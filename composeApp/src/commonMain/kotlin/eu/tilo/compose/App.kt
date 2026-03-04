@@ -36,42 +36,75 @@ fun App() {
 
     val features = remember {
         mapFeatures {
-            point(
-                key = "pt-1",
-                x = 14.4378,
-                y = 50.0755,
-                label = "Vinohrady",
-                style = BaseStyle(fillColor = 0xFFFF6D00, strokeWidth = 8.0)
-            )
+            // Czech Republic area envelope (rough): lon 12.0..19.0, lat 48.5..51.2
+            val lonMin = 12.0
+            val lonMax = 19.0
+            val latMin = 48.5
+            val latMax = 51.2
 
-            lineString(
-                key = "line-1",
-                points = listOf(
-                    Point(13.0, 49.5),
-                    Point(14.421, 50.087),
-                    Point(15.5, 50.4)
-                ),
-                style = BaseStyle(strokeColor = 0xFF00ACC1, strokeWidth = 3.0)
-            )
+            fun lerp(min: Double, max: Double, t: Double): Double = min + (max - min) * t
 
-            polygon(
-                key = "poly-1",
-                rings = listOf(
-                    listOf(
-                        Point(13.9, 49.9),
-                        Point(14.3, 49.9),
-                        Point(14.3, 50.2),
-                        Point(13.9, 50.2),
-                        Point(13.9, 52.9),
-                        Point(13.9, 49.9)
-                    )
-                ),
-                style = BaseStyle(
-                    strokeColor = 0xFF3949AB,
-                    fillColor = 0x663949AB,
-                    strokeWidth = 2.0
+            repeat(100) { i ->
+                val t = (i + 1).toDouble() / 101.0
+                val s = ((i * 7) % 100 + 1).toDouble() / 101.0
+                val lon = lerp(lonMin, lonMax, t)
+                val lat = lerp(latMin, latMax, s)
+
+                point(
+                    key = "pt-$i",
+                    x = lon,
+                    y = lat,
+                    label = "Point ${i + 1}",
+                    style = BaseStyle(fillColor = 0xFFFF6D00, strokeWidth = 8.0)
                 )
-            )
+            }
+
+            repeat(15) { i ->
+                val t = (i + 1).toDouble() / 16.0
+                val lonA = lerp(lonMin + 0.2, lonMax - 0.6, t)
+                val latA = lerp(latMin + 0.2, latMax - 0.6, ((i * 5) % 15 + 1).toDouble() / 16.0)
+
+                val p1 = Point(lonA, latA)
+                val p2 = Point((lonA + 0.45).coerceAtMost(lonMax - 0.1), (latA + 0.15).coerceAtMost(latMax - 0.1))
+                val p3 = Point((lonA + 0.9).coerceAtMost(lonMax - 0.05), (latA - 0.2).coerceAtLeast(latMin + 0.05))
+
+                lineString(
+                    key = "line-$i",
+                    points = listOf(p1, p2, p3),
+                    style = BaseStyle(strokeColor = 0xFF00ACC1, strokeWidth = 3.0)
+                )
+            }
+
+            repeat(15) { i ->
+                val t = (i + 1).toDouble() / 16.0
+                val cx = lerp(lonMin + 0.35, lonMax - 0.35, t)
+                val cy = lerp(latMin + 0.25, latMax - 0.25, ((i * 9) % 15 + 1).toDouble() / 16.0)
+
+                val halfW = 0.12
+                val halfH = 0.08
+                val left = (cx - halfW).coerceAtLeast(lonMin + 0.02)
+                val right = (cx + halfW).coerceAtMost(lonMax - 0.02)
+                val bottom = (cy - halfH).coerceAtLeast(latMin + 0.02)
+                val top = (cy + halfH).coerceAtMost(latMax - 0.02)
+
+                polygon(
+                    key = "poly-$i",
+                    rings = listOf(
+                        listOf(
+                            Point(left, bottom),
+                            Point(right, bottom),
+                            Point(right, top),
+                            Point(left, top),
+                            Point(left, bottom)
+                        )
+                    ),
+                    style = BaseStyle(
+                        strokeColor = 0xFF3949AB,
+                        fillColor = 0x663949AB,
+                        strokeWidth = 2.0
+                    )
+                )
+            }
         }
     }
 

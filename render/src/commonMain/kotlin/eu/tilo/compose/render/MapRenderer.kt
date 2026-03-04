@@ -12,10 +12,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
@@ -47,8 +50,9 @@ import tilo.compose.core.tile.source.Source
 private const val TILE_GRID_SIDE = 3
 private const val TILE_SIZE_PX = 256.0
 private const val TILE_OVERFETCH_RING = 1
-private const val LABEL_VERTICAL_PADDING_PX = 32f
-private const val LABEL_HALO_RADIUS_PX = 3f
+private const val LABEL_VERTICAL_PADDING_PX = 8f
+private const val LABEL_HALO_RADIUS_PX = 1f
+private const val LABEL_BITMAP_PADDING_PX = 2
 
 /**
  * Compose-first map renderer (Skia-backed through Compose Canvas).
@@ -68,6 +72,8 @@ fun MapRenderer(
     var stateVersion by remember { mutableStateOf(0) }
     var tiles by remember { mutableStateOf<List<Tile>>(emptyList()) }
     val tileBitmapCache = remember { mutableMapOf<String, ImageBitmap?>() }
+    val labelBitmapCache = remember { mutableMapOf<String, ImageBitmap>() }
+    val offscreenLabelDrawScope = remember { CanvasDrawScope() }
     val textMeasurer = rememberTextMeasurer()
 
     val current = CommandBuilder.build(mapState, features)
@@ -180,46 +186,21 @@ fun MapRenderer(
 
                 is RenderLabel -> {
                     val labelColor = command.style.strokeColor?.toColor() ?: Color(0xFF111827)
-                    val labelStyle = TextStyle(
-                        color = labelColor,
-                        fontSize = 16.sp
-                    )
-                    val layout = textMeasurer.measure(
+                    val labelBitmap = getOrCreateLabelBitmap(
                         text = command.text,
-                        style = labelStyle
+                        textColor = labelColor,
+                        textMeasurer = textMeasurer,
+                        cache = labelBitmapCache,
+                        offscreenDrawScope = offscreenLabelDrawScope
                     )
-
-                    val baseTopLeft = Offset(
-                        x = command.anchor.x.toFloat() - (layout.size.width / 2f),
+                    val topLeft = Offset(
+                        x = command.anchor.x.toFloat() - (labelBitmap.width / 2f),
                         y = command.anchor.y.toFloat() + LABEL_VERTICAL_PADDING_PX
                     )
-
-                    val haloColor = Color.White
-                    val haloOffsets = arrayOf(
-                        Offset(-LABEL_HALO_RADIUS_PX, 0f),
-                        Offset(LABEL_HALO_RADIUS_PX, 0f),
-                        Offset(0f, -LABEL_HALO_RADIUS_PX),
-                        Offset(0f, LABEL_HALO_RADIUS_PX),
-                        Offset(-LABEL_HALO_RADIUS_PX, -LABEL_HALO_RADIUS_PX),
-                        Offset(LABEL_HALO_RADIUS_PX, -LABEL_HALO_RADIUS_PX),
-                        Offset(-LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX),
-                        Offset(LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX)
-                    )
-
-                    haloOffsets.forEach { offset ->
-                        drawText(
-                            textMeasurer = textMeasurer,
-                            text = command.text,
-                            topLeft = baseTopLeft + offset,
-                            style = labelStyle.copy(color = haloColor)
-                        )
-                    }
-
-                    drawText(
-                        textMeasurer = textMeasurer,
-                        text = command.text,
-                        topLeft = baseTopLeft,
-                        style = labelStyle
+                    drawImage(
+                        image = labelBitmap,
+                        dstOffset = IntOffset(topLeft.x.toInt(), topLeft.y.toInt()),
+                        dstSize = IntSize(labelBitmap.width, labelBitmap.height)
                     )
                 }
             }
@@ -342,3 +323,61 @@ private fun lonLatToGlobalPixel(lon: Double, lat: Double, zoomLevel: Int): Point
 }
 
 private fun Long.toColor(): Color = Color((this and 0xFFFFFFFFL).toInt())
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.getOrCreateLabelBitmap(
+    text: String,
+    textColor: Color,
+    textMeasurer: androidx.compose.ui.text.TextMeasurer,
+    cache: MutableMap<String, ImageBitmap>,
+    offscreenDrawScope: CanvasDrawScope
+): ImageBitmap {
+    val cacheKey = "$text|${textColor.toArgb()}"
+    cache[cacheKey]?.let { return it }
+
+    val labelStyle = TextStyle(color = textColor, fontSize = 12.sp)
+    val textLayout = textMeasurer.measure(text = text, style = labelStyle)
+
+    val haloPadding = LABEL_BITMAP_PADDING_PX + LABEL_HALO_RADIUS_PX.toInt()
+    val width = (textLayout.size.width + haloPadding * 2).coerceAtLeast(1)
+    val height = (textLayout.size.height + haloPadding * 2).coerceAtLeast(1)
+
+    val bitmap = ImageBitmap(width, height)
+    val canvas = GraphicsCanvas(bitmap)
+    val baseTopLeft = Offset(haloPadding.toFloat(), haloPadding.toFloat())
+    val haloStyle = labelStyle.copy(color = Color.White)
+    val haloOffsets = arrayOf(
+        Offset(-LABEL_HALO_RADIUS_PX, 0f),
+        Offset(LABEL_HALO_RADIUS_PX, 0f),
+        Offset(0f, -LABEL_HALO_RADIUS_PX),
+        Offset(0f, LABEL_HALO_RADIUS_PX),
+        Offset(-LABEL_HALO_RADIUS_PX, -LABEL_HALO_RADIUS_PX),
+        Offset(LABEL_HALO_RADIUS_PX, -LABEL_HALO_RADIUS_PX),
+        Offset(-LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX),
+        Offset(LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX)
+    )
+
+    offscreenDrawScope.draw(
+        density = this,
+        layoutDirection = layoutDirection,
+        canvas = canvas,
+        size = Size(width.toFloat(), height.toFloat())
+    ) {
+        haloOffsets.forEach { offset ->
+            drawText(
+                textMeasurer = textMeasurer,
+                text = text,
+                topLeft = baseTopLeft + offset,
+                style = haloStyle
+            )
+        }
+        drawText(
+            textMeasurer = textMeasurer,
+            text = text,
+            topLeft = baseTopLeft,
+            style = labelStyle
+        )
+    }
+
+    cache[cacheKey] = bitmap
+    return bitmap
+}

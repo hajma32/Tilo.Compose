@@ -1,6 +1,7 @@
 package eu.tilo.compose.render
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -13,8 +14,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import kotlin.math.ln
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 
@@ -29,12 +33,13 @@ fun MapRenderer(
     modifier: Modifier = Modifier
 ) {
     var retained by remember { mutableStateOf<Map<String, RenderCommand>>(emptyMap()) }
+    var stateVersion by remember { mutableStateOf(0) }
 
     val current = CommandBuilder.build(mapState, features)
     val currentMap = current.associateBy { it.id }
     val ops = SceneDiff.diffMaps(retained, currentMap)
 
-    LaunchedEffect(current) {
+    LaunchedEffect(current, stateVersion) {
         retained = SceneDiff.apply(retained, ops)
     }
 
@@ -43,6 +48,23 @@ fun MapRenderer(
             .fillMaxSize()
             .onSizeChanged { size ->
                 mapState.viewport = Viewport(width = size.width, height = size.height)
+                stateVersion++
+            }
+            .pointerInput(mapState) {
+                detectTransformGestures { centroid, pan, zoom, _ ->
+                    // Pan follows finger direction, while map center moves in opposite screen delta.
+                    if (pan != Offset.Zero) {
+                        mapState.panBy(-pan.x.toDouble(), -pan.y.toDouble())
+                    }
+
+                    // Gesture zoom is multiplicative; map zoomBy expects additive delta in log2 scale.
+                    if (zoom > 0.0f && zoom != 1.0f) {
+                        val zoomDelta = ln(zoom.toDouble()) / ln(2.0)
+                        mapState.zoomBy(zoomDelta, Point(centroid.x.toDouble(), centroid.y.toDouble()))
+                    }
+
+                    stateVersion++
+                }
             }
     ) {
         retained.values.forEach { command ->

@@ -1,0 +1,20 @@
+# Minimal detekt configuration for TiloCompose
+build:
+  maxIssues: 0
+
+processors:
+  active: true
+
+formatting:
+  active: true
+
+rules:
+  comments:
+    active: true
+  complexity:
+    active: true
+  exceptions:
+    active: true
+
+# You can extend this config with project-specific rules later.
+

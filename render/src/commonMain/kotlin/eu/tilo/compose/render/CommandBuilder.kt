@@ -19,6 +19,19 @@ object CommandBuilder {
             val baseId = feature.key
             val style = feature.style ?: BaseStyle()
             commands.addAll(geometryToCommands(baseId, mapState, feature.geometry, style))
+
+            feature.label
+                ?.takeIf { it.isNotBlank() }
+                ?.let { labelText ->
+                    labelAnchorWorld(feature.geometry)?.let { worldAnchor ->
+                        commands += RenderLabel(
+                            id = "$baseId:label",
+                            text = labelText,
+                            anchor = mapState.worldToScreen(worldAnchor),
+                            style = style
+                        )
+                    }
+                }
         }
         return commands
     }
@@ -73,5 +86,28 @@ object CommandBuilder {
                 )
             }
         }
+    }
+
+    private fun labelAnchorWorld(geometry: Geometry): Point? {
+        val points = when (geometry) {
+            is Point -> listOf(geometry)
+            is MultiPoint -> geometry.points
+            is LineString -> geometry.points
+            is MultiLineString -> geometry.lines.flatMap { it.points }
+            is Polygon -> geometry.rings.firstOrNull().orEmpty()
+            is MultiPolygon -> geometry.polygons.flatMap { polygon ->
+                polygon.rings.firstOrNull().orEmpty()
+            }
+        }
+        if (points.isEmpty()) return null
+
+        val minX = points.minOf { it.x }
+        val minY = points.minOf { it.y }
+        val maxX = points.maxOf { it.x }
+        val maxY = points.maxOf { it.y }
+        return Point(
+            x = (minX + maxX) / 2.0,
+            y = (minY + maxY) / 2.0
+        )
     }
 }

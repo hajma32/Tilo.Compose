@@ -1,10 +1,12 @@
 package tilo.compose.core.render
 
 import eu.tilo.compose.render.CommandBuilder
+import eu.tilo.compose.render.RenderLabel
 import eu.tilo.compose.render.RenderLineString
 import eu.tilo.compose.render.RenderPoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.LineString
@@ -49,5 +51,28 @@ class CommandBuilderTests {
         assertTrue(commands.first() is RenderLineString)
         assertEquals("l1:line", commands.first().id)
     }
-}
 
+    @Test
+    fun buildsLabelCommandWhenFeatureHasLabel() {
+        val state = MapState(
+            center = Point(0.0, 0.0),
+            zoom = 0.0,
+            settings = MapSettings(),
+            viewport = Viewport(100, 100)
+        )
+        val features = listOf(
+            Feature(
+                key = "p-label",
+                geometry = Point(10.0, 20.0),
+                label = "Praha"
+            )
+        )
+
+        val commands = CommandBuilder.build(state, features)
+
+        val label = commands.find { it.id == "p-label:label" }
+        assertNotNull(label)
+        assertTrue(label is RenderLabel)
+        assertEquals("Praha", label.text)
+    }
+}

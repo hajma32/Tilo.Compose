@@ -10,7 +10,7 @@ sealed interface RenderCommand {
 data class RenderPoint(
     override val id: String,
     val point: Point,
-    val radius: Double = 4.0,
+    val radius: Double = 15.0,
     val style: BaseStyle = BaseStyle(strokeColor = 0xFF1E88E5)
 ) : RenderCommand
 
@@ -30,3 +30,9 @@ data class RenderPolygon(
     )
 ) : RenderCommand
 
+data class RenderLabel(
+    override val id: String,
+    val text: String,
+    val anchor: Point,
+    val style: BaseStyle = BaseStyle()
+) : RenderCommand

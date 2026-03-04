@@ -7,11 +7,8 @@ plugins {
 
 kotlin {
     androidTarget()
-
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    )
+    iosArm64()
+    iosSimulatorArm64()
 
     sourceSets {
         val commonMain by getting {
@@ -27,6 +24,16 @@ kotlin {
                 implementation(libs.kotlin.test)
             }
         }
+
+        val iosMain by creating {
+            dependsOn(commonMain)
+        }
+        val iosArm64Main by getting {
+            dependsOn(iosMain)
+        }
+        val iosSimulatorArm64Main by getting {
+            dependsOn(iosMain)
+        }
     }
 }
 
@@ -38,4 +45,3 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
     }
 }
-

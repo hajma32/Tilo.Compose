@@ -14,33 +14,42 @@ import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapSettings
 import tilo.compose.core.map.MapState
+import tilo.compose.core.tile.source.OSMSource
+import tilo.compose.core.transform.Wgs84WebMercatorCoordinateSystem
 
 @Composable
 @Preview
 fun App() {
+    val platform = remember { getPlatform() }
+
     val mapState = remember {
         MapState(
-            center = Point(0.0, 0.0),
-            zoom = 2.0,
-            settings = MapSettings(minZoom = 0.0, maxZoom = 20.0)
+            // Prague in lon/lat (WGS84)
+            center = Point(14.421, 50.087),
+            zoom = 6.0,
+            settings = MapSettings(minZoom = 0.0, maxZoom = 20.0),
+            coordSys = Wgs84WebMercatorCoordinateSystem
         )
     }
+
+    val tileSource = remember { OSMSource(downloader = platform.tileDownloader) }
 
     val features = remember {
         mapFeatures {
             point(
                 key = "pt-1",
-                x = 10.0,
-                y = 10.0,
-                style = BaseStyle(fillColor = 0xFFFF6D00)
+                x = 14.4378,
+                y = 50.0755,
+                label = "Vinohrady",
+                style = BaseStyle(fillColor = 0xFFFF6D00, strokeWidth = 8.0)
             )
 
             lineString(
                 key = "line-1",
                 points = listOf(
-                    Point(-80.0, -20.0),
-                    Point(0.0, 30.0),
-                    Point(80.0, -10.0)
+                    Point(13.0, 49.5),
+                    Point(14.421, 50.087),
+                    Point(15.5, 50.4)
                 ),
                 style = BaseStyle(strokeColor = 0xFF00ACC1, strokeWidth = 3.0)
             )
@@ -49,11 +58,12 @@ fun App() {
                 key = "poly-1",
                 rings = listOf(
                     listOf(
-                        Point(-60.0, -40.0),
-                        Point(-20.0, -40.0),
-                        Point(-20.0, 0.0),
-                        Point(-60.0, 0.0),
-                        Point(-60.0, -40.0)
+                        Point(13.9, 49.9),
+                        Point(14.3, 49.9),
+                        Point(14.3, 50.2),
+                        Point(13.9, 50.2),
+                        Point(13.9, 52.9),
+                        Point(13.9, 49.9)
                     )
                 ),
                 style = BaseStyle(
@@ -69,6 +79,8 @@ fun App() {
         MapRenderer(
             mapState = mapState,
             features = features,
+            tileSource = tileSource,
+            tileImageDecoder = platform::tileImageDecoder,
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFFF6F8FA))

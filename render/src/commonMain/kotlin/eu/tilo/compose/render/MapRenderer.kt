@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.PI
 import kotlin.math.ceil
@@ -41,11 +42,12 @@ import kotlin.math.roundToInt
 import kotlin.math.tan
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.TileLayer
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.tile.Tile
-import tilo.compose.core.tile.source.OSMSource
 import tilo.compose.core.tile.source.Source
+import tilo.compose.core.tile.source.WMSSource
 
 private const val TILE_GRID_SIDE = 3
 private const val TILE_SIZE_PX = 256.0
@@ -64,6 +66,7 @@ fun MapRenderer(
     mapState: MapState,
     features: List<Feature>,
     modifier: Modifier = Modifier,
+    tileLayer: TileLayer? = null,
     tileSource: Source? = null,
     tileCount: Int = 9,
     tileImageDecoder: ((ByteArray) -> ImageBitmap?)? = null
@@ -71,6 +74,7 @@ fun MapRenderer(
     var retained by remember { mutableStateOf<Map<String, RenderCommand>>(emptyMap()) }
     var stateVersion by remember { mutableStateOf(0) }
     var tiles by remember { mutableStateOf<List<Tile>>(emptyList()) }
+    var lastTileRequestKey by remember { mutableStateOf<String?>(null) }
     val tileBitmapCache = remember { mutableMapOf<String, ImageBitmap?>() }
     val labelBitmapCache = remember { mutableMapOf<String, ImageBitmap>() }
     val offscreenLabelDrawScope = remember { CanvasDrawScope() }
@@ -84,15 +88,14 @@ fun MapRenderer(
         retained = SceneDiff.apply(retained, ops)
     }
 
-    LaunchedEffect(tileSource, stateVersion, mapState.zoom) {
-        val source = tileSource ?: run {
+    LaunchedEffect(tileLayer, tileSource, stateVersion, mapState.zoom) {
+        val source = tileLayer?.source ?: tileSource ?: run {
             tiles = emptyList()
             return@LaunchedEffect
         }
 
-        if (source is OSMSource) {
-            source.setCenter(lat = mapState.center.y, lon = mapState.center.x)
-        }
+        // Small debounce prevents flood of network/decode work during fast gestures.
+        delay(80)
 
         val zoomLevel = computeRenderTileZoom(mapState.zoom, mapState.viewport)
         val requestedTileCount = computeRequestedTileCount(
@@ -101,12 +104,45 @@ fun MapRenderer(
             tileZoomLevel = zoomLevel
         )
 
+        val centerGlobal = lonLatToGlobalPixel(mapState.center.x, mapState.center.y, zoomLevel)
+        val centerTileX = floor(centerGlobal.x / TILE_SIZE_PX).toInt()
+        val centerTileY = floor(centerGlobal.y / TILE_SIZE_PX).toInt()
+        val requestKey = listOf(
+            zoomLevel,
+            centerTileX,
+            centerTileY,
+            mapState.viewport.width,
+            mapState.viewport.height,
+            requestedTileCount
+        ).joinToString(":")
+
+        if (requestKey == lastTileRequestKey) return@LaunchedEffect
+        lastTileRequestKey = requestKey
+
         tiles = withContext(Dispatchers.Default) {
-            source.getTiles(
-                zoomLevel = zoomLevel,
-                viewport = mapState.viewport,
-                tileCount = requestedTileCount
-            )
+            when {
+                tileLayer != null -> {
+                    val requests = tileLayer.buildRequests(
+                        zoomLevel = zoomLevel,
+                        centerLon = mapState.center.x,
+                        centerLat = mapState.center.y,
+                        viewport = mapState.viewport,
+                        tileCount = requestedTileCount
+                    )
+                    tileLayer.source.getTiles(requests)
+                }
+
+                source is WMSSource -> {
+                    // WMSSource does not compute grid/BBOX. Without a TileLayer planner, return nothing.
+                    emptyList()
+                }
+
+                else -> source.getTiles(
+                    zoomLevel = zoomLevel,
+                    viewport = mapState.viewport,
+                    tileCount = requestedTileCount
+                )
+            }
         }
     }
 

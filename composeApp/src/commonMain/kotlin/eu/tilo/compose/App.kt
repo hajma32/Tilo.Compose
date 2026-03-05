@@ -45,6 +45,7 @@ import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.map.MapSettings
 import tilo.compose.core.map.MapState
+import tilo.compose.core.layers.impl.SimpleTileLayer
 import tilo.compose.core.tile.source.OSMSource
 import tilo.compose.core.transform.Wgs84WebMercatorCoordinateSystem
 
@@ -62,7 +63,8 @@ private enum class TestScreen(val title: String) {
 @Preview
 fun App() {
     val platform = remember { getPlatform() }
-    val tileSource = remember { OSMSource(downloader = platform.tileDownloader) }
+    val tileSource = remember { OSMSource() }
+    val tileLayer = remember { SimpleTileLayer(id = "base-wms", source = tileSource) }
 
     var selectedScreen by remember { mutableStateOf(TestScreen.MultipleLabelsTest) }
     val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -127,7 +129,7 @@ fun App() {
                 MapRenderer(
                     mapState = mapState,
                     features = features,
-                    tileSource = tileSource,
+                    tileLayer = tileLayer,
                     tileImageDecoder = platform::tileImageDecoder,
                     modifier = Modifier
                         .padding(innerPadding)

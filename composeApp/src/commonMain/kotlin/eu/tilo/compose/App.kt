@@ -50,10 +50,11 @@ import tilo.compose.core.transform.Wgs84WebMercatorCoordinateSystem
 
 private enum class TestScreen(val title: String) {
     MultipleLabelsTest("Multiple labels"),
-    LineTest("LineString"),
+    LineTest("Line"),
     PolygonTest("Polygon"),
     MultiLineStringTest("MultiLineString"),
-    MultiPolygonTest("MultiPolygon")
+    MultiPolygonTest("MultiPolygon"),
+    PolygonMultiRingTest("Polygon (multi-ring)")
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -83,6 +84,7 @@ fun App() {
             TestScreen.PolygonTest -> buildPolygonTestFeatures()
             TestScreen.MultiLineStringTest -> buildMultiLineStringTestFeatures()
             TestScreen.MultiPolygonTest -> buildMultiPolygonTestFeatures()
+            TestScreen.PolygonMultiRingTest -> buildPolygonMultiRingTestFeatures()
         }
     }
 
@@ -294,4 +296,59 @@ private fun buildMultiPolygonTestFeatures(): List<Feature> {
             )
         )
     )
+}
+
+private fun buildPolygonMultiRingTestFeatures(): List<Feature> {
+    fun ellipseRing(
+        centerLon: Double,
+        centerLat: Double,
+        radiusLon: Double,
+        radiusLat: Double,
+        points: Int = 96,
+        clockwise: Boolean
+    ): List<Point> {
+        val ring = (0 until points).map { i ->
+            val direction = if (clockwise) -1.0 else 1.0
+            val angle = direction * (2.0 * PI * i) / points.toDouble()
+            Point(
+                x = centerLon + cos(angle) * radiusLon,
+                y = centerLat + sin(angle) * radiusLat
+            )
+        }
+        return ring + ring.first()
+    }
+
+    val outer = ellipseRing(
+        centerLon = 14.6,
+        centerLat = 49.9,
+        radiusLon = 1.2,
+        radiusLat = 0.8,
+        clockwise = false
+    )
+    val holeA = ellipseRing(
+        centerLon = 14.2,
+        centerLat = 49.9,
+        radiusLon = 0.25,
+        radiusLat = 0.18,
+        clockwise = true
+    )
+    val holeB = ellipseRing(
+        centerLon = 15.0,
+        centerLat = 49.75,
+        radiusLon = 0.22,
+        radiusLat = 0.15,
+        clockwise = true
+    )
+
+    return mapFeatures {
+        polygon(
+            key = "polygon-multi-ring-test",
+            rings = listOf(outer, holeA, holeB),
+            style = BaseStyle(
+                strokeColor = 0xFF6D4C41,
+                fillColor = 0x666D4C41,
+                strokeWidth = 2.0
+            )
+        )
+    }
 }

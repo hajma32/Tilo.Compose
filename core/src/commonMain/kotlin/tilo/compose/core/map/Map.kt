@@ -3,9 +3,12 @@ package tilo.compose.core.map
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.projection.IdentityProjection
+import tilo.compose.core.transform.Transformation
 
-/** Mutable-ish map viewport state that stores center, zoom and exposes helpers. */
-class MapState(
+/**
+ * Represents the state of a map, including its center, zoom level, projection, and viewport.
+ */
+class Map(
     var center: Point = Point(0.0, 0.0),
     var zoom: Double = 0.0,
     val projection: Projection = IdentityProjection,
@@ -34,6 +37,27 @@ class MapState(
         center = Point(center.x + (worldBefore.x - worldAfter.x), center.y + (worldBefore.y - worldAfter.y))
     }
 
+    //TODO could be one transform method
+    fun transformSourceToTarget(point: Point, source: Projection, target: Projection): Point {
+        val transformation = requireTransformation(source, target)
+        return transformation.sourceToTarget(point)
+    }
+
+    fun transformTargetToSource(point: Point, source: Projection, target: Projection): Point {
+        val transformation = requireTransformation(source, target)
+        return transformation.targetToSource(point)
+    }
+
     fun worldToScreen(world: Point): Point = viewport.worldToScreen(world, center, zoom)
     fun screenToWorld(screen: Point): Point = viewport.screenToWorld(screen, center, zoom)
+
+    private fun requireTransformation(
+        source: Projection,
+        target: Projection
+    ): Transformation<Projection, Projection> {
+        return config.transformations.firstOrNull { it.source === source && it.target === target }
+            ?: throw IllegalStateException(
+                "No transformation registered for ${source::class.simpleName} -> ${target::class.simpleName}."
+            )
+    }
 }

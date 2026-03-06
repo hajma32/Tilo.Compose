@@ -4,10 +4,9 @@ import kotlin.math.pow
 import tilo.compose.core.geometry.Point
 
 /**
- * Viewport represents the pixel size available for rendering the map.
+ * Represents the current viewport of the map, including dimensions and zoom level.
  */
 data class Viewport(val width: Int, val height: Int, val pixelRatio: Double = 1.0) {
-
     fun worldToScreen(world: Point, center: Point, zoom: Double): Point {
         val scale = 2.0.pow(zoom)
         val dx = (world.x - center.x) * scale + width / 2.0

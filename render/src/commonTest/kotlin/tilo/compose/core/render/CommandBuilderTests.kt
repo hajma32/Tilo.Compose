@@ -11,14 +11,14 @@ import kotlin.test.assertTrue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.Point
-import tilo.compose.core.map.MapState
+import tilo.compose.core.map.Map
 import tilo.compose.core.map.Viewport
 
 class CommandBuilderTests {
 
     @Test
     fun buildsPointCommandWithStableId() {
-        val state = MapState(
+        val state = Map(
             center = Point(0.0, 0.0),
             zoom = 0.0,
             viewport = Viewport(100, 100)
@@ -34,7 +34,7 @@ class CommandBuilderTests {
 
     @Test
     fun buildsLineStringCommand() {
-        val state = MapState(
+        val state = Map(
             center = Point(0.0, 0.0),
             zoom = 0.0,
             viewport = Viewport(100, 100)
@@ -51,7 +51,7 @@ class CommandBuilderTests {
 
     @Test
     fun buildsLabelCommandWhenFeatureHasLabel() {
-        val state = MapState(
+        val state = Map(
             center = Point(0.0, 0.0),
             zoom = 0.0,
             viewport = Viewport(100, 100)

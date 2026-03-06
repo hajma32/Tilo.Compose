@@ -49,7 +49,7 @@ import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.layers.TileLayer
-import tilo.compose.core.map.MapState
+import tilo.compose.core.map.Map
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.source.Source
@@ -70,7 +70,7 @@ private const val LABEL_BITMAP_PADDING_PX = 2
 @Suppress("UNUSED_PARAMETER")
 @Composable
 fun MapRenderer(
-    mapState: MapState,
+    map: Map,
     features: List<Feature>,
     featuresSourceProjection: Projection? = null,
     modifier: Modifier = Modifier,
@@ -80,7 +80,7 @@ fun MapRenderer(
     tileImageDecoder: ((ByteArray) -> ImageBitmap?)? = null
 ) {
     val density = LocalDensity.current
-    var retained by remember { mutableStateOf<Map<String, RenderCommand>>(emptyMap()) }
+    var retained by remember { mutableStateOf<kotlin.collections.Map<String, RenderCommand>>(emptyMap()) }
     var stateVersion by remember { mutableStateOf(0) }
     var tiles by remember { mutableStateOf<List<Tile>>(emptyList()) }
     var lastTileRequestKey by remember { mutableStateOf<String?>(null) }
@@ -92,9 +92,9 @@ fun MapRenderer(
     val projectedFeatures = transformFeaturesToMapProjection(
         features = features,
         featuresSourceProjection = featuresSourceProjection,
-        mapState = mapState
+        map = map
     )
-    val current = CommandBuilder.build(mapState, projectedFeatures)
+    val current = CommandBuilder.build(map, projectedFeatures)
     val currentMap = current.associateBy { it.id }
     val ops = SceneDiff.diffMaps(retained, currentMap)
 
@@ -102,7 +102,7 @@ fun MapRenderer(
         retained = SceneDiff.apply(retained, ops)
     }
 
-    LaunchedEffect(tileLayer, tileSource, stateVersion, mapState.zoom) {
+    LaunchedEffect(tileLayer, tileSource, stateVersion, map.zoom) {
         val source = tileLayer?.source ?: tileSource ?: run {
             tiles = emptyList()
             return@LaunchedEffect
@@ -111,22 +111,22 @@ fun MapRenderer(
         // Small debounce prevents flood of network/decode work during fast gestures.
         delay(80)
 
-        val zoomLevel = computeRenderTileZoom(mapState.zoom, mapState.viewport)
+        val zoomLevel = computeRenderTileZoom(map.zoom, map.viewport)
         val requestedTileCount = computeRequestedTileCount(
-            zoom = mapState.zoom,
-            viewport = mapState.viewport,
+            zoom = map.zoom,
+            viewport = map.viewport,
             tileZoomLevel = zoomLevel
         )
 
-        val centerGlobal = lonLatToGlobalPixel(mapState.center.x, mapState.center.y, zoomLevel)
+        val centerGlobal = lonLatToGlobalPixel(map.center.x, map.center.y, zoomLevel)
         val centerTileX = floor(centerGlobal.x / TILE_SIZE_PX).toInt()
         val centerTileY = floor(centerGlobal.y / TILE_SIZE_PX).toInt()
         val requestKey = listOf(
             zoomLevel,
             centerTileX,
             centerTileY,
-            mapState.viewport.width,
-            mapState.viewport.height,
+            map.viewport.width,
+            map.viewport.height,
             requestedTileCount
         ).joinToString(":")
 
@@ -136,16 +136,16 @@ fun MapRenderer(
         tiles = withContext(Dispatchers.Default) {
             when {
                 tileLayer != null -> {
-                    val centerInLayerProjection = mapState.config.sourceToTarget(
-                        point = mapState.center,
-                        source = mapState.projection,
-                        target = tileLayer.projection ?: mapState.projection
+                    val centerInLayerProjection = map.transformSourceToTarget(
+                        point = map.center,
+                        source = map.projection,
+                        target = tileLayer.projection ?: map.projection
                     )
                     val requests = tileLayer.buildRequests(
                         zoomLevel = zoomLevel,
                         centerLon = centerInLayerProjection.x,
                         centerLat = centerInLayerProjection.y,
-                        viewport = mapState.viewport,
+                        viewport = map.viewport,
                         tileCount = requestedTileCount
                     )
                     tileLayer.source.getTiles(requests)
@@ -158,7 +158,7 @@ fun MapRenderer(
 
                 else -> source.getTiles(
                     zoomLevel = zoomLevel,
-                    viewport = mapState.viewport,
+                    viewport = map.viewport,
                     tileCount = requestedTileCount
                 )
             }
@@ -169,24 +169,24 @@ fun MapRenderer(
         modifier = modifier
             .fillMaxSize()
             .onSizeChanged { size ->
-                mapState.viewport = Viewport(
+                map.viewport = Viewport(
                     width = size.width,
                     height = size.height,
                     pixelRatio = density.density.toDouble()
                 )
                 stateVersion++
             }
-            .pointerInput(mapState) {
+            .pointerInput(map) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
                     // Pan follows finger direction, while map center moves in opposite screen delta.
                     if (pan != Offset.Zero) {
-                        mapState.panBy(-pan.x.toDouble(), -pan.y.toDouble())
+                        map.panBy(-pan.x.toDouble(), -pan.y.toDouble())
                     }
 
                     // Gesture zoom is multiplicative; map zoomBy expects additive delta in log2 scale.
                     if (zoom > 0.0f && zoom != 1.0f) {
                         val zoomDelta = ln(zoom.toDouble()) / ln(2.0)
-                        mapState.zoomBy(zoomDelta, Point(centroid.x.toDouble(), centroid.y.toDouble()))
+                        map.zoomBy(zoomDelta, Point(centroid.x.toDouble(), centroid.y.toDouble()))
                     }
 
                     stateVersion++
@@ -195,7 +195,7 @@ fun MapRenderer(
     ) {
         drawTiles(
             tiles = tiles,
-            mapState = mapState,
+            map = map,
             tileBitmapCache = tileBitmapCache,
             decoder = tileImageDecoder
         )
@@ -270,23 +270,23 @@ fun MapRenderer(
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTiles(
     tiles: List<Tile>,
-    mapState: MapState,
+    map: Map,
     tileBitmapCache: MutableMap<String, ImageBitmap?>,
     decoder: ((ByteArray) -> ImageBitmap?)?
 ) {
-    val viewportWidth = mapState.viewport.width.toDouble()
-    val viewportHeight = mapState.viewport.height.toDouble()
+    val viewportWidth = map.viewport.width.toDouble()
+    val viewportHeight = map.viewport.height.toDouble()
     if (viewportWidth <= 0.0 || viewportHeight <= 0.0) return
 
-    val zTile = computeRenderTileZoom(mapState.zoom, mapState.viewport)
-    val zoomScale = 2.0.pow(mapState.zoom - zTile)
+    val zTile = computeRenderTileZoom(map.zoom, map.viewport)
+    val zoomScale = 2.0.pow(map.zoom - zTile)
     val screenSize = TILE_SIZE_PX * zoomScale
 
     // Draw all tiles intersecting the viewport plus one-ring overfetch buffer.
     val maxIndex = (2.0.pow(zTile.toDouble()).toInt() - 1).coerceAtLeast(0)
     val byCoord = tiles.associateBy { Triple(it.coordinate.z, it.coordinate.x, it.coordinate.y) }
 
-    val centerGlobal = lonLatToGlobalPixel(mapState.center.x, mapState.center.y, zTile)
+    val centerGlobal = lonLatToGlobalPixel(map.center.x, map.center.y, zTile)
     val leftGlobal = centerGlobal.x - viewportWidth / (2.0 * zoomScale)
     val rightGlobal = centerGlobal.x + viewportWidth / (2.0 * zoomScale)
     val topGlobal = centerGlobal.y - viewportHeight / (2.0 * zoomScale)
@@ -445,16 +445,16 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.getOrCreateLabelBit
 private fun transformFeaturesToMapProjection(
     features: List<Feature>,
     featuresSourceProjection: Projection?,
-    mapState: MapState
+    map: Map
 ): List<Feature> {
     val sourceProjection = featuresSourceProjection ?: return features
-    if (sourceProjection === mapState.projection) return features
+    if (sourceProjection === map.projection) return features
 
     return features.map { feature ->
         feature.copy(
             geometry = transformGeometry(
                 geometry = feature.geometry,
-                mapState = mapState,
+                map = map,
                 sourceProjection = sourceProjection
             )
         )
@@ -463,14 +463,14 @@ private fun transformFeaturesToMapProjection(
 
 private fun transformGeometry(
     geometry: tilo.compose.core.geometry.Geometry,
-    mapState: MapState,
+    map: Map,
     sourceProjection: Projection
 ): tilo.compose.core.geometry.Geometry {
     fun transformPoint(p: Point): Point {
-        return mapState.config.sourceToTarget(
+        return map.transformSourceToTarget(
             point = p,
             source = sourceProjection,
-            target = mapState.projection
+            target = map.projection
         )
     }
 

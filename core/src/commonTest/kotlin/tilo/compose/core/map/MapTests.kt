@@ -4,11 +4,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
-class MapStateTests {
+class MapTests {
 
     @Test
     fun zoomByIsClampedToConfig() {
-        val state = MapState(zoom = 5.0, config = MapConfig(minZoom = 2.0, maxZoom = 10.0))
+        val state = Map(zoom = 5.0, config = MapConfig(minZoom = 2.0, maxZoom = 10.0))
         state.zoomBy(100.0)
         assertEquals(10.0, state.zoom)
         state.zoomBy(-100.0)
@@ -17,7 +17,7 @@ class MapStateTests {
 
     @Test
     fun panByChangesCenter() {
-        val state = MapState(center = tilo.compose.core.geometry.Point(0.0, 0.0), zoom = 1.0, viewport = Viewport(100, 100))
+        val state = Map(center = tilo.compose.core.geometry.Point(0.0, 0.0), zoom = 1.0, viewport = Viewport(100, 100))
         state.panBy(10.0, 0.0)
         // Expect center.x to change (simple sanity check)
         assertNotEquals(state.center.x, 0.0)
@@ -25,7 +25,7 @@ class MapStateTests {
 
     @Test
     fun zoomByWithFocusKeepsWorldPointUnderFocus() {
-        val state = MapState(center = tilo.compose.core.geometry.Point(0.0, 0.0), zoom = 1.0, viewport = Viewport(200, 200))
+        val state = Map(center = tilo.compose.core.geometry.Point(0.0, 0.0), zoom = 1.0, viewport = Viewport(200, 200))
         val focusScreen = tilo.compose.core.geometry.Point(50.0, 50.0)
         val worldBefore = state.screenToWorld(focusScreen)
         state.zoomBy(1.0, focusScreen)

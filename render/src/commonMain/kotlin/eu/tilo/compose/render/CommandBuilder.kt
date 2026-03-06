@@ -10,7 +10,7 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
-import tilo.compose.core.map.MapState
+import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Wgs84WebMercatorProjection
 
 object CommandBuilder {
@@ -47,11 +47,11 @@ object CommandBuilder {
     private val geometryBoundsCache = linkedMapOf<String, WorldBounds>()
     private val projectedGeometryCache = linkedMapOf<String, ProjectedCacheEntry>()
 
-    fun build(mapState: MapState, features: List<Feature>): List<RenderCommand> {
+    fun build(map: Map, features: List<Feature>): List<RenderCommand> {
         val commands = mutableListOf<RenderCommand>()
-        val visible = visibleWorldBounds(mapState)
-        val useProjectedPath = mapState.projection === Wgs84WebMercatorProjection
-        val transform = if (useProjectedPath) screenTransform(mapState) else null
+        val visible = visibleWorldBounds(map)
+        val useProjectedPath = map.projection === Wgs84WebMercatorProjection
+        val transform = if (useProjectedPath) screenTransform(map) else null
 
         features.forEach { feature ->
             val featureBounds = worldBoundsForFeature(feature)
@@ -76,7 +76,7 @@ object CommandBuilder {
                         )
                     }
             } else {
-                commands.addAll(geometryToCommands(baseId, mapState, feature.geometry, style))
+                commands.addAll(geometryToCommands(baseId, map, feature.geometry, style))
 
                 feature.label
                     ?.takeIf { it.isNotBlank() }
@@ -85,7 +85,7 @@ object CommandBuilder {
                             commands += RenderLabel(
                                 id = "$baseId:label",
                                 text = labelText,
-                                anchor = mapState.worldToScreen(worldAnchor),
+                                anchor = map.worldToScreen(worldAnchor),
                                 style = style
                             )
                         }
@@ -96,11 +96,11 @@ object CommandBuilder {
         return commands
     }
 
-    private fun screenTransform(mapState: MapState): ScreenTransform {
-        val centerProjected = projectPoint(mapState.center)
-        val scale = TILE_SIZE * 2.0.pow(mapState.zoom)
-        val tx = -centerProjected.u * scale + mapState.viewport.width / 2.0
-        val ty = -centerProjected.v * scale + mapState.viewport.height / 2.0
+    private fun screenTransform(map: Map): ScreenTransform {
+        val centerProjected = projectPoint(map.center)
+        val scale = TILE_SIZE * 2.0.pow(map.zoom)
+        val tx = -centerProjected.u * scale + map.viewport.width / 2.0
+        val ty = -centerProjected.v * scale + map.viewport.height / 2.0
         return ScreenTransform(scale = scale, tx = tx, ty = ty)
     }
 
@@ -138,10 +138,10 @@ object CommandBuilder {
         }
     }
 
-    private fun visibleWorldBounds(mapState: MapState): WorldBounds {
-        val topLeft = mapState.screenToWorld(Point(0.0, 0.0))
-        val bottomRight = mapState.screenToWorld(
-            Point(mapState.viewport.width.toDouble(), mapState.viewport.height.toDouble())
+    private fun visibleWorldBounds(map: Map): WorldBounds {
+        val topLeft = map.screenToWorld(Point(0.0, 0.0))
+        val bottomRight = map.screenToWorld(
+            Point(map.viewport.width.toDouble(), map.viewport.height.toDouble())
         )
 
         val minX = minOf(topLeft.x, bottomRight.x)
@@ -252,7 +252,7 @@ object CommandBuilder {
 
     private fun geometryToCommands(
         baseId: String,
-        mapState: MapState,
+        map: Map,
         geometry: Geometry,
         style: BaseStyle
     ): List<RenderCommand> {
@@ -264,7 +264,7 @@ object CommandBuilder {
                 listOf(
                     RenderPoint(
                         id = "$baseId:point",
-                        point = mapState.worldToScreen(geometry),
+                        point = map.worldToScreen(geometry),
                         style = style
                     )
                 )
@@ -275,7 +275,7 @@ object CommandBuilder {
                 geometry.points.mapIndexed { i, p ->
                     RenderPoint(
                         id = "$baseId:point:$i",
-                        point = mapState.worldToScreen(p),
+                        point = map.worldToScreen(p),
                         style = style
                     )
                 }
@@ -283,28 +283,28 @@ object CommandBuilder {
             is LineString -> listOf(
                 RenderLineString(
                     id = "$baseId:line",
-                    points = geometry.points.map(mapState::worldToScreen),
+                    points = geometry.points.map(map::worldToScreen),
                     style = style
                 )
             )
             is MultiLineString -> geometry.lines.mapIndexed { i, line ->
                 RenderLineString(
                     id = "$baseId:line:$i",
-                    points = line.points.map(mapState::worldToScreen),
+                    points = line.points.map(map::worldToScreen),
                     style = style
                 )
             }
             is Polygon -> listOf(
                 RenderPolygon(
                     id = "$baseId:polygon",
-                    rings = geometry.rings.map { ring -> ring.map(mapState::worldToScreen) },
+                    rings = geometry.rings.map { ring -> ring.map(map::worldToScreen) },
                     style = style
                 )
             )
             is MultiPolygon -> geometry.polygons.mapIndexed { i, polygon ->
                 RenderPolygon(
                     id = "$baseId:polygon:$i",
-                    rings = polygon.rings.map { ring -> ring.map(mapState::worldToScreen) },
+                    rings = polygon.rings.map { ring -> ring.map(map::worldToScreen) },
                     style = style
                 )
             }

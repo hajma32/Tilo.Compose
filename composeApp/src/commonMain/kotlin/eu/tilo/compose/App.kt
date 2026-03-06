@@ -54,7 +54,7 @@ import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.map.MapConfig
-import tilo.compose.core.map.MapState
+import tilo.compose.core.map.Map
 import tilo.compose.core.layers.impl.SimpleTileLayer
 import tilo.compose.core.tile.source.OSMSource
 import tilo.compose.core.projection.Wgs84WebMercatorProjection
@@ -81,8 +81,8 @@ fun App() {
     val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
-    val mapState = remember(selectedScreen) {
-        MapState(
+    val map = remember(selectedScreen) {
+        Map(
             center = Point(16.6068, 49.1951),
             zoom = 11.5,
             config = MapConfig(minZoom = 0.0, maxZoom = 20.0),
@@ -115,15 +115,15 @@ fun App() {
         var lastTileKey: String? = null
 
         while (selectedScreen == TestScreen.MbtilesVectorTest) {
-            val currentCenter = mapState.center
-            val currentZoom = mapState.zoom.roundToInt()
+            val currentCenter = map.center
+            val currentZoom = map.zoom.roundToInt()
             val tileX = lonToTileX(currentCenter.x, currentZoom)
             val tileY = latToTileY(currentCenter.y, currentZoom)
             val tileCount = computeMbtilesTileCount(
-                viewportWidth = mapState.viewport.width,
-                viewportHeight = mapState.viewport.height,
-                pixelRatio = mapState.viewport.pixelRatio,
-                zoom = mapState.zoom,
+                viewportWidth = map.viewport.width,
+                viewportHeight = map.viewport.height,
+                pixelRatio = map.viewport.pixelRatio,
+                zoom = map.zoom,
                 tileZoomLevel = currentZoom
             )
             val tileKey = "$currentZoom/$tileX/$tileY/$tileCount"
@@ -131,7 +131,7 @@ fun App() {
             if (tileKey != lastTileKey) {
                 mbtilesFeatures = platform.loadMbtilesVectorFeatures(
                     center = currentCenter,
-                    zoom = mapState.zoom,
+                    zoom = map.zoom,
                     tileCount = tileCount
                 )
                 lastTileKey = tileKey
@@ -190,7 +190,7 @@ fun App() {
                         .background(Color(0xFFF6F8FA))
                 ) {
                     MapRenderer(
-                        mapState = mapState,
+                        map = map,
                         features = renderedFeatures,
                         tileLayer = renderedTileLayer,
                         tileImageDecoder = platform::tileImageDecoder,

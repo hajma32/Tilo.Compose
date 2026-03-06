@@ -11,7 +11,7 @@ import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.map.MapState
-import tilo.compose.core.transform.Wgs84WebMercatorCoordinateSystem
+import tilo.compose.core.projection.Wgs84WebMercatorProjection
 
 object CommandBuilder {
 
@@ -50,7 +50,7 @@ object CommandBuilder {
     fun build(mapState: MapState, features: List<Feature>): List<RenderCommand> {
         val commands = mutableListOf<RenderCommand>()
         val visible = visibleWorldBounds(mapState)
-        val useProjectedPath = mapState.coordSys === Wgs84WebMercatorCoordinateSystem
+        val useProjectedPath = mapState.projection === Wgs84WebMercatorProjection
         val transform = if (useProjectedPath) screenTransform(mapState) else null
 
         features.forEach { feature ->

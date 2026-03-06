@@ -7,11 +7,11 @@ import kotlin.test.assertNotEquals
 class MapStateTests {
 
     @Test
-    fun zoomIsClampedToSettings() {
-        val state = MapState(zoom = 5.0, settings = MapSettings(minZoom = 2.0, maxZoom = 10.0))
-        state.zoom = 20.0
+    fun zoomByIsClampedToConfig() {
+        val state = MapState(zoom = 5.0, config = MapConfig(minZoom = 2.0, maxZoom = 10.0))
+        state.zoomBy(100.0)
         assertEquals(10.0, state.zoom)
-        state.zoom = 1.0
+        state.zoomBy(-100.0)
         assertEquals(2.0, state.zoom)
     }
 

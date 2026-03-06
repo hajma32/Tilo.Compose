@@ -12,7 +12,6 @@ import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
-import tilo.compose.core.map.MapSettings
 import tilo.compose.core.map.Viewport
 
 class CommandBuilderTests {
@@ -22,7 +21,6 @@ class CommandBuilderTests {
         val state = MapState(
             center = Point(0.0, 0.0),
             zoom = 0.0,
-            settings = MapSettings(),
             viewport = Viewport(100, 100)
         )
         val features = listOf(Feature(key = "p1", geometry = Point(10.0, 20.0)))
@@ -39,7 +37,6 @@ class CommandBuilderTests {
         val state = MapState(
             center = Point(0.0, 0.0),
             zoom = 0.0,
-            settings = MapSettings(),
             viewport = Viewport(100, 100)
         )
         val line = LineString(listOf(Point(0.0, 0.0), Point(10.0, 0.0)))
@@ -57,7 +54,6 @@ class CommandBuilderTests {
         val state = MapState(
             center = Point(0.0, 0.0),
             zoom = 0.0,
-            settings = MapSettings(),
             viewport = Viewport(100, 100)
         )
         val features = listOf(

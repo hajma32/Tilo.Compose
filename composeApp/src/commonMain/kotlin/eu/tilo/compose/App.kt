@@ -53,11 +53,11 @@ import tilo.compose.core.geometry.MultiLineString
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
-import tilo.compose.core.map.MapSettings
+import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
 import tilo.compose.core.layers.impl.SimpleTileLayer
 import tilo.compose.core.tile.source.OSMSource
-import tilo.compose.core.transform.Wgs84WebMercatorCoordinateSystem
+import tilo.compose.core.projection.Wgs84WebMercatorProjection
 
 private enum class TestScreen(val title: String) {
     MultipleLabelsTest("Multiple labels"),
@@ -85,8 +85,8 @@ fun App() {
         MapState(
             center = Point(16.6068, 49.1951),
             zoom = 11.5,
-            settings = MapSettings(minZoom = 0.0, maxZoom = 20.0),
-            coordSys = Wgs84WebMercatorCoordinateSystem
+            config = MapConfig(minZoom = 0.0, maxZoom = 20.0),
+            projection = Wgs84WebMercatorProjection
         )
     }
 
@@ -339,8 +339,7 @@ private fun buildMultiLineStringTestFeatures(): List<Feature> {
                 )
             ),
             style = BaseStyle(strokeColor = 0xFF00897B, strokeWidth = 2.5)
-        )
-    )
+        ))
 }
 
 private fun buildMultiPolygonTestFeatures(): List<Feature> {

@@ -14,17 +14,17 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.TileCoordinate
-import tilo.compose.core.transform.WmsBbox
 
 /**
  * Precomputed WMS tile request.
  */
 data class WmsTileRequest(
     val coordinate: TileCoordinate,
-    val bbox: WmsBbox,
+    val bbox: BoundingBox,
     val width: Int = 256,
     val height: Int = 256
 )
@@ -38,10 +38,9 @@ data class WmsTileRequest(
 open class WMSSource(
     private val wmsBaseUrl: String,
     private val layers: String,
-    private val crs: String = "EPSG:3857",
-    private val crsParameterName: String = "SRS"
+    val crs: String = "EPSG:3857",
+    val crsParameterName: String = "SRS"
 ) : Source {
-
     private companion object {
         const val MAX_CONCURRENT_REQUESTS = 6
         const val MAX_CACHE_ENTRIES = 256
@@ -115,7 +114,11 @@ open class WMSSource(
         )
     }
 
-    private fun buildWmsUrl(bbox: WmsBbox, width: Int, height: Int): String {
+    private fun buildWmsUrl(bbox: BoundingBox, width: Int, height: Int): String {
+        val minX = bbox.bottomLeft.x
+        val minY = bbox.bottomLeft.y
+        val maxX = bbox.topRight.x
+        val maxY = bbox.topRight.y
         return buildString {
             append(wmsBaseUrl)
             append(if (wmsBaseUrl.contains("?")) "&" else "?")
@@ -129,7 +132,7 @@ open class WMSSource(
             append("&$crsParameterName=$crs")
             append("&WIDTH=$width")
             append("&HEIGHT=$height")
-            append("&BBOX=${bbox.minX},${bbox.minY},${bbox.maxX},${bbox.maxY}")
+            append("&BBOX=$minX,$minY,$maxX,$maxY")
         }
     }
 }

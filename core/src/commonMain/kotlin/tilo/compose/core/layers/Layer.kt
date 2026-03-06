@@ -1,5 +1,7 @@
 package tilo.compose.core.layers
 
+import tilo.compose.core.projection.Projection
+
 /**
  * Represents a map layer responsible for rendering and updating map elements.
  *
@@ -12,14 +14,9 @@ interface Layer {
      */
     val id: String
 
-    /**
-     * Update the layer's state (for example, when features or the map state change).
-     * Implementations may be a no-op if no update is required.
-     */
-    fun update()
-
-    /**
-     * Release resources held by the layer. After calling this, the layer should not be used.
-     */
-    fun dispose()
+    /** Source CRS of data provided by this layer (for example `EPSG:4326`, `EPSG:5514`).
+     *  If null, the layer is expected to provide data in the same coordinate system as the viewport (for example `EPSG:3857` for WebMercator).
+     * */
+    val projection: Projection?
+        get() = null
 }

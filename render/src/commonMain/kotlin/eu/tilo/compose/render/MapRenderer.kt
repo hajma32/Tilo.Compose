@@ -42,13 +42,19 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.tan
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.geometry.LineString
+import tilo.compose.core.geometry.MultiLineString
+import tilo.compose.core.geometry.MultiPoint
+import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.layers.TileLayer
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.source.Source
 import tilo.compose.core.tile.source.WMSSource
+import tilo.compose.core.projection.Projection
 
 private const val TILE_GRID_SIDE = 3
 private const val TILE_SIZE_PX = 256.0
@@ -66,6 +72,7 @@ private const val LABEL_BITMAP_PADDING_PX = 2
 fun MapRenderer(
     mapState: MapState,
     features: List<Feature>,
+    featuresSourceProjection: Projection? = null,
     modifier: Modifier = Modifier,
     tileLayer: TileLayer? = null,
     tileSource: Source? = null,
@@ -82,7 +89,12 @@ fun MapRenderer(
     val offscreenLabelDrawScope = remember { CanvasDrawScope() }
     val textMeasurer = rememberTextMeasurer()
 
-    val current = CommandBuilder.build(mapState, features)
+    val projectedFeatures = transformFeaturesToMapProjection(
+        features = features,
+        featuresSourceProjection = featuresSourceProjection,
+        mapState = mapState
+    )
+    val current = CommandBuilder.build(mapState, projectedFeatures)
     val currentMap = current.associateBy { it.id }
     val ops = SceneDiff.diffMaps(retained, currentMap)
 
@@ -124,10 +136,15 @@ fun MapRenderer(
         tiles = withContext(Dispatchers.Default) {
             when {
                 tileLayer != null -> {
+                    val centerInLayerProjection = mapState.config.sourceToTarget(
+                        point = mapState.center,
+                        source = mapState.projection,
+                        target = tileLayer.projection ?: mapState.projection
+                    )
                     val requests = tileLayer.buildRequests(
                         zoomLevel = zoomLevel,
-                        centerLon = mapState.center.x,
-                        centerLat = mapState.center.y,
+                        centerLon = centerInLayerProjection.x,
+                        centerLat = centerInLayerProjection.y,
                         viewport = mapState.viewport,
                         tileCount = requestedTileCount
                     )
@@ -423,4 +440,52 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.getOrCreateLabelBit
 
     cache[cacheKey] = bitmap
     return bitmap
+}
+
+private fun transformFeaturesToMapProjection(
+    features: List<Feature>,
+    featuresSourceProjection: Projection?,
+    mapState: MapState
+): List<Feature> {
+    val sourceProjection = featuresSourceProjection ?: return features
+    if (sourceProjection === mapState.projection) return features
+
+    return features.map { feature ->
+        feature.copy(
+            geometry = transformGeometry(
+                geometry = feature.geometry,
+                mapState = mapState,
+                sourceProjection = sourceProjection
+            )
+        )
+    }
+}
+
+private fun transformGeometry(
+    geometry: tilo.compose.core.geometry.Geometry,
+    mapState: MapState,
+    sourceProjection: Projection
+): tilo.compose.core.geometry.Geometry {
+    fun transformPoint(p: Point): Point {
+        return mapState.config.sourceToTarget(
+            point = p,
+            source = sourceProjection,
+            target = mapState.projection
+        )
+    }
+
+    return when (geometry) {
+        is Point -> transformPoint(geometry)
+        is MultiPoint -> MultiPoint(geometry.points.map(::transformPoint))
+        is LineString -> LineString(geometry.points.map(::transformPoint))
+        is MultiLineString -> MultiLineString(
+            geometry.lines.map { line -> LineString(line.points.map(::transformPoint)) }
+        )
+        is Polygon -> Polygon(geometry.rings.map { ring -> ring.map(::transformPoint) })
+        is MultiPolygon -> MultiPolygon(
+            geometry.polygons.map { polygon ->
+                Polygon(rings = polygon.rings.map { ring -> ring.map(::transformPoint) })
+            }
+        )
+    }
 }

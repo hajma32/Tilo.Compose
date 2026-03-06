@@ -21,21 +21,31 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import eu.tilo.compose.map.mapFeatures
 import eu.tilo.compose.render.MapRenderer
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.tan
 import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.LineString
@@ -55,7 +65,8 @@ private enum class TestScreen(val title: String) {
     PolygonTest("Polygon"),
     MultiLineStringTest("MultiLineString"),
     MultiPolygonTest("MultiPolygon"),
-    PolygonMultiRingTest("Polygon (multi-ring)")
+    PolygonMultiRingTest("Polygon (multi-ring)"),
+    MbtilesVectorTest("MBTiles Vector (.pbf)")
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -72,8 +83,8 @@ fun App() {
 
     val mapState = remember(selectedScreen) {
         MapState(
-            center = Point(14.421, 50.087),
-            zoom = 6.0,
+            center = Point(16.6068, 49.1951),
+            zoom = 11.5,
             settings = MapSettings(minZoom = 0.0, maxZoom = 20.0),
             coordSys = Wgs84WebMercatorCoordinateSystem
         )
@@ -87,8 +98,54 @@ fun App() {
             TestScreen.MultiLineStringTest -> buildMultiLineStringTestFeatures()
             TestScreen.MultiPolygonTest -> buildMultiPolygonTestFeatures()
             TestScreen.PolygonMultiRingTest -> buildPolygonMultiRingTestFeatures()
+            TestScreen.MbtilesVectorTest -> emptyList()
         }
     }
+
+    var mbtilesFeatures by remember { mutableStateOf<List<Feature>>(emptyList()) }
+    var mbtilesDebug by remember { mutableStateOf("") }
+
+    LaunchedEffect(selectedScreen) {
+        if (selectedScreen != TestScreen.MbtilesVectorTest) {
+            mbtilesFeatures = emptyList()
+            mbtilesDebug = ""
+            return@LaunchedEffect
+        }
+
+        var lastTileKey: String? = null
+
+        while (selectedScreen == TestScreen.MbtilesVectorTest) {
+            val currentCenter = mapState.center
+            val currentZoom = mapState.zoom.roundToInt()
+            val tileX = lonToTileX(currentCenter.x, currentZoom)
+            val tileY = latToTileY(currentCenter.y, currentZoom)
+            val tileCount = computeMbtilesTileCount(
+                viewportWidth = mapState.viewport.width,
+                viewportHeight = mapState.viewport.height,
+                pixelRatio = mapState.viewport.pixelRatio,
+                zoom = mapState.zoom,
+                tileZoomLevel = currentZoom
+            )
+            val tileKey = "$currentZoom/$tileX/$tileY/$tileCount"
+
+            if (tileKey != lastTileKey) {
+                mbtilesFeatures = platform.loadMbtilesVectorFeatures(
+                    center = currentCenter,
+                    zoom = mapState.zoom,
+                    tileCount = tileCount
+                )
+                lastTileKey = tileKey
+                val labels = mbtilesFeatures.count { !it.label.isNullOrBlank() }
+                mbtilesDebug = "z=$currentZoom tile=$tileKey features=${mbtilesFeatures.size} labels=$labels"
+            }
+
+            // Keep reload responsive, but avoid flooding on micro-moves.
+            delay(120)
+        }
+    }
+
+    val renderedFeatures = if (selectedScreen == TestScreen.MbtilesVectorTest) mbtilesFeatures else features
+    val renderedTileLayer = if (selectedScreen == TestScreen.MbtilesVectorTest) null else tileLayer
 
     MaterialTheme {
         ModalNavigationDrawer(
@@ -126,16 +183,31 @@ fun App() {
                     )
                 }
             ) { innerPadding ->
-                MapRenderer(
-                    mapState = mapState,
-                    features = features,
-                    tileLayer = tileLayer,
-                    tileImageDecoder = platform::tileImageDecoder,
+                Box(
                     modifier = Modifier
                         .padding(innerPadding)
                         .fillMaxSize()
                         .background(Color(0xFFF6F8FA))
-                )
+                ) {
+                    MapRenderer(
+                        mapState = mapState,
+                        features = renderedFeatures,
+                        tileLayer = renderedTileLayer,
+                        tileImageDecoder = platform::tileImageDecoder,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    if (selectedScreen == TestScreen.MbtilesVectorTest) {
+                        Text(
+                            text = mbtilesDebug,
+                            color = Color(0xFF111827),
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .background(Color(0xCCFFFFFF))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -353,4 +425,36 @@ private fun buildPolygonMultiRingTestFeatures(): List<Feature> {
             )
         )
     }
+}
+
+private fun lonToTileX(lon: Double, z: Int): Int {
+    val n = 2.0.pow(z.toDouble())
+    return floor((lon + 180.0) / 360.0 * n).toInt()
+}
+
+private fun latToTileY(lat: Double, z: Int): Int {
+    val latRad = lat.coerceIn(-85.05112878, 85.05112878) * PI / 180.0
+    val n = 2.0.pow(z.toDouble())
+    return floor((1.0 - ln(tan(latRad) + 1.0 / cos(latRad)) / PI) / 2.0 * n).toInt()
+}
+
+private fun computeMbtilesTileCount(
+    viewportWidth: Int,
+    viewportHeight: Int,
+    pixelRatio: Double,
+    zoom: Double,
+    tileZoomLevel: Int,
+    tileSizePx: Double = 256.0,
+    overfetchRing: Int = 0
+): Int {
+    if (viewportWidth <= 0 || viewportHeight <= 0) return 9
+
+    val effectiveWidthPx = viewportWidth * pixelRatio
+    val effectiveHeightPx = viewportHeight * pixelRatio
+    val zoomScale = 2.0.pow(zoom - tileZoomLevel)
+    val tileScreenSizePx = (tileSizePx * zoomScale).coerceAtLeast(1e-6)
+    val tilesAcross = ceil(effectiveWidthPx / tileScreenSizePx).toInt().coerceAtLeast(1)
+    val tilesDown = ceil(effectiveHeightPx / tileScreenSizePx).toInt().coerceAtLeast(1)
+    val side = max(tilesAcross, tilesDown) + (2 * overfetchRing)
+    return side * side
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -71,6 +72,7 @@ fun MapRenderer(
     tileCount: Int = 9,
     tileImageDecoder: ((ByteArray) -> ImageBitmap?)? = null
 ) {
+    val density = LocalDensity.current
     var retained by remember { mutableStateOf<Map<String, RenderCommand>>(emptyMap()) }
     var stateVersion by remember { mutableStateOf(0) }
     var tiles by remember { mutableStateOf<List<Tile>>(emptyList()) }
@@ -150,7 +152,11 @@ fun MapRenderer(
         modifier = modifier
             .fillMaxSize()
             .onSizeChanged { size ->
-                mapState.viewport = Viewport(width = size.width, height = size.height)
+                mapState.viewport = Viewport(
+                    width = size.width,
+                    height = size.height,
+                    pixelRatio = density.density.toDouble()
+                )
                 stateVersion++
             }
             .pointerInput(mapState) {
@@ -180,6 +186,7 @@ fun MapRenderer(
         retained.values.forEach { command ->
             when (command) {
                 is RenderPoint -> {
+                    if (command.style.fillColor == 0x00000000L) return@forEach
                     val fill = command.style.fillColor?.toColor() ?: Color(0xFF1E88E5)
                     drawCircle(
                         color = fill,

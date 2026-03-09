@@ -1,9 +1,6 @@
 package eu.tilo.compose
 
-import android.graphics.BitmapFactory
 import android.os.Build
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import tilo.compose.core.feature.Feature
@@ -17,11 +14,6 @@ class AndroidPlatform : Platform {
             context = AndroidAppContext.require(),
             rawResourceId = R.raw.brno
         )
-    }
-
-    override fun tileImageDecoder(bytes: ByteArray): ImageBitmap? {
-        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
-        return bmp.asImageBitmap()
     }
 
     override suspend fun loadMbtilesVectorFeatures(center: Point, zoom: Double, tileCount: Int): List<Feature> {

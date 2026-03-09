@@ -28,19 +28,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import kotlin.math.PI
-import kotlin.math.ceil
-import kotlin.math.cos
-import kotlin.math.floor
-import kotlin.math.ln
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.roundToInt
-import kotlin.math.tan
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.MultiLineString
@@ -48,17 +35,11 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
-import tilo.compose.core.layers.TileLayer
 import tilo.compose.core.map.Map
 import tilo.compose.core.map.Viewport
-import tilo.compose.core.tile.Tile
-import tilo.compose.core.tile.source.Source
-import tilo.compose.core.tile.source.WMSSource
 import tilo.compose.core.projection.Projection
+import kotlin.math.ln
 
-private const val TILE_GRID_SIDE = 3
-private const val TILE_SIZE_PX = 256.0
-private const val TILE_OVERFETCH_RING = 1
 private const val LABEL_VERTICAL_PADDING_PX = 8f
 private const val LABEL_HALO_RADIUS_PX = 1f
 private const val LABEL_BITMAP_PADDING_PX = 2
@@ -73,18 +54,11 @@ fun MapRenderer(
     map: Map,
     features: List<Feature>,
     featuresSourceProjection: Projection? = null,
-    modifier: Modifier = Modifier,
-    tileLayer: TileLayer? = null,
-    tileSource: Source? = null,
-    tileCount: Int = 9,
-    tileImageDecoder: ((ByteArray) -> ImageBitmap?)? = null
+    modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
     var retained by remember { mutableStateOf<kotlin.collections.Map<String, RenderCommand>>(emptyMap()) }
     var stateVersion by remember { mutableStateOf(0) }
-    var tiles by remember { mutableStateOf<List<Tile>>(emptyList()) }
-    var lastTileRequestKey by remember { mutableStateOf<String?>(null) }
-    val tileBitmapCache = remember { mutableMapOf<String, ImageBitmap?>() }
     val labelBitmapCache = remember { mutableMapOf<String, ImageBitmap>() }
     val offscreenLabelDrawScope = remember { CanvasDrawScope() }
     val textMeasurer = rememberTextMeasurer()
@@ -100,69 +74,6 @@ fun MapRenderer(
 
     LaunchedEffect(current, stateVersion) {
         retained = SceneDiff.apply(retained, ops)
-    }
-
-    LaunchedEffect(tileLayer, tileSource, stateVersion, map.zoom) {
-        val source = tileLayer?.source ?: tileSource ?: run {
-            tiles = emptyList()
-            return@LaunchedEffect
-        }
-
-        // Small debounce prevents flood of network/decode work during fast gestures.
-        delay(80)
-
-        val zoomLevel = computeRenderTileZoom(map.zoom, map.viewport)
-        val requestedTileCount = computeRequestedTileCount(
-            zoom = map.zoom,
-            viewport = map.viewport,
-            tileZoomLevel = zoomLevel
-        )
-
-        val centerGlobal = lonLatToGlobalPixel(map.center.x, map.center.y, zoomLevel)
-        val centerTileX = floor(centerGlobal.x / TILE_SIZE_PX).toInt()
-        val centerTileY = floor(centerGlobal.y / TILE_SIZE_PX).toInt()
-        val requestKey = listOf(
-            zoomLevel,
-            centerTileX,
-            centerTileY,
-            map.viewport.width,
-            map.viewport.height,
-            requestedTileCount
-        ).joinToString(":")
-
-        if (requestKey == lastTileRequestKey) return@LaunchedEffect
-        lastTileRequestKey = requestKey
-
-        tiles = withContext(Dispatchers.Default) {
-            when {
-                tileLayer != null -> {
-                    val centerInLayerProjection = map.transformSourceToTarget(
-                        point = map.center,
-                        source = map.projection,
-                        target = tileLayer.projection ?: map.projection
-                    )
-                    val requests = tileLayer.buildRequests(
-                        zoomLevel = zoomLevel,
-                        centerLon = centerInLayerProjection.x,
-                        centerLat = centerInLayerProjection.y,
-                        viewport = map.viewport,
-                        tileCount = requestedTileCount
-                    )
-                    tileLayer.source.getTiles(requests)
-                }
-
-                source is WMSSource -> {
-                    // WMSSource does not compute grid/BBOX. Without a TileLayer planner, return nothing.
-                    emptyList()
-                }
-
-                else -> source.getTiles(
-                    zoomLevel = zoomLevel,
-                    viewport = map.viewport,
-                    tileCount = requestedTileCount
-                )
-            }
-        }
     }
 
     Canvas(
@@ -193,13 +104,6 @@ fun MapRenderer(
                 }
             }
     ) {
-        drawTiles(
-            tiles = tiles,
-            map = map,
-            tileBitmapCache = tileBitmapCache,
-            decoder = tileImageDecoder
-        )
-
         retained.values.forEach { command ->
             when (command) {
                 is RenderPoint -> {
@@ -266,120 +170,6 @@ fun MapRenderer(
             }
         }
     }
-}
-
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTiles(
-    tiles: List<Tile>,
-    map: Map,
-    tileBitmapCache: MutableMap<String, ImageBitmap?>,
-    decoder: ((ByteArray) -> ImageBitmap?)?
-) {
-    val viewportWidth = map.viewport.width.toDouble()
-    val viewportHeight = map.viewport.height.toDouble()
-    if (viewportWidth <= 0.0 || viewportHeight <= 0.0) return
-
-    val zTile = computeRenderTileZoom(map.zoom, map.viewport)
-    val zoomScale = 2.0.pow(map.zoom - zTile)
-    val screenSize = TILE_SIZE_PX * zoomScale
-
-    // Draw all tiles intersecting the viewport plus one-ring overfetch buffer.
-    val maxIndex = (2.0.pow(zTile.toDouble()).toInt() - 1).coerceAtLeast(0)
-    val byCoord = tiles.associateBy { Triple(it.coordinate.z, it.coordinate.x, it.coordinate.y) }
-
-    val centerGlobal = lonLatToGlobalPixel(map.center.x, map.center.y, zTile)
-    val leftGlobal = centerGlobal.x - viewportWidth / (2.0 * zoomScale)
-    val rightGlobal = centerGlobal.x + viewportWidth / (2.0 * zoomScale)
-    val topGlobal = centerGlobal.y - viewportHeight / (2.0 * zoomScale)
-    val bottomGlobal = centerGlobal.y + viewportHeight / (2.0 * zoomScale)
-
-    val minTileX = floor(leftGlobal / TILE_SIZE_PX).toInt() - TILE_OVERFETCH_RING
-    val maxTileX = floor(rightGlobal / TILE_SIZE_PX).toInt() + TILE_OVERFETCH_RING
-    val minTileY = floor(topGlobal / TILE_SIZE_PX).toInt() - TILE_OVERFETCH_RING
-    val maxTileY = floor(bottomGlobal / TILE_SIZE_PX).toInt() + TILE_OVERFETCH_RING
-
-    for (rawY in minTileY..maxTileY) {
-        for (rawX in minTileX..maxTileX) {
-            val x = wrapTileX(rawX, zTile)
-            val y = rawY.coerceIn(0, maxIndex)
-            val tile = byCoord[Triple(zTile, x, y)]
-
-            val tileGlobalX = x * TILE_SIZE_PX
-            val tileGlobalY = y * TILE_SIZE_PX
-
-            val screenX = (tileGlobalX - centerGlobal.x) * zoomScale + viewportWidth / 2.0
-            val screenY = (tileGlobalY - centerGlobal.y) * zoomScale + viewportHeight / 2.0
-
-            val tileKey = "$zTile/$x/$y"
-            val image = tileBitmapCache[tileKey] ?: tile?.bytes?.let { bytes ->
-                decoder?.invoke(bytes)
-            }.also { decoded ->
-                if (tile?.bytes != null) tileBitmapCache[tileKey] = decoded
-            }
-
-            if (image != null) {
-                drawImage(
-                    image = image,
-                    dstOffset = IntOffset(screenX.toInt(), screenY.toInt()),
-                    dstSize = IntSize(screenSize.toInt(), screenSize.toInt())
-                )
-            } else {
-                val hasBytes = tile?.bytes != null
-                val fill = if (hasBytes) Color(0xFFE3F2FD) else Color(0xFFDCE3EA)
-                val border = if (hasBytes) Color(0xFF90CAF9) else Color(0xFFB0BEC5)
-
-                drawRect(
-                    color = fill,
-                    topLeft = Offset(screenX.toFloat(), screenY.toFloat()),
-                    size = Size(screenSize.toFloat(), screenSize.toFloat())
-                )
-                drawRect(
-                    color = border,
-                    topLeft = Offset(screenX.toFloat(), screenY.toFloat()),
-                    size = Size(screenSize.toFloat(), screenSize.toFloat()),
-                    style = Stroke(width = 1f)
-                )
-            }
-        }
-    }
-}
-
-private fun computeRequestedTileCount(zoom: Double, viewport: Viewport, tileZoomLevel: Int): Int {
-    val zoomScale = 2.0.pow(zoom - tileZoomLevel)
-    val tilesAcross = ceil(viewport.width / (TILE_SIZE_PX * zoomScale)).toInt().coerceAtLeast(1)
-    val tilesDown = ceil(viewport.height / (TILE_SIZE_PX * zoomScale)).toInt().coerceAtLeast(1)
-    val gridSide = max(
-        TILE_GRID_SIDE,
-        max(tilesAcross, tilesDown) + (2 * TILE_OVERFETCH_RING)
-    )
-    return gridSide * gridSide
-}
-
-private fun computeRenderTileZoom(zoom: Double, viewport: Viewport): Int {
-    val roundedZoom = zoom.roundToInt().coerceAtLeast(0)
-    val requiredScale = max(
-        viewport.width / (TILE_GRID_SIDE * TILE_SIZE_PX),
-        viewport.height / (TILE_GRID_SIDE * TILE_SIZE_PX)
-    ).coerceAtLeast(1e-6)
-    val maxUsableZoom = floor(zoom - (ln(requiredScale) / ln(2.0))).toInt()
-    return min(roundedZoom, maxUsableZoom).coerceAtLeast(0)
-}
-
-
-private fun wrapTileX(x: Int, zoomLevel: Int): Int {
-    val n = 2.0.pow(zoomLevel.toDouble()).toInt().coerceAtLeast(1)
-    val mod = x % n
-    return if (mod < 0) mod + n else mod
-}
-
-private fun lonLatToGlobalPixel(lon: Double, lat: Double, zoomLevel: Int): Point {
-    val scale = TILE_SIZE_PX * 2.0.pow(zoomLevel.toDouble())
-    val x = (lon + 180.0) / 360.0 * scale
-
-    val clampedLat = lat.coerceIn(-85.05112878, 85.05112878)
-    val latRad = clampedLat * PI / 180.0
-    val y = (1.0 - ln(tan(latRad) + 1.0 / cos(latRad)) / PI) / 2.0 * scale
-
-    return Point(x, y)
 }
 
 private fun Long.toColor(): Color = Color((this and 0xFFFFFFFFL).toInt())
@@ -466,26 +256,14 @@ private fun transformGeometry(
     map: Map,
     sourceProjection: Projection
 ): tilo.compose.core.geometry.Geometry {
-    fun transformPoint(p: Point): Point {
-        return map.transformSourceToTarget(
-            point = p,
-            source = sourceProjection,
-            target = map.projection
-        )
-    }
+    fun tp(p: Point) = map.transformSourceToTarget(p, sourceProjection, map.projection)
 
     return when (geometry) {
-        is Point -> transformPoint(geometry)
-        is MultiPoint -> MultiPoint(geometry.points.map(::transformPoint))
-        is LineString -> LineString(geometry.points.map(::transformPoint))
-        is MultiLineString -> MultiLineString(
-            geometry.lines.map { line -> LineString(line.points.map(::transformPoint)) }
-        )
-        is Polygon -> Polygon(geometry.rings.map { ring -> ring.map(::transformPoint) })
-        is MultiPolygon -> MultiPolygon(
-            geometry.polygons.map { polygon ->
-                Polygon(rings = polygon.rings.map { ring -> ring.map(::transformPoint) })
-            }
-        )
+        is Point -> tp(geometry)
+        is MultiPoint -> MultiPoint(geometry.points.map(::tp))
+        is LineString -> LineString(geometry.points.map(::tp))
+        is MultiLineString -> MultiLineString(geometry.lines.map { LineString(it.points.map(::tp)) })
+        is Polygon -> Polygon(geometry.rings.map { ring -> ring.map(::tp) })
+        is MultiPolygon -> MultiPolygon(geometry.polygons.map { Polygon(it.rings.map { ring -> ring.map(::tp) }) })
     }
 }

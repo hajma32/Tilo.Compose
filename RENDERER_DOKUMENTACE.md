@@ -180,6 +180,9 @@ Co je uz zavedeno:
  - sdilena tile math logika je presunuta do `core.tile.utils` (`TilePlanner`, `TileRequestFactory`),
  - WebMercator tile index/BBOX matika je v `core.tile.utils.WebMercatorTileMath`,
  - `SimpleTileLayer` pouze vybere strategii enumem a interni utility vytvori requesty.
+ - `TileLayer` pocita viditelne tiles z viewport bounds (`visibleTiles`) misto stareho odhadu `tileCount`,
+ - `TilePlanner` uz neplanuje kolem stredu mapy; pouze expanduje `TileRange -> List<TileCoordinate>`,
+ - `WebMercatorTileMath` byl zredukovan na funkce nutne pro world center prevod a WMS BBOX vypocet.
 
 Dotcene soubory v kroku 1:
 

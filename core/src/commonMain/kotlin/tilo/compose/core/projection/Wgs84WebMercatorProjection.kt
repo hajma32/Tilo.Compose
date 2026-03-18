@@ -1,8 +1,10 @@
 package tilo.compose.core.projection
 
 /**
- * WGS84 lon/lat CRS used with WebMercator viewport math in the current renderer.
+ * Backwards-compatible alias for Web Mercator (EPSG:3857).
  */
-object Wgs84WebMercatorProjection : Projection {
-    override val id: String = "EPSG:4326"
-}
+@Deprecated(
+    message = "Use Epsg3857Projection.",
+    replaceWith = ReplaceWith("Epsg3857Projection")
+)
+object Wgs84WebMercatorProjection : Projection by Epsg3857Projection

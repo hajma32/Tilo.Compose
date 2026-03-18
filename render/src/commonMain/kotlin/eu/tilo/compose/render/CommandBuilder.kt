@@ -1,8 +1,8 @@
 package eu.tilo.compose.render
 
-import kotlin.math.pow
 import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Geometry
 import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.MultiLineString
@@ -11,138 +11,67 @@ import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.map.Map
-import tilo.compose.core.projection.Wgs84WebMercatorProjection
 
+/**
+ * Builds a flat list of [RenderCommand]s visible in the current [Map] view.
+ *
+ * Positioning is done exclusively via [Map.worldToScreen] — no CRS knowledge here.
+ */
 object CommandBuilder {
 
-    private data class WorldBounds(
-        val minX: Double,
-        val minY: Double,
-        val maxX: Double,
-        val maxY: Double
-    )
+    private const val MAX_BOUNDS_CACHE_SIZE = 10_000
 
-    private data class ScreenTransform(
-        val scale: Double,
-        val tx: Double,
-        val ty: Double
-    ) {
-        fun toScreen(point: MercatorPoint): Point {
-            return Point(
-                x = point.u * scale + tx,
-                y = point.v * scale + ty
-            )
-        }
-    }
+    /**
+     * @param boundsCache owned by the caller (typically a Compose `remember`) so that cache
+     * lifetime matches the composable scope, not a global singleton.
+     */
+    internal fun build(
+        map: Map,
+        features: List<Feature>,
+        boundsCache: MutableMap<String, BoundingBox> = mutableMapOf()
+    ): List<RenderCommand> {
+        val visible = visibleBounds(map)
 
-    private data class ProjectedCacheEntry(
-        val geometryHash: Int,
-        val projected: ProjectedGeometry
-    )
+        return buildList {
+            features.forEach { feature ->
+                val featureBounds = cachedBounds(feature, boundsCache)
+                if (!visible.intersects(featureBounds)) return@forEach
 
-    private const val TILE_SIZE = 256.0
-    private const val MAX_BOUNDS_CACHE_SIZE = 50_000
-    private const val MAX_PROJECTED_CACHE_SIZE = 50_000
+                val baseId = feature.key
+                val style  = feature.style ?: BaseStyle()
 
-    private val geometryBoundsCache = linkedMapOf<String, WorldBounds>()
-    private val projectedGeometryCache = linkedMapOf<String, ProjectedCacheEntry>()
+                addAll(geometryToCommands(baseId, map, feature.geometry, style))
 
-    fun build(map: Map, features: List<Feature>): List<RenderCommand> {
-        val commands = mutableListOf<RenderCommand>()
-        val visible = visibleWorldBounds(map)
-        val useProjectedPath = map.projection === Wgs84WebMercatorProjection
-        val transform = if (useProjectedPath) screenTransform(map) else null
-
-        features.forEach { feature ->
-            val featureBounds = worldBoundsForFeature(feature)
-            if (!intersects(visible, featureBounds)) return@forEach
-
-            val baseId = feature.key
-            val style = feature.style ?: BaseStyle()
-
-            if (useProjectedPath && transform != null) {
-                val projected = projectedGeometryForFeature(feature)
-                commands.addAll(projectedToCommands(baseId, projected, transform, style))
-
-                feature.label
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { labelText ->
-                        val anchor = projectedAnchor(projected)
-                        commands += RenderLabel(
-                            id = "$baseId:label",
-                            text = labelText,
-                            anchor = transform.toScreen(anchor),
-                            style = style
-                        )
+                feature.label?.takeIf { it.isNotBlank() }?.let { label ->
+                    labelAnchorWorld(feature.geometry)?.let { anchor ->
+                        add(RenderLabel(
+                            id     = "$baseId:label",
+                            text   = label,
+                            anchor = map.worldToScreen(anchor),
+                            style  = style
+                        ))
                     }
-            } else {
-                commands.addAll(geometryToCommands(baseId, map, feature.geometry, style))
-
-                feature.label
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { labelText ->
-                        labelAnchorWorld(feature.geometry)?.let { worldAnchor ->
-                            commands += RenderLabel(
-                                id = "$baseId:label",
-                                text = labelText,
-                                anchor = map.worldToScreen(worldAnchor),
-                                style = style
-                            )
-                        }
-                    }
+                }
             }
         }
-
-        return commands
     }
 
-    private fun screenTransform(map: Map): ScreenTransform {
-        val centerProjected = projectPoint(map.center)
-        val scale = TILE_SIZE * 2.0.pow(map.zoom)
-        val tx = -centerProjected.u * scale + map.viewport.width / 2.0
-        val ty = -centerProjected.v * scale + map.viewport.height / 2.0
-        return ScreenTransform(scale = scale, tx = tx, ty = ty)
-    }
-
-    private fun worldBoundsForFeature(feature: Feature): WorldBounds {
-        geometryBoundsCache[feature.key]?.let { return it }
-
-        val computed = geometryWorldBounds(feature.geometry)
-        geometryBoundsCache[feature.key] = computed
-        trimBoundsCacheIfNeeded()
-        return computed
-    }
-
-    private fun projectedGeometryForFeature(feature: Feature): ProjectedGeometry {
-        val geometryHash = feature.geometry.hashCode()
-        val cached = projectedGeometryCache[feature.key]
-        if (cached != null && cached.geometryHash == geometryHash) return cached.projected
-
-        val projected = projectGeometry(feature.geometry)
-        projectedGeometryCache[feature.key] = ProjectedCacheEntry(geometryHash = geometryHash, projected = projected)
-        trimProjectedCacheIfNeeded()
-        return projected
-    }
-
-    private fun trimBoundsCacheIfNeeded() {
-        while (geometryBoundsCache.size > MAX_BOUNDS_CACHE_SIZE) {
-            val oldestKey = geometryBoundsCache.keys.firstOrNull() ?: return
-            geometryBoundsCache.remove(oldestKey)
+    private fun cachedBounds(
+        feature: Feature,
+        cache: MutableMap<String, BoundingBox>
+    ): BoundingBox {
+        cache[feature.key]?.let { return it }
+        return geometryBounds(feature.geometry).also { bounds ->
+            cache[feature.key] = bounds
+            if (cache.size > MAX_BOUNDS_CACHE_SIZE) {
+                cache.remove(cache.keys.first())
+            }
         }
     }
 
-    private fun trimProjectedCacheIfNeeded() {
-        while (projectedGeometryCache.size > MAX_PROJECTED_CACHE_SIZE) {
-            val oldestKey = projectedGeometryCache.keys.firstOrNull() ?: return
-            projectedGeometryCache.remove(oldestKey)
-        }
-    }
-
-    private fun visibleWorldBounds(map: Map): WorldBounds {
-        val topLeft = map.screenToWorld(Point(0.0, 0.0))
-        val bottomRight = map.screenToWorld(
-            Point(map.viewport.width.toDouble(), map.viewport.height.toDouble())
-        )
+    private fun visibleBounds(map: Map): BoundingBox {
+        val topLeft     = map.screenToWorld(Point(0.0, 0.0))
+        val bottomRight = map.screenToWorld(Point(map.viewport.width.toDouble(), map.viewport.height.toDouble()))
 
         val minX = minOf(topLeft.x, bottomRight.x)
         val maxX = maxOf(topLeft.x, bottomRight.x)
@@ -152,103 +81,23 @@ object CommandBuilder {
         val padX = (maxX - minX) * 0.1
         val padY = (maxY - minY) * 0.1
 
-        return WorldBounds(
-            minX = minX - padX,
-            minY = minY - padY,
-            maxX = maxX + padX,
-            maxY = maxY + padY
+        return BoundingBox(
+            topLeft     = Point(minX - padX, maxY + padY),
+            topRight    = Point(maxX + padX, maxY + padY),
+            bottomLeft  = Point(minX - padX, minY - padY),
+            bottomRight = Point(maxX + padX, minY - padY)
         )
     }
 
-    private fun geometryWorldBounds(geometry: Geometry): WorldBounds {
-        val points = when (geometry) {
-            is Point -> listOf(geometry)
-            is MultiPoint -> geometry.points
-            is LineString -> geometry.points
+    private fun geometryBounds(geometry: Geometry): BoundingBox =
+        BoundingBox.fromPoints(when (geometry) {
+            is Point           -> listOf(geometry)
+            is MultiPoint      -> geometry.points
+            is LineString      -> geometry.points
             is MultiLineString -> geometry.lines.flatMap { it.points }
-            is Polygon -> geometry.rings.flatten()
-            is MultiPolygon -> geometry.polygons.flatMap { it.rings.flatten() }
-        }
-
-        val minX = points.minOf { it.x }
-        val minY = points.minOf { it.y }
-        val maxX = points.maxOf { it.x }
-        val maxY = points.maxOf { it.y }
-
-        return WorldBounds(minX = minX, minY = minY, maxX = maxX, maxY = maxY)
-    }
-
-    private fun intersects(a: WorldBounds, b: WorldBounds): Boolean {
-        if (a.maxX < b.minX || b.maxX < a.minX) return false
-        if (a.maxY < b.minY || b.maxY < a.minY) return false
-        return true
-    }
-
-    private fun projectedToCommands(
-        baseId: String,
-        geometry: ProjectedGeometry,
-        transform: ScreenTransform,
-        style: BaseStyle
-    ): List<RenderCommand> {
-        val hidePointMarkers = style.fillColor == 0x00000000L
-        return when (geometry) {
-            is ProjectedPointGeometry -> if (hidePointMarkers) {
-                emptyList()
-            } else {
-                listOf(
-                 RenderPoint(
-                     id = "$baseId:point",
-                     point = transform.toScreen(geometry.point),
-                     style = style
-                 )
-                )
-            }
-
-            is ProjectedMultiPointGeometry -> if (hidePointMarkers) {
-                emptyList()
-            } else {
-                geometry.points.mapIndexed { i, point ->
-                    RenderPoint(
-                        id = "$baseId:point:$i",
-                        point = transform.toScreen(point),
-                        style = style
-                    )
-                }
-            }
-
-            is ProjectedLineGeometry -> listOf(
-                RenderLineString(
-                    id = "$baseId:line",
-                    points = geometry.points.map(transform::toScreen),
-                    style = style
-                )
-            )
-
-            is ProjectedMultiLineGeometry -> geometry.lines.mapIndexed { i, line ->
-                RenderLineString(
-                    id = "$baseId:line:$i",
-                    points = line.map(transform::toScreen),
-                    style = style
-                )
-            }
-
-            is ProjectedPolygonGeometry -> listOf(
-                RenderPolygon(
-                    id = "$baseId:polygon",
-                    rings = geometry.rings.map { ring -> ring.map(transform::toScreen) },
-                    style = style
-                )
-            )
-
-            is ProjectedMultiPolygonGeometry -> geometry.polygons.mapIndexed { i, polygon ->
-                RenderPolygon(
-                    id = "$baseId:polygon:$i",
-                    rings = polygon.map { ring -> ring.map(transform::toScreen) },
-                    style = style
-                )
-            }
-        }
-    }
+            is Polygon         -> geometry.rings.flatten()
+            is MultiPolygon    -> geometry.polygons.flatMap { it.rings.flatten() }
+        })
 
     private fun geometryToCommands(
         baseId: String,
@@ -256,81 +105,42 @@ object CommandBuilder {
         geometry: Geometry,
         style: BaseStyle
     ): List<RenderCommand> {
-        val hidePointMarkers = style.fillColor == 0x00000000L
-         return when (geometry) {
-            is Point -> if (hidePointMarkers) {
-                emptyList()
-            } else {
-                listOf(
-                    RenderPoint(
-                        id = "$baseId:point",
-                        point = map.worldToScreen(geometry),
-                        style = style
-                    )
-                )
-            }
-            is MultiPoint -> if (hidePointMarkers) {
-                emptyList()
-            } else {
-                geometry.points.mapIndexed { i, p ->
-                    RenderPoint(
-                        id = "$baseId:point:$i",
-                        point = map.worldToScreen(p),
-                        style = style
-                    )
-                }
+        val hidePoints = style.fillColor == 0x00000000L
+        return when (geometry) {
+            is Point -> if (hidePoints) emptyList() else listOf(
+                RenderPoint(id = "$baseId:point", point = map.worldToScreen(geometry), style = style)
+            )
+            is MultiPoint -> if (hidePoints) emptyList() else geometry.points.mapIndexed { i, p ->
+                RenderPoint(id = "$baseId:point:$i", point = map.worldToScreen(p), style = style)
             }
             is LineString -> listOf(
-                RenderLineString(
-                    id = "$baseId:line",
-                    points = geometry.points.map(map::worldToScreen),
-                    style = style
-                )
+                RenderLineString(id = "$baseId:line", points = geometry.points.map(map::worldToScreen), style = style)
             )
             is MultiLineString -> geometry.lines.mapIndexed { i, line ->
-                RenderLineString(
-                    id = "$baseId:line:$i",
-                    points = line.points.map(map::worldToScreen),
-                    style = style
-                )
+                RenderLineString(id = "$baseId:line:$i", points = line.points.map(map::worldToScreen), style = style)
             }
             is Polygon -> listOf(
-                RenderPolygon(
-                    id = "$baseId:polygon",
-                    rings = geometry.rings.map { ring -> ring.map(map::worldToScreen) },
-                    style = style
-                )
+                RenderPolygon(id = "$baseId:polygon", rings = geometry.rings.map { r -> r.map(map::worldToScreen) }, style = style)
             )
             is MultiPolygon -> geometry.polygons.mapIndexed { i, polygon ->
-                RenderPolygon(
-                    id = "$baseId:polygon:$i",
-                    rings = polygon.rings.map { ring -> ring.map(map::worldToScreen) },
-                    style = style
-                )
+                RenderPolygon(id = "$baseId:polygon:$i", rings = polygon.rings.map { r -> r.map(map::worldToScreen) }, style = style)
             }
         }
     }
 
     private fun labelAnchorWorld(geometry: Geometry): Point? {
         val points = when (geometry) {
-            is Point -> listOf(geometry)
-            is MultiPoint -> geometry.points
-            is LineString -> geometry.points
+            is Point          -> listOf(geometry)
+            is MultiPoint     -> geometry.points
+            is LineString     -> geometry.points
             is MultiLineString -> geometry.lines.flatMap { it.points }
-            is Polygon -> geometry.rings.firstOrNull().orEmpty()
-            is MultiPolygon -> geometry.polygons.flatMap { polygon ->
-                polygon.rings.firstOrNull().orEmpty()
-            }
+            is Polygon        -> geometry.rings.firstOrNull().orEmpty()
+            is MultiPolygon   -> geometry.polygons.flatMap { it.rings.firstOrNull().orEmpty() }
         }
         if (points.isEmpty()) return null
-
-        val minX = points.minOf { it.x }
-        val minY = points.minOf { it.y }
-        val maxX = points.maxOf { it.x }
-        val maxY = points.maxOf { it.y }
         return Point(
-            x = (minX + maxX) / 2.0,
-            y = (minY + maxY) / 2.0
+            x = (points.minOf { it.x } + points.maxOf { it.x }) / 2.0,
+            y = (points.minOf { it.y } + points.maxOf { it.y }) / 2.0
         )
     }
 }

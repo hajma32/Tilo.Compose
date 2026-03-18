@@ -49,7 +49,12 @@ import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.Map
-import tilo.compose.core.projection.Wgs84WebMercatorProjection
+import tilo.compose.core.projection.Epsg3857Projection
+import tilo.compose.core.projection.Epsg4326Projection
+import tilo.compose.core.tile.TileGrid
+import tilo.compose.core.tile.WMSTileLayer
+import tilo.compose.core.transform.WebMercatorToWgs84Transformation
+import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
 
 private enum class TestScreen(val title: String) {
     MultipleLabelsTest("Multiple labels"),
@@ -66,6 +71,17 @@ private enum class TestScreen(val title: String) {
 @Preview
 fun App() {
     val platform = remember { getPlatform() }
+    val tileLayer = remember {
+        WMSTileLayer(
+            id = "osm-wms",
+            grid = TileGrid.WebMercator,
+            baseUrl = "https://ows.terrestris.de/osm/service",
+            layers = "OSM-WMS",
+            projection = Epsg3857Projection,
+            crs = Epsg3857Projection.id,
+            crsParamName = "SRS"
+        )
+    }
 
     var selectedScreen by remember { mutableStateOf(TestScreen.MultipleLabelsTest) }
     val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -73,10 +89,10 @@ fun App() {
 
     val map = remember(selectedScreen) {
         Map(
-            center = Point(16.6068, 49.1951),
+            center = Wgs84ToWebMercatorTransformation.sourceToTarget(Point(16.6068, 49.1951)),
             zoom = 11.5,
             config = MapConfig(minZoom = 0.0, maxZoom = 20.0),
-            projection = Wgs84WebMercatorProjection
+            projection = Epsg3857Projection
         )
     }
 
@@ -105,7 +121,7 @@ fun App() {
         var lastKey: String? = null
 
         while (selectedScreen == TestScreen.MbtilesVectorTest) {
-            val currentCenter = map.center
+            val currentCenter = WebMercatorToWgs84Transformation.sourceToTarget(map.center)
             val currentZoom = map.zoom.roundToInt()
             val key = "$currentZoom/${currentCenter.x.toInt()}/${currentCenter.y.toInt()}"
 
@@ -171,6 +187,9 @@ fun App() {
                     MapRenderer(
                         map = map,
                         features = renderedFeatures,
+                        featuresSourceProjection = Epsg4326Projection,
+                        tileLayer = if (selectedScreen == TestScreen.MbtilesVectorTest) null else tileLayer,
+                        tileDecoder = ::decodeImageBitmap,
                         modifier = Modifier.fillMaxSize()
                     )
 

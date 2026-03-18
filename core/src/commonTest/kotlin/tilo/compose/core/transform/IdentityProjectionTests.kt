@@ -30,4 +30,18 @@ class IdentityProjectionTests {
         assertTrue(approxEqual(world.x, world2.x), "x differs: $world vs $world2")
         assertTrue(approxEqual(world.y, world2.y), "y differs: $world vs $world2")
     }
+
+    @Test
+    fun viewportCartesianWorldToScreenAndBackAreInversesWithPixelRatio() {
+        val viewport = Viewport(width = 1600, height = 1200, pixelRatio = 2.0)
+        val center = Point(100.5, -42.25)
+        val world = Point(-123.45, 67.89)
+        val zoom = 3.5
+
+        val screen = viewport.worldToScreen(world, center, zoom)
+        val world2 = viewport.screenToWorld(screen, center, zoom)
+
+        assertTrue(approxEqual(world.x, world2.x), "x differs: $world vs $world2")
+        assertTrue(approxEqual(world.y, world2.y), "y differs: $world vs $world2")
+    }
 }

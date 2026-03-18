@@ -1,9 +1,8 @@
 package tilo.compose.core.map
 
 import tilo.compose.core.geometry.Point
-import tilo.compose.core.projection.Projection
 import tilo.compose.core.projection.IdentityProjection
-import tilo.compose.core.transform.Transformation
+import tilo.compose.core.projection.Projection
 
 /**
  * Represents the state of a map, including its center, zoom level, projection, and viewport.
@@ -17,8 +16,8 @@ class Map(
 ) {
 
     fun panBy(dx: Double, dy: Double) {
-        val worldDelta = viewport.screenToWorld(Point(dx, dy), center, zoom)
-        val originWorld = viewport.screenToWorld(Point(0.0, 0.0), center, zoom)
+        val worldDelta = viewport.screenToWorld(Point(dx, dy), center, zoom, projection.worldUnitsPerMapUnit)
+        val originWorld = viewport.screenToWorld(Point(0.0, 0.0), center, zoom, projection.worldUnitsPerMapUnit)
         center = Point(
             x = center.x + (worldDelta.x - originWorld.x),
             y = center.y + (worldDelta.y - originWorld.y)
@@ -31,33 +30,23 @@ class Map(
             zoom = newZoom
             return
         }
-        val worldBefore = viewport.screenToWorld(focus, center, zoom)
+        val worldBefore = viewport.screenToWorld(focus, center, zoom, projection.worldUnitsPerMapUnit)
         zoom = newZoom
-        val worldAfter = viewport.screenToWorld(focus, center, zoom)
+        val worldAfter = viewport.screenToWorld(focus, center, zoom, projection.worldUnitsPerMapUnit)
         center = Point(center.x + (worldBefore.x - worldAfter.x), center.y + (worldBefore.y - worldAfter.y))
     }
 
-    //TODO could be one transform method
     fun transformSourceToTarget(point: Point, source: Projection, target: Projection): Point {
-        val transformation = requireTransformation(source, target)
-        return transformation.sourceToTarget(point)
+        return config.transformer.sourceToTarget(point, source, target)
     }
 
     fun transformTargetToSource(point: Point, source: Projection, target: Projection): Point {
-        val transformation = requireTransformation(source, target)
-        return transformation.targetToSource(point)
+        return config.transformer.targetToSource(point, source, target)
     }
 
-    fun worldToScreen(world: Point): Point = viewport.worldToScreen(world, center, zoom)
-    fun screenToWorld(screen: Point): Point = viewport.screenToWorld(screen, center, zoom)
+    fun worldToScreen(world: Point): Point =
+        viewport.worldToScreen(world, center, zoom, projection.worldUnitsPerMapUnit)
 
-    private fun requireTransformation(
-        source: Projection,
-        target: Projection
-    ): Transformation<Projection, Projection> {
-        return config.transformations.firstOrNull { it.source === source && it.target === target }
-            ?: throw IllegalStateException(
-                "No transformation registered for ${source::class.simpleName} -> ${target::class.simpleName}."
-            )
-    }
+    fun screenToWorld(screen: Point): Point =
+        viewport.screenToWorld(screen, center, zoom, projection.worldUnitsPerMapUnit)
 }

@@ -166,6 +166,12 @@ class AndroidMbtilesVectorLoader(
         }
     }
 
+    /**
+     * Loads vector features around [center] in geographic lon/lat (EPSG:4326).
+     *
+     * Decoded geometries are also returned in EPSG:4326, so the caller must
+     * reproject them when the map itself uses a different CRS.
+     */
     fun loadFeatures(center: Point, zoom: Double, tileCount: Int): List<Feature> {
         val requestedZoom = zoom.roundToInt().coerceAtLeast(0)
         val sourceZoom = resolveSourceZoom(requestedZoom) ?: return emptyList()

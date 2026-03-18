@@ -1,5 +1,7 @@
 # Coding Guidelines - TiloCompose
 
+> **For AI agents:** Before starting any work, also read [`AGENT_SKILLS.md`](./AGENT_SKILLS.md) — it contains instructions specific to automated tools (existing types in `core`, CRS rules, Compose cache rules, language rules).
+
 This document defines coding standards and best practices for the TiloCompose project (Kotlin Multiplatform + Compose). It is intended for contributors and automated tools (linters, CI).
 
 ## Goals and Scope
@@ -80,6 +82,23 @@ This repository hosts a multiplatform library for working with maps: tile layers
 
 ## Documentation
 - Document public APIs with KDoc and provide short usage examples in `README.md` or `docs/`.
+
+## Shared types in `core` — use, don't duplicate
+
+The `core` module contains canonical types shared across all modules. **Always check `core` before creating a new local type.**
+
+| Type | Package | Use instead of |
+|---|---|---|
+| `BoundingBox` | `tilo.compose.core.geometry` | any local `WorldBounds`, `Rect`, `Bounds` data class |
+| `Point` | `tilo.compose.core.geometry` | local `Vec2`, `Coordinate`, `LatLon` wrappers |
+| `Geometry` + subtypes | `tilo.compose.core.geometry` | any local geometry representations |
+| `TileCoordinate` / `TileBounds` | `tilo.compose.core.tile` | local tile address structs |
+| `Viewport` | `tilo.compose.core.map` | local screen-size holders |
+
+Rules:
+- If you need a new property or method on a shared type (e.g. `BoundingBox.intersects`), **add it to `core`**, do not wrap or extend it locally.
+- If a `core` type is missing something, extend it rather than creating a parallel type.
+- Never import a `core` type and then shadow it with a same-concept local type in the same module.
 
 ---
 

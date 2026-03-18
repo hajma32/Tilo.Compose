@@ -1,25 +1,32 @@
 package tilo.compose.core.geometry
 
-/** Bounding box defined by its four corner points. */
+/** Axis-aligned bounding box defined by its four corners. */
 data class BoundingBox(
     val topLeft: Point,
     val topRight: Point,
     val bottomLeft: Point,
     val bottomRight: Point
 ) {
+    val minX: Double get() = topLeft.x
+    val maxX: Double get() = topRight.x
+    val minY: Double get() = bottomLeft.y
+    val maxY: Double get() = topLeft.y
+
+    fun intersects(other: BoundingBox): Boolean =
+        maxX >= other.minX && other.maxX >= minX &&
+        maxY >= other.minY && other.maxY >= minY
+
     companion object {
         fun fromPoints(points: List<Point>): BoundingBox {
             require(points.isNotEmpty()) { "Cannot create BoundingBox from empty list" }
-            val xs = points.map { it.x }
-            val ys = points.map { it.y }
-            val minX = xs.minOrNull() ?: 0.0
-            val maxX = xs.maxOrNull() ?: 0.0
-            val minY = ys.minOrNull() ?: 0.0
-            val maxY = ys.maxOrNull() ?: 0.0
+            val minX = points.minOf { it.x }
+            val maxX = points.maxOf { it.x }
+            val minY = points.minOf { it.y }
+            val maxY = points.maxOf { it.y }
             return BoundingBox(
-                topLeft = Point(minX, maxY),
-                topRight = Point(maxX, maxY),
-                bottomLeft = Point(minX, minY),
+                topLeft     = Point(minX, maxY),
+                topRight    = Point(maxX, maxY),
+                bottomLeft  = Point(minX, minY),
                 bottomRight = Point(maxX, minY)
             )
         }

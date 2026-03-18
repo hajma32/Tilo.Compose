@@ -38,18 +38,20 @@ object CommandBuilder {
                 if (!visible.intersects(featureBounds)) return@forEach
 
                 val baseId = feature.key
-                val style  = feature.style ?: BaseStyle()
+                val style = feature.style ?: BaseStyle()
 
                 addAll(geometryToCommands(baseId, map, feature.geometry, style))
 
                 feature.label?.takeIf { it.isNotBlank() }?.let { label ->
                     labelAnchorWorld(feature.geometry)?.let { anchor ->
-                        add(RenderLabel(
-                            id     = "$baseId:label",
-                            text   = label,
-                            anchor = map.worldToScreen(anchor),
-                            style  = style
-                        ))
+                        add(
+                            RenderLabel(
+                                id = "$baseId:label",
+                                text = label,
+                                anchor = map.worldToScreen(anchor),
+                                style = style
+                            )
+                        )
                     }
                 }
             }
@@ -70,7 +72,7 @@ object CommandBuilder {
     }
 
     private fun visibleBounds(map: Map): BoundingBox {
-        val topLeft     = map.screenToWorld(Point(0.0, 0.0))
+        val topLeft = map.screenToWorld(Point(0.0, 0.0))
         val bottomRight = map.screenToWorld(Point(map.viewport.width.toDouble(), map.viewport.height.toDouble()))
 
         val minX = minOf(topLeft.x, bottomRight.x)
@@ -82,21 +84,22 @@ object CommandBuilder {
         val padY = (maxY - minY) * 0.1
 
         return BoundingBox(
-            topLeft     = Point(minX - padX, maxY + padY),
-            topRight    = Point(maxX + padX, maxY + padY),
-            bottomLeft  = Point(minX - padX, minY - padY),
+            topLeft = Point(minX - padX, maxY + padY),
+            topRight = Point(maxX + padX, maxY + padY),
+            bottomLeft = Point(minX - padX, minY - padY),
             bottomRight = Point(maxX + padX, minY - padY)
         )
     }
 
     private fun geometryBounds(geometry: Geometry): BoundingBox =
-        BoundingBox.fromPoints(when (geometry) {
-            is Point           -> listOf(geometry)
-            is MultiPoint      -> geometry.points
-            is LineString      -> geometry.points
+        BoundingBox.fromPoints(
+            when (geometry) {
+            is Point -> listOf(geometry)
+            is MultiPoint -> geometry.points
+            is LineString -> geometry.points
             is MultiLineString -> geometry.lines.flatMap { it.points }
-            is Polygon         -> geometry.rings.flatten()
-            is MultiPolygon    -> geometry.polygons.flatMap { it.rings.flatten() }
+            is Polygon -> geometry.rings.flatten()
+            is MultiPolygon -> geometry.polygons.flatMap { it.rings.flatten() }
         })
 
     private fun geometryToCommands(
@@ -110,32 +113,45 @@ object CommandBuilder {
             is Point -> if (hidePoints) emptyList() else listOf(
                 RenderPoint(id = "$baseId:point", point = map.worldToScreen(geometry), style = style)
             )
+
             is MultiPoint -> if (hidePoints) emptyList() else geometry.points.mapIndexed { i, p ->
                 RenderPoint(id = "$baseId:point:$i", point = map.worldToScreen(p), style = style)
             }
+
             is LineString -> listOf(
                 RenderLineString(id = "$baseId:line", points = geometry.points.map(map::worldToScreen), style = style)
             )
+
             is MultiLineString -> geometry.lines.mapIndexed { i, line ->
                 RenderLineString(id = "$baseId:line:$i", points = line.points.map(map::worldToScreen), style = style)
             }
+
             is Polygon -> listOf(
-                RenderPolygon(id = "$baseId:polygon", rings = geometry.rings.map { r -> r.map(map::worldToScreen) }, style = style)
+                RenderPolygon(
+                    id = "$baseId:polygon",
+                    rings = geometry.rings.map { r -> r.map(map::worldToScreen) },
+                    style = style
+                )
             )
+
             is MultiPolygon -> geometry.polygons.mapIndexed { i, polygon ->
-                RenderPolygon(id = "$baseId:polygon:$i", rings = polygon.rings.map { r -> r.map(map::worldToScreen) }, style = style)
+                RenderPolygon(
+                    id = "$baseId:polygon:$i",
+                    rings = polygon.rings.map { r -> r.map(map::worldToScreen) },
+                    style = style
+                )
             }
         }
     }
 
     private fun labelAnchorWorld(geometry: Geometry): Point? {
         val points = when (geometry) {
-            is Point          -> listOf(geometry)
-            is MultiPoint     -> geometry.points
-            is LineString     -> geometry.points
+            is Point -> listOf(geometry)
+            is MultiPoint -> geometry.points
+            is LineString -> geometry.points
             is MultiLineString -> geometry.lines.flatMap { it.points }
-            is Polygon        -> geometry.rings.firstOrNull().orEmpty()
-            is MultiPolygon   -> geometry.polygons.flatMap { it.rings.firstOrNull().orEmpty() }
+            is Polygon -> geometry.rings.firstOrNull().orEmpty()
+            is MultiPolygon -> geometry.polygons.flatMap { it.rings.firstOrNull().orEmpty() }
         }
         if (points.isEmpty()) return null
         return Point(

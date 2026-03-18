@@ -1,4 +1,4 @@
-package tilo.compose.core.tile
+package tilo.compose.core.layers.tile.impl
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -10,9 +10,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.tile.TileLayer
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.Projection
+import tilo.compose.core.tile.Tile
+import tilo.compose.core.tile.TileGrid
+import tilo.compose.core.tile.TileRequest
 
 /**
  * WMS tile layer (OGC WMS GetMap).
@@ -26,7 +30,7 @@ import tilo.compose.core.projection.Projection
 class WMSTileLayer(
     override val id: String,
     override val projection: Projection = Epsg4326Projection,
-    override val grid: TileGrid = TileGrid.defaultFor(projection),
+    override val grid: TileGrid = TileGrid.Companion.defaultFor(projection),
     private val baseUrl: String,
     private val layers: String,
     private val crs: String = projection.id,
@@ -55,7 +59,12 @@ class WMSTileLayer(
         val zoom = grid.zoomForViewport(map.zoom, map.viewport, projection)
 
         val topLeft = map.screenToWorld(Point(0.0, 0.0))
-        val bottomRight = map.screenToWorld(Point(map.viewport.width.toDouble(), map.viewport.height.toDouble()))
+        val bottomRight = map.screenToWorld(
+            Point(
+                map.viewport.width.toDouble(),
+                map.viewport.height.toDouble()
+            )
+        )
 
         val requests = grid.visibleTiles(
             minX = minOf(topLeft.x, bottomRight.x),

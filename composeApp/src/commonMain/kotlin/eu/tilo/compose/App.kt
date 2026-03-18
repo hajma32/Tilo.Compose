@@ -52,7 +52,7 @@ import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.tile.TileGrid
-import tilo.compose.core.tile.WMSTileLayer
+import tilo.compose.core.layers.tile.impl.WMSTileLayer
 import tilo.compose.core.transform.WebMercatorToWgs84Transformation
 import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
 

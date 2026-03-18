@@ -23,7 +23,7 @@ import tilo.compose.core.map.Map
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.Tile
-import tilo.compose.core.tile.TileLayer
+import tilo.compose.core.layers.tile.TileLayer
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -42,32 +42,33 @@ fun MapRenderer(
     tileDecoder: ((ByteArray) -> ImageBitmap?)? = null,
     modifier: Modifier = Modifier
 ) {
-    val density      = LocalDensity.current
+    val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
 
-    // Caches owned by this composable scope — not global singletons.
-    val boundsCache             = remember { mutableMapOf<String, BoundingBox>() }
-    val tileBitmapCache         = remember { mutableMapOf<String, ImageBitmap?>() }
-    val labelBitmapCache        = remember { mutableMapOf<String, ImageBitmap>() }
+    val boundsCache = remember { mutableMapOf<String, BoundingBox>() }
+    val tileBitmapCache = remember { mutableMapOf<String, ImageBitmap?>() }
+    val labelBitmapCache = remember { mutableMapOf<String, ImageBitmap>() }
     val offscreenLabelDrawScope = remember { CanvasDrawScope() }
 
     var stateVersion by remember { mutableStateOf(0) }
-    var tiles        by remember { mutableStateOf<List<Tile>>(emptyList()) }
+    var tiles by remember { mutableStateOf<List<Tile>>(emptyList()) }
 
     // ── Scene: build commands synchronously in the recompose pass ─────────────
     // No LaunchedEffect needed — build and map happen in one pass, no stale-closure risk.
     val projectedFeatures = transformFeaturesToMapProjection(features, featuresSourceProjection, map)
-    val retained          = CommandBuilder.build(map, projectedFeatures, boundsCache).associateBy { it.id }
+    val retained = CommandBuilder.build(map, projectedFeatures, boundsCache).associateBy { it.id }
 
     // ── Tile loading (debounced, deduplicated) ────────────────────────────────
     var lastTileKey by remember { mutableStateOf("") }
 
     LaunchedEffect(tileLayer, stateVersion, map.zoom, map.center) {
-        if (tileLayer == null) { tiles = emptyList(); return@LaunchedEffect }
+        if (tileLayer == null) {
+            tiles = emptyList(); return@LaunchedEffect
+        }
         val zoom = floor(map.zoom).toInt().coerceIn(0, 22)
-        val cx   = (map.center.x * 1000).roundToInt()
-        val cy   = (map.center.y * 1000).roundToInt()
-        val key  = "$zoom/$cx/$cy/${map.viewport.width}x${map.viewport.height}"
+        val cx = (map.center.x * 1000).roundToInt()
+        val cy = (map.center.y * 1000).roundToInt()
+        val key = "$zoom/$cx/$cy/${map.viewport.width}x${map.viewport.height}"
         if (key == lastTileKey) return@LaunchedEffect
         delay(60)
         lastTileKey = key
@@ -80,8 +81,8 @@ fun MapRenderer(
             .fillMaxSize()
             .onSizeChanged { size ->
                 map.viewport = Viewport(
-                    width      = size.width,
-                    height     = size.height,
+                    width = size.width,
+                    height = size.height,
                     pixelRatio = density.density.toDouble()
                 )
                 stateVersion++

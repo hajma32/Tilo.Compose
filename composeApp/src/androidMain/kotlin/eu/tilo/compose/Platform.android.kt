@@ -9,7 +9,7 @@ import tilo.compose.core.geometry.Point
 class AndroidPlatform : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
 
-    private val mbtilesLoader: AndroidMbtilesVectorLoader by lazy {
+    private val mbtilesLoader by lazy {
         AndroidMbtilesVectorLoader(
             context = AndroidAppContext.require(),
             rawResourceId = R.raw.brno

@@ -40,6 +40,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(project(":core"))
             implementation(project(":render"))
+            implementation(project(":data"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

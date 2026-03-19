@@ -1,0 +1,51 @@
+CREATE TABLE IF NOT EXISTS metadata (
+  name TEXT NOT NULL,
+  value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tiles (
+  zoom_level INTEGER NOT NULL,
+  tile_column INTEGER NOT NULL,
+  tile_row INTEGER NOT NULL,
+  tile_data BLOB
+);
+
+selectMetadataValue:
+SELECT value
+FROM metadata
+WHERE name = ?
+LIMIT 1;
+
+selectAvailableZoomLevels:
+SELECT DISTINCT zoom_level
+FROM tiles;
+
+selectTileExtentsByZoom:
+SELECT zoom_level,
+       MIN(tile_column) AS minX,
+       MAX(tile_column) AS maxX,
+       MIN(tile_row) AS minRow,
+       MAX(tile_row) AS maxRow
+FROM tiles
+GROUP BY zoom_level;
+
+selectTileCountByZoom:
+SELECT zoom_level,
+       COUNT(*) AS tileCount
+FROM tiles
+GROUP BY zoom_level;
+
+selectTilePresenceByZoom:
+SELECT tile_column,
+       tile_row
+FROM tiles
+WHERE zoom_level = ?;
+
+selectTileData:
+SELECT tile_data
+FROM tiles
+WHERE zoom_level = ?
+  AND tile_column = ?
+  AND tile_row = ?
+LIMIT 1;
+

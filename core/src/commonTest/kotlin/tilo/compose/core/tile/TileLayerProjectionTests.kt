@@ -1,9 +1,9 @@
 package tilo.compose.core.tile
 
-import tilo.compose.core.layers.tile.impl.WMSTileLayer
-import tilo.compose.core.layers.tile.impl.XYZTileLayer
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import tilo.compose.core.layers.raster.WMSTileLayer
+import tilo.compose.core.layers.raster.XYZTileLayer
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
@@ -38,4 +38,3 @@ class TileLayerProjectionTests {
         }
     }
 }
-

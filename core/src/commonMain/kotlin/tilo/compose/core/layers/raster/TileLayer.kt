@@ -1,4 +1,4 @@
-package tilo.compose.core.layers.tile
+package tilo.compose.core.layers.raster
 
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Projection

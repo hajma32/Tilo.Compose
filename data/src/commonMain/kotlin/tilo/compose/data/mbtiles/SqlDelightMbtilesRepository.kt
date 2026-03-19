@@ -1,46 +1,37 @@
 package tilo.compose.data.mbtiles
 
 import app.cash.sqldelight.db.SqlDriver
-import tilo.compose.core.vectortile.GeoBounds
-import tilo.compose.core.vectortile.TileCoordinate
-import tilo.compose.core.vectortile.VectorTileDatasetMetadata
+import tilo.compose.core.geometry.BoundingBox
+import tilo.compose.core.tile.TileCoordinate
+import tilo.compose.core.tile.TileMatrixBounds
 import tilo.compose.data.mbtiles.db.MbtilesDatabase
+import tilo.compose.data.utils.CompressionUtils
 
-internal class SqlDelightMbtilesStore(
+internal class SqlDelightMbtilesRepository(
     driver: SqlDriver
-) {
+) : MbtilesRepository {
     private companion object {
         const val TILE_CACHE_SIZE = 2048
         const val TILE_PRESENCE_ZOOM_CACHE_SIZE = 4
         const val MAX_TILE_PRESENCE_SET_SIZE = 120_000
     }
 
-    private data class TileExtent(
-        val minX: Long,
-        val maxX: Long,
-        val minRow: Long,
-        val maxRow: Long
-    )
-
-    private data class TileCacheKey(
-        val z: Int,
-        val x: Int,
-        val row: Int
-    )
-
     private val database = MbtilesDatabase(driver)
     private val queries = database.mbtilesQueries
 
-    private val tileCache = LinkedHashMap<TileCacheKey, ByteArray?>(TILE_CACHE_SIZE, 0.75f)
+    private val tileCache = LinkedHashMap<TileCoordinate, ByteArray?>(TILE_CACHE_SIZE, 0.75f)
     private val tilePresenceByZoom = mutableMapOf<Int, Set<Long>>()
     private val tilePresenceAccessOrder = mutableListOf<Int>()
 
-    val metadata: VectorTileDatasetMetadata by lazy {
-        VectorTileDatasetMetadata(
+    override val metadata: MbtilesMetadata by lazy {
+        val format = queryMetadataValue("format")?.lowercase()
+        MbtilesMetadata(
             availableZoomLevels = availableZoomLevels,
             minZoom = queryMetadataValue("minzoom")?.toIntOrNull(),
             maxZoom = queryMetadataValue("maxzoom")?.toIntOrNull(),
-            bounds = queryBounds()
+            bounds = queryBounds(),
+            format = format,
+            contentType = resolveContentType(format)
         )
     }
 
@@ -55,15 +46,15 @@ internal class SqlDelightMbtilesStore(
             .toSet()
     }
 
-    private val tileExtentsByZoom: Map<Int, TileExtent> by lazy {
+    private val tileMatrixBoundsByZoom: Map<Int, TileMatrixBounds> by lazy {
         queries.selectTileExtentsByZoom()
             .executeAsList()
             .associate { row ->
-                row.zoom_level.toInt() to TileExtent(
-                    minX = row.minX ?: 0L,
-                    maxX = row.maxX ?: 0L,
-                    minRow = row.minRow ?: 0L,
-                    maxRow = row.maxRow ?: 0L
+                row.zoom_level.toInt() to TileMatrixBounds(
+                    minX = (row.minX ?: 0L).toInt(),
+                    maxX = (row.maxX ?: 0L).toInt(),
+                    minY = (row.minRow ?: 0L).toInt(),
+                    maxY = (row.maxRow ?: 0L).toInt()
                 )
             }
     }
@@ -76,66 +67,59 @@ internal class SqlDelightMbtilesStore(
             }
     }
 
-    fun readTileBytes(tile: TileCoordinate): ByteArray? {
-        val row = if (rowScheme == "xyz") {
-            tile.y
-        } else {
-            ((1 shl tile.z) - 1 - tile.y).coerceAtLeast(0)
-        }
+    override fun readTileBytes(tile: TileCoordinate): ByteArray? {
+        val storageTile = tile.toStorageTile(rowScheme)
+        if (!hasPotentialTile(storageTile)) return null
 
-        if (!hasPotentialTile(tile.z, tile.x, row)) return null
-
-        val cacheKey = TileCacheKey(z = tile.z, x = tile.x, row = row)
-        if (tileCache.containsKey(cacheKey)) {
-            return tileCache[cacheKey]
+        if (tileCache.containsKey(storageTile)) {
+            return tileCache[storageTile]
         }
 
         val bytes = queries.selectTileData(
-            zoom_level = tile.z.toLong(),
-            tile_column = tile.x.toLong(),
-            tile_row = row.toLong()
+            zoom_level = storageTile.z.toLong(),
+            tile_column = storageTile.x.toLong(),
+            tile_row = storageTile.y.toLong()
         ).executeAsOneOrNull()?.tile_data
 
         val decodedBytes = bytes?.let { compressedBytes ->
-            MbtilesCompression.ungzipIfNeeded(compressedBytes)
+            CompressionUtils.ungzipIfNeeded(compressedBytes)
         }
-        cacheTile(cacheKey, decodedBytes)
+        cacheTile(storageTile, decodedBytes)
         return decodedBytes
     }
 
-    private fun cacheTile(key: TileCacheKey, bytes: ByteArray?) {
+    private fun cacheTile(tile: TileCoordinate, bytes: ByteArray?) {
         if (tileCache.size >= TILE_CACHE_SIZE) {
             tileCache.keys.firstOrNull()?.let(tileCache::remove)
         }
-        tileCache[key] = bytes
+        tileCache[tile] = bytes
     }
 
-    private fun queryBounds(): GeoBounds? {
+    private fun queryBounds(): BoundingBox? {
         val rawBounds = queryMetadataValue("bounds") ?: return null
         val values = rawBounds.split(',').mapNotNull { value -> value.trim().toDoubleOrNull() }
         if (values.size != 4) return null
 
-        return GeoBounds(
-            minLon = values[0],
-            minLat = values[1],
-            maxLon = values[2],
-            maxLat = values[3]
+        return BoundingBox.fromExtents(
+            minX = values[0],
+            maxX = values[2],
+            minY = values[1],
+            maxY = values[3]
         )
     }
 
-    private fun hasPotentialTile(z: Int, x: Int, row: Int): Boolean {
-        val extent = tileExtentsByZoom[z] ?: return false
-        if (x.toLong() !in extent.minX..extent.maxX) return false
-        if (row.toLong() !in extent.minRow..extent.maxRow) return false
+    private fun hasPotentialTile(tile: TileCoordinate): Boolean {
+        val bounds = tileMatrixBoundsByZoom[tile.z] ?: return false
+        if (!bounds.contains(tile)) return false
 
-        val zoomTileCount = tileCountByZoom[z] ?: 0
+        val zoomTileCount = tileCountByZoom[tile.z] ?: 0
         if (zoomTileCount <= 0) return false
         if (zoomTileCount > MAX_TILE_PRESENCE_SET_SIZE) return true
 
-        val presence = tilePresenceByZoom[z] ?: loadTilePresenceForZoom(z).also { loaded ->
-            cacheTilePresence(z, loaded)
+        val presence = tilePresenceByZoom[tile.z] ?: loadTilePresenceForZoom(tile.z).also { loaded ->
+            cacheTilePresence(tile.z, loaded)
         }
-        return encodeTileKey(x = x, row = row) in presence
+        return encodeTileKey(x = tile.x, row = tile.y) in presence
     }
 
     private fun cacheTilePresence(zoom: Int, presence: Set<Long>) {
@@ -160,7 +144,21 @@ internal class SqlDelightMbtilesStore(
         return queries.selectMetadataValue(name).executeAsOneOrNull()?.value_
     }
 
+    private fun resolveContentType(format: String?): MbtilesContentType {
+        return when (format) {
+            "pbf", "mvt" -> MbtilesContentType.VECTOR
+            "png", "jpg", "jpeg", "webp", "avif" -> MbtilesContentType.RASTER
+            else -> MbtilesContentType.UNKNOWN
+        }
+    }
+
+    private fun TileCoordinate.toStorageTile(rowScheme: String): TileCoordinate {
+        val storageRow = if (rowScheme == "xyz") y else ((1 shl z) - 1 - y).coerceAtLeast(0)
+        return TileCoordinate(z = z, x = x, y = storageRow)
+    }
+
     private fun encodeTileKey(x: Int, row: Int): Long {
         return (x.toLong() shl 32) xor (row.toLong() and 0xFFFFFFFFL)
     }
 }
+

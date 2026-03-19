@@ -1,27 +1,31 @@
 package tilo.compose.data.mbtiles
 
-import tilo.compose.core.vectortile.TileCoordinate
-import tilo.compose.core.vectortile.VectorTile
-import tilo.compose.core.vectortile.VectorTileDatasetMetadata
-import tilo.compose.core.vectortile.VectorTileSource
+import tilo.compose.core.tile.TileCoordinate
+import tilo.compose.core.tile.vector.VectorTile
+import tilo.compose.core.tile.vector.VectorTileDatasetMetadata
+import tilo.compose.core.tile.vector.VectorTileSource
 import tilo.compose.data.vectortile.MvtParser
 
-open class SqlDelightMbtilesVectorTileSource(
-    fileProvider: MbtilesFileProvider,
-    driverFactory: MbtilesSqlDriverFactory,
+class SqlDelightMbtilesVectorTileSource(
+    private val repository: MbtilesRepository,
     private val parser: MvtParser = MvtParser()
 ) : VectorTileSource {
-    private val store by lazy {
-        SqlDelightMbtilesStore(
-            driver = driverFactory.createDriver(fileProvider.provideDatabasePath())
-        )
+    override val metadata: VectorTileDatasetMetadata by lazy {
+        repository.metadata.toVectorTileDatasetMetadata()
     }
 
-    override val metadata: VectorTileDatasetMetadata
-        get() = store.metadata
-
     override fun loadTile(tile: TileCoordinate): VectorTile? {
-        val bytes = store.readTileBytes(tile) ?: return null
+        if (repository.metadata.contentType == MbtilesContentType.RASTER) return null
+        val bytes = repository.readTileBytes(tile) ?: return null
         return parser.parseTile(bytes)
+    }
+
+    private fun MbtilesMetadata.toVectorTileDatasetMetadata(): VectorTileDatasetMetadata {
+        return VectorTileDatasetMetadata(
+            availableZoomLevels = availableZoomLevels,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
+            bounds = bounds
+        )
     }
 }

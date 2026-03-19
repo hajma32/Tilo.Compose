@@ -1,4 +1,4 @@
-package tilo.compose.data.mbtiles
+package tilo.compose.data.utils
 
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -12,7 +12,7 @@ class MbtilesCompressionTests {
     fun ungzipIfNeededReturnsOriginalBytesForPlainPayload() {
         val bytes = "plain-tile".encodeToByteArray()
 
-        assertContentEquals(bytes, MbtilesCompression.ungzipIfNeeded(bytes))
+        assertContentEquals(bytes, CompressionUtils.ungzipIfNeeded(bytes))
     }
 
     @Test
@@ -27,6 +27,6 @@ class MbtilesCompressionTests {
         }
         val gzipped = target.readByteArray()
 
-        assertContentEquals(original, MbtilesCompression.ungzipIfNeeded(gzipped))
+        assertContentEquals(original, CompressionUtils.ungzipIfNeeded(gzipped))
     }
 }

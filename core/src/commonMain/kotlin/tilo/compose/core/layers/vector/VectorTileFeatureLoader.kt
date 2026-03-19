@@ -1,4 +1,4 @@
-package tilo.compose.core.vectortile
+package tilo.compose.core.layers.vector
 
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Geometry
@@ -8,6 +8,9 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
+import tilo.compose.core.tile.vector.VectorTileGeometryDecoder
+import tilo.compose.core.tile.vector.VectorTileQueryPlanner
+import tilo.compose.core.tile.vector.VectorTileSource
 
 class VectorTileFeatureLoader(
     private val source: VectorTileSource,
@@ -76,4 +79,3 @@ class VectorTileFeatureLoader(
         }
     }
 }
-

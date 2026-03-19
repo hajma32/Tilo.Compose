@@ -1,4 +1,4 @@
-package tilo.compose.core.layers.tile.impl
+package tilo.compose.core.layers.raster
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -10,7 +10,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import tilo.compose.core.geometry.Point
-import tilo.compose.core.layers.tile.TileLayer
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.Projection
@@ -30,7 +29,7 @@ import tilo.compose.core.tile.TileRequest
 class WMSTileLayer(
     override val id: String,
     override val projection: Projection = Epsg4326Projection,
-    override val grid: TileGrid = TileGrid.Companion.defaultFor(projection),
+    override val grid: TileGrid = TileGrid.defaultFor(projection),
     private val baseUrl: String,
     private val layers: String,
     private val crs: String = projection.id,

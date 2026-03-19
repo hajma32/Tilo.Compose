@@ -2,7 +2,7 @@ package tilo.compose.data.vectortile
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import tilo.compose.core.vectortile.VectorTileGeometryType
+import tilo.compose.core.tile.vector.VectorTileGeometryType
 
 class MvtParserTests {
 

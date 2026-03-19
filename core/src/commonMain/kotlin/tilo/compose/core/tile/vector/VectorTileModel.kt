@@ -1,31 +1,15 @@
-package tilo.compose.core.vectortile
+package tilo.compose.core.tile.vector
 
-import tilo.compose.core.geometry.Point
+import tilo.compose.core.geometry.BoundingBox
+import tilo.compose.core.tile.TileCoordinate
 
 const val DEFAULT_VECTOR_TILE_EXTENT = 4096
-
-data class GeoBounds(
-    val minLon: Double,
-    val minLat: Double,
-    val maxLon: Double,
-    val maxLat: Double
-) {
-    fun contains(point: Point): Boolean {
-        return point.x in minLon..maxLon && point.y in minLat..maxLat
-    }
-}
-
-data class TileCoordinate(
-    val z: Int,
-    val x: Int,
-    val y: Int
-)
 
 data class VectorTileDatasetMetadata(
     val availableZoomLevels: Set<Int>,
     val minZoom: Int? = null,
     val maxZoom: Int? = null,
-    val bounds: GeoBounds? = null
+    val bounds: BoundingBox? = null
 )
 
 interface VectorTileSource {

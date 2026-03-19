@@ -1,4 +1,4 @@
-package tilo.compose.core.vectortile
+package tilo.compose.core.tile.vector
 
 import kotlin.math.PI
 import kotlin.math.atan
@@ -11,6 +11,7 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
+import tilo.compose.core.tile.TileCoordinate
 
 class VectorTileGeometryDecoder {
     private companion object {
@@ -140,10 +141,11 @@ class VectorTileGeometryDecoder {
 
                 2 -> {
                     repeat(count) {
-                        if (current == null || index + 1 >= commands.size) return@repeat
+                        val currentPath = current ?: return@repeat
+                        if (index + 1 >= commands.size) return@repeat
                         x += zigZagDecode(commands[index++])
                         y += zigZagDecode(commands[index++])
-                        current.add(IntPoint(x, y))
+                        currentPath.add(IntPoint(x, y))
                     }
                 }
 

@@ -1,10 +1,10 @@
-package tilo.compose.data.mbtiles
+package tilo.compose.data.utils
 
 import okio.Buffer
 import okio.GzipSource
 import okio.buffer
 
-internal object MbtilesCompression {
+internal object CompressionUtils {
     fun ungzipIfNeeded(bytes: ByteArray): ByteArray {
         val isGzip = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
         if (!isGzip) return bytes
@@ -17,3 +17,4 @@ internal object MbtilesCompression {
         }
     }
 }
+

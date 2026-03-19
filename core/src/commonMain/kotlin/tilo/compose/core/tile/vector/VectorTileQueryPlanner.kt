@@ -1,4 +1,4 @@
-package tilo.compose.core.vectortile
+package tilo.compose.core.tile.vector
 
 import kotlin.math.PI
 import kotlin.math.ceil
@@ -10,6 +10,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.math.tan
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.tile.TileCoordinate
 
 data class VectorTileLoadPlan(
     val requestedZoom: Int,
@@ -106,4 +107,3 @@ class VectorTileQueryPlanner {
         return 2.0.pow(z.toDouble()).toInt().coerceAtLeast(1)
     }
 }
-

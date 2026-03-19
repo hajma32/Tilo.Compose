@@ -1,10 +1,12 @@
-package tilo.compose.core.vectortile
+package tilo.compose.core.layers.vector
 
 import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.geometry.Geometry
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
+import tilo.compose.core.tile.vector.VectorTileFeature
+import tilo.compose.core.tile.vector.VectorTileGeometryType
 
 interface VectorTileRenderPolicy {
     fun isLayerEnabled(layerName: String, renderZoom: Int): Boolean
@@ -205,4 +207,3 @@ object DefaultVectorTileRenderPolicy : VectorTileRenderPolicy {
         return sampled + sampled.first()
     }
 }
-

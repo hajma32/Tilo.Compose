@@ -1,10 +1,18 @@
-package tilo.compose.core.vectortile
+package tilo.compose.core.layers.vector
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.tile.TileCoordinate
+import tilo.compose.core.tile.vector.VectorTile
+import tilo.compose.core.tile.vector.VectorTileDatasetMetadata
+import tilo.compose.core.tile.vector.VectorTileFeature
+import tilo.compose.core.tile.vector.VectorTileGeometryType
+import tilo.compose.core.tile.vector.VectorTileLayer
+import tilo.compose.core.tile.vector.VectorTileQueryPlanner
+import tilo.compose.core.tile.vector.VectorTileSource
 
 class VectorTileFeatureLoaderTests {
 

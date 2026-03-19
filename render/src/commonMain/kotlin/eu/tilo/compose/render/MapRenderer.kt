@@ -23,7 +23,7 @@ import tilo.compose.core.map.Map
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.Tile
-import tilo.compose.core.layers.tile.TileLayer
+import tilo.compose.core.layers.raster.TileLayer
 import kotlin.math.floor
 import kotlin.math.roundToInt
 

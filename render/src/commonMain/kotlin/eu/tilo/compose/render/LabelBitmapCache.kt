@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.sp
@@ -26,20 +26,12 @@ private val HALO_OFFSETS = arrayOf(
     Offset(LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX)
 )
 
-/**
- * Returns a cached offscreen bitmap for [text] rendered with [textColor] and a white halo.
- * The bitmap is created lazily and stored in [cache] keyed by text + color.
- */
-internal fun DrawScope.getOrCreateLabelBitmap(
+internal fun DrawScope.createLabelBitmap(
     text: String,
     textColor: Color,
-    textMeasurer: androidx.compose.ui.text.TextMeasurer,
-    cache: MutableMap<String, ImageBitmap>,
+    textMeasurer: TextMeasurer,
     offscreenDrawScope: CanvasDrawScope
 ): ImageBitmap {
-    val cacheKey = "$text|${textColor.toArgb()}"
-    cache[cacheKey]?.let { return it }
-
     val labelStyle = TextStyle(color = textColor, fontSize = 12.sp)
     val textLayout = textMeasurer.measure(text = text, style = labelStyle)
 
@@ -64,7 +56,5 @@ internal fun DrawScope.getOrCreateLabelBitmap(
         drawText(textMeasurer = textMeasurer, text = text, topLeft = baseTopLeft, style = labelStyle)
     }
 
-    cache[cacheKey] = bitmap
     return bitmap
 }
-

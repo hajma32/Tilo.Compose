@@ -14,9 +14,10 @@ import tilo.compose.core.tile.vector.VectorTileSource
 
 class VectorTileFeatureLoader(
     private val source: VectorTileSource,
+    private val layerStyle: VectorTileLayerStyle,
     private val queryPlanner: VectorTileQueryPlanner = VectorTileQueryPlanner(),
     private val geometryDecoder: VectorTileGeometryDecoder = VectorTileGeometryDecoder(),
-    private val renderPolicy: VectorTileRenderPolicy = DefaultVectorTileRenderPolicy
+    private val decodedFeatureCache: VectorTileDecodedFeatureCache = VectorTileDecodedFeatureCache()
 ) {
 
     fun loadFeatures(center: Point, zoom: Double, tileCount: Int): List<Feature> {
@@ -32,37 +33,26 @@ class VectorTileFeatureLoader(
         val out = mutableListOf<Feature>()
         var featureCounter = 0
 
-        plan.tiles.forEach { tile ->
-            val vectorTile = source.loadTile(tile) ?: return@forEach
+        val decodedFeatures = decodedFeatureCache.getOrDecode(
+            source = source,
+            plan = plan,
+            geometryDecoder = geometryDecoder
+        )
 
-            vectorTile.layers.forEach { layer ->
-                if (!renderPolicy.isLayerEnabled(layer.name, plan.requestedZoom)) return@forEach
+        decodedFeatures.forEach { decoded ->
+            if (!layerStyle.isLayerEnabled(decoded.layerName, plan.requestedZoom)) return@forEach
+            if (!layerStyle.shouldIncludeFeature(decoded.layerName, decoded.feature, plan.requestedZoom)) return@forEach
 
-                layer.features.forEachIndexed { featureIndex, feature ->
-                    if (!renderPolicy.shouldIncludeFeature(layer.name, feature, plan.requestedZoom)) {
-                        return@forEachIndexed
-                    }
+            val simplifiedGeometry = layerStyle.simplifyGeometry(decoded.layerName, decoded.geometry)
+            if (bounds != null && geometryPoints(simplifiedGeometry).none(bounds::contains)) return@forEach
 
-                    val geometry = geometryDecoder.decodeGeometry(
-                        feature = feature,
-                        extent = layer.extent,
-                        tile = tile
-                    ) ?: return@forEachIndexed
-
-                    val simplifiedGeometry = renderPolicy.simplifyGeometry(layer.name, geometry)
-                    if (bounds != null && geometryPoints(simplifiedGeometry).none(bounds::contains)) {
-                        return@forEachIndexed
-                    }
-
-                    out += Feature(
-                        geometry = simplifiedGeometry,
-                        key = "${tile.z}/${tile.x}/${tile.y}:${layer.name}:$featureIndex:$featureCounter",
-                        style = renderPolicy.styleFor(layer.name, feature.attributes, plan.requestedZoom),
-                        label = renderPolicy.labelFor(layer.name, feature.attributes, plan.requestedZoom)
-                    )
-                    featureCounter++
-                }
-            }
+            out += Feature(
+                geometry = simplifiedGeometry,
+                key = "${decoded.tile.z}/${decoded.tile.x}/${decoded.tile.y}:${decoded.layerName}:${layerStyle.id}:${decoded.featureIndex}:$featureCounter",
+                style = layerStyle.styleFor(decoded.layerName, decoded.feature.attributes, plan.requestedZoom),
+                label = layerStyle.labelFor(decoded.layerName, decoded.feature.attributes, plan.requestedZoom)
+            )
+            featureCounter++
         }
 
         return out

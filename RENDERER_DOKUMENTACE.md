@@ -221,13 +221,20 @@ Napojeni v rendereru:
 - `MapRenderer` prevadi `mapState.center` do `tileLayer.sourceProjection` pomoci `mapState.config.sourceToTarget(...)` pred `buildRequests(...)`,
 - pri chybejici transformaci renderer selze okamzite vyjimkou z `MapConfig`.
 
-## Doporucene hranice pro dalsi modularizaci
+## Backend boundary
 
-Aby se to posunulo z PoC na framework (DRY/KISS), dává smysl rozdelit renderer na samostatne moduly:
+Renderer ma minimalni backend-agnostickou vrstvu nad aktualni command pipeline:
 
-- `render-engine` (command build + diff + draw API)
-- `label-engine` (anchor, kolize, raster cache)
-- `tile-engine` (planning, scheduler, cache policy)
-- `gesture-controller` (pan/zoom + state mutace)
+- `render/.../backend/RenderScene.kt`
+- `render/.../backend/RenderBackend.kt`
+- `render/.../backend/RenderSceneBuilder.kt`
+- `render/.../backend/ComposeCanvasRenderBackend.kt`
 
-Minimalni prvni krok: oddelit z `MapRenderer.kt` tile planning/fetch a label bitmap pipeline do samostatnych trid/sluzeb s malym rozhranim.
+### Co je oddeleno
+
+`MapRenderer` uz nestavi draw pipeline primo jen pro Compose Canvas, ale nejdriv vytvori `RenderScene`:
+
+- raster layers -> `RasterRenderSceneLayer`
+- vector layers -> `VectorRenderSceneLayer`
+
+Aktualni i jediny pouzivany backend je `ComposeCanvasRenderBackend`.

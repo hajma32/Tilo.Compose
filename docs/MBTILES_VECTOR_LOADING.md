@@ -29,3 +29,14 @@ Open the app and select **MBTiles Vector (.pbf)** in the drawer.
 - Current implementation focuses on geometry rendering (Point, LineString, Polygon).
 - Styling is simple and layer-name based.
 - The data/storage pipeline is shared between Android and iOS; only file access and SQL driver creation are platform-specific.
+
+## Style config (map object)
+
+Vector styles are configured by a map object in code (`VectorTileStyleConfigMap`).
+
+- Top-level map key = one render layer / one batch (`water`, `roads`, ...).
+- Top-level map insertion order = render order.
+- Missing keys are not rendered (no implicit defaults).
+- Each top-level layer contains sub-layers (e.g. `roads.primary`, `roads.secondary`).
+
+The sample app config lives in `composeApp/src/commonMain/kotlin/eu/tilo/compose/MbtilesStyleConfig.kt`.

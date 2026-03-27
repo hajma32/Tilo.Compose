@@ -3,12 +3,8 @@ package tilo.compose.core.layers.raster
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.request.get
 import io.ktor.http.isSuccess
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg4326Projection
@@ -46,7 +42,6 @@ class WMSTileLayer(
 
     private val http = HttpClient {
         expectSuccess = false
-        install(HttpCache)
         install(HttpTimeout) {
             requestTimeoutMillis = 10_000
             connectTimeoutMillis = 5_000
@@ -73,9 +68,7 @@ class WMSTileLayer(
             zoom = zoom
         )
 
-        return coroutineScope {
-            requests.map { req -> async { fetchTile(req) } }.awaitAll()
-        }
+        return requests.map { request -> fetchTile(request) }
     }
 
     private suspend fun fetchTile(request: TileRequest): Tile {

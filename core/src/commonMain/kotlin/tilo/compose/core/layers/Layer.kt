@@ -14,6 +14,13 @@ interface Layer {
      */
     val id: String
 
+    /**
+     * Draw order relative to other layers. Lower values render first (below higher values).
+     * Layers with equal zIndex preserve their order in the input list.
+     */
+    val zIndex: Int
+        get() = 0
+
     /** Source CRS of data provided by this layer (for example `EPSG:4326`, `EPSG:5514`).
      *  If null, the layer is expected to provide data in the same coordinate system as the viewport (for example `EPSG:3857` for WebMercator).
      * */

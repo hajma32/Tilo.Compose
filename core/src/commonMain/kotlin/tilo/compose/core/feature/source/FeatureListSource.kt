@@ -1,7 +1,7 @@
 package tilo.compose.core.feature.source
 
 import tilo.compose.core.feature.Feature
-import tilo.compose.core.map.Viewport
+import tilo.compose.core.map.Map
 
 /**
  * Simple in-memory list-backed feature source.
@@ -9,6 +9,5 @@ import tilo.compose.core.map.Viewport
 class FeatureListSource(
     private val features: List<Feature>
 ) : FeatureSource {
-    override fun getFeatures(viewport: Viewport): List<Feature> = features
+    override fun getFeatures(map: Map): List<Feature> = features
 }
-

@@ -1,10 +1,8 @@
 package eu.tilo.compose
 
 import android.os.Build
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import tilo.compose.core.feature.Feature
-import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.vector.VectorLayer
+import tilo.compose.core.layers.vector.VectorTileStyleConfigMap
 
 class AndroidPlatform : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
@@ -16,11 +14,8 @@ class AndroidPlatform : Platform {
         )
     }
 
-    override suspend fun loadMbtilesVectorFeatures(center: Point, zoom: Double, tileCount: Int): List<Feature> {
-        return withContext(Dispatchers.Default) {
-            mbtilesLoader.loadFeatures(center = center, zoom = zoom, tileCount = tileCount)
-        }
-    }
+    override fun createMbtilesVectorLayers(styleConfig: VectorTileStyleConfigMap): List<VectorLayer> =
+        mbtilesLoader.createLayers("mbtiles-brno", styleConfigMap = styleConfig)
 }
 
 actual fun getPlatform(): Platform = AndroidPlatform()

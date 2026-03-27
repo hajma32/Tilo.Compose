@@ -1,10 +1,8 @@
 package eu.tilo.compose
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import platform.UIKit.UIDevice
-import tilo.compose.core.feature.Feature
-import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.vector.VectorLayer
+import tilo.compose.core.layers.vector.VectorTileStyleConfigMap
 import tilo.compose.data.mbtiles.IosBundledMbtilesFileProvider
 import tilo.compose.data.mbtiles.IosMbtilesSqlDriverFactory
 import tilo.compose.data.mbtiles.MbtilesVectorFeatureService
@@ -19,13 +17,8 @@ class IOSPlatform : Platform {
         )
     }
 
-    override suspend fun loadMbtilesVectorFeatures(center: Point, zoom: Double, tileCount: Int): List<Feature> {
-        return withContext(Dispatchers.Default) {
-            runCatching {
-                mbtilesService.loadFeatures(center = center, zoom = zoom, tileCount = tileCount)
-            }.getOrDefault(emptyList())
-        }
-    }
+    override fun createMbtilesVectorLayers(styleConfig: VectorTileStyleConfigMap): List<VectorLayer> =
+        mbtilesService.createLayers("mbtiles-brno", styleConfigMap = styleConfig)
 }
 
 actual fun getPlatform(): Platform = IOSPlatform()

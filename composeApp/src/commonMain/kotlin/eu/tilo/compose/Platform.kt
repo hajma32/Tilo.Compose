@@ -1,16 +1,17 @@
 package eu.tilo.compose
 
-import tilo.compose.core.feature.Feature
-import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.vector.VectorLayer
+import tilo.compose.core.layers.vector.VectorTileStyleConfigMap
 
 interface Platform {
     val name: String
 
     /**
-     * Optional platform hook for loading vector features from MBTiles.
-     * Platforms that do not support MBTiles parsing can return an empty list.
+     * Returns [VectorLayer]s backed by the bundled MBTiles file.
+     *
+     * Render output is driven strictly by [styleConfig]; missing layers/sub-layers are not rendered.
      */
-    suspend fun loadMbtilesVectorFeatures(center: Point, zoom: Double, tileCount: Int): List<Feature> = emptyList()
+    fun createMbtilesVectorLayers(styleConfig: VectorTileStyleConfigMap): List<VectorLayer> = emptyList()
 }
 
 expect fun getPlatform(): Platform

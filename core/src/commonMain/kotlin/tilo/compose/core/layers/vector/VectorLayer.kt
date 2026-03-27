@@ -1,6 +1,7 @@
-package tilo.compose.core.layers
+package tilo.compose.core.layers.vector
 
 import tilo.compose.core.feature.source.FeatureSource
+import tilo.compose.core.layers.Layer
 
 /**
  * A layer that provides vector features from a `FeatureSource`.

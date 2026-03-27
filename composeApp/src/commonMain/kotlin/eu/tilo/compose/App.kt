@@ -21,24 +21,20 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import eu.tilo.compose.map.mapFeatures
 import eu.tilo.compose.render.MapRenderer
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.feature.Feature
@@ -47,14 +43,18 @@ import tilo.compose.core.geometry.MultiLineString
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
+import tilo.compose.core.layers.Layer
+import tilo.compose.core.layers.raster.WMSTileLayer
+import tilo.compose.core.layers.vector.FeatureLayer
+import tilo.compose.core.layers.vector.DefaultVectorTileBasemapStyleConfig
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.tile.TileGrid
-import tilo.compose.core.layers.raster.WMSTileLayer
-import tilo.compose.core.transform.WebMercatorToWgs84Transformation
 import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
+
+private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
 
 private enum class TestScreen(val title: String) {
     MultipleLabelsTest("Multiple labels"),
@@ -71,6 +71,7 @@ private enum class TestScreen(val title: String) {
 @Preview
 fun App() {
     val platform = remember { getPlatform() }
+
     val tileLayer = remember {
         WMSTileLayer(
             id = "osm-wms",
@@ -82,6 +83,8 @@ fun App() {
             crsParamName = "SRS"
         )
     }
+
+    val mbtilesLayers = remember { platform.createMbtilesVectorLayers(DefaultVectorTileBasemapStyleConfig.basemap) }
 
     var selectedScreen by remember { mutableStateOf(TestScreen.MultipleLabelsTest) }
     val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -96,51 +99,21 @@ fun App() {
         )
     }
 
-    val features = remember(selectedScreen) {
-        when (selectedScreen) {
-            TestScreen.MultipleLabelsTest -> buildMultipleLabelsTestFeatures()
-            TestScreen.LineTest -> buildLineTestFeatures()
-            TestScreen.PolygonTest -> buildPolygonTestFeatures()
-            TestScreen.MultiLineStringTest -> buildMultiLineStringTestFeatures()
-            TestScreen.MultiPolygonTest -> buildMultiPolygonTestFeatures()
-            TestScreen.PolygonMultiRingTest -> buildPolygonMultiRingTestFeatures()
-            TestScreen.MbtilesVectorTest -> emptyList()
-        }
-    }
-
-    var mbtilesFeatures by remember { mutableStateOf<List<Feature>>(emptyList()) }
-    var mbtilesDebug by remember { mutableStateOf("") }
-
-    LaunchedEffect(selectedScreen) {
-        if (selectedScreen != TestScreen.MbtilesVectorTest) {
-            mbtilesFeatures = emptyList()
-            mbtilesDebug = ""
-            return@LaunchedEffect
-        }
-
-        var lastKey: String? = null
-
-        while (selectedScreen == TestScreen.MbtilesVectorTest) {
-            val currentCenter = WebMercatorToWgs84Transformation.sourceToTarget(map.center)
-            val currentZoom = map.zoom.roundToInt()
-            val key = "$currentZoom/${currentCenter.x.toInt()}/${currentCenter.y.toInt()}"
-
-            if (key != lastKey) {
-                mbtilesFeatures = platform.loadMbtilesVectorFeatures(
-                    center = currentCenter,
-                    zoom = map.zoom,
-                    tileCount = 9
+    val layers: List<Layer> = remember(selectedScreen) {
+        if (selectedScreen == TestScreen.MbtilesVectorTest) {
+            mbtilesLayers
+        } else {
+            listOf(
+                tileLayer,
+                FeatureLayer(
+                    id = "test-features",
+                    zIndex = 1,
+                    projection = Epsg4326Projection,
+                    features = buildTestFeatures(selectedScreen)
                 )
-                lastKey = key
-                val labels = mbtilesFeatures.count { !it.label.isNullOrBlank() }
-                mbtilesDebug = "z=$currentZoom features=${mbtilesFeatures.size} labels=$labels"
-            }
-
-            delay(120)
+            )
         }
     }
-
-    val renderedFeatures = if (selectedScreen == TestScreen.MbtilesVectorTest) mbtilesFeatures else features
 
     MaterialTheme {
         ModalNavigationDrawer(
@@ -182,31 +155,28 @@ fun App() {
                     modifier = Modifier
                         .padding(innerPadding)
                         .fillMaxSize()
-                        .background(Color(0xFFF6F8FA))
+                        .background(Color(MAP_BACKGROUND_COLOR))
                 ) {
                     MapRenderer(
                         map = map,
-                        features = renderedFeatures,
-                        featuresSourceProjection = Epsg4326Projection,
-                        tileLayer = if (selectedScreen == TestScreen.MbtilesVectorTest) null else tileLayer,
+                        layers = layers,
                         tileDecoder = ::decodeImageBitmap,
                         modifier = Modifier.fillMaxSize()
                     )
-
-                    if (selectedScreen == TestScreen.MbtilesVectorTest) {
-                        Text(
-                            text = mbtilesDebug,
-                            color = Color(0xFF111827),
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .background(Color(0xCCFFFFFF))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
                 }
             }
         }
     }
+}
+
+private fun buildTestFeatures(screen: TestScreen): List<Feature> = when (screen) {
+    TestScreen.MultipleLabelsTest -> buildMultipleLabelsTestFeatures()
+    TestScreen.LineTest -> buildLineTestFeatures()
+    TestScreen.PolygonTest -> buildPolygonTestFeatures()
+    TestScreen.MultiLineStringTest -> buildMultiLineStringTestFeatures()
+    TestScreen.MultiPolygonTest -> buildMultiPolygonTestFeatures()
+    TestScreen.PolygonMultiRingTest -> buildPolygonMultiRingTestFeatures()
+    TestScreen.MbtilesVectorTest -> emptyList()
 }
 
 @Composable

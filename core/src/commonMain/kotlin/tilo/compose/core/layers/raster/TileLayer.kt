@@ -1,5 +1,6 @@
 package tilo.compose.core.layers.raster
 
+import tilo.compose.core.layers.Layer
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.Tile
@@ -15,10 +16,9 @@ import tilo.compose.core.tile.TileGrid
  * The renderer only positions tiles using [tilo.compose.core.map.Map.worldToScreen] on the
  * bounds carried by each [tilo.compose.core.tile.Tile] — no CRS logic in the renderer.
  */
-interface TileLayer {
-    val id: String
+interface TileLayer : Layer {
     val grid: TileGrid
-    val projection: Projection
+    override val projection: Projection
 
     /**
      * Returns tiles visible for the current [map] state.

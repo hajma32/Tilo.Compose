@@ -10,25 +10,15 @@ import kotlin.math.roundToInt
 
 /**
  * Draws [tiles] onto the canvas using [map].worldToScreen for positioning.
- * Tile bitmaps are decoded lazily via [tileDecoder] and cached in [bitmapCache].
- * A failed decode (null) is cached so we don't re-decode on every frame,
- * but the cache entry is replaced whenever the tile bytes change.
  */
 internal fun DrawScope.drawTiles(
     tiles: List<Tile>,
     tileDecoder: (ByteArray) -> ImageBitmap?,
-    bitmapCache: MutableMap<String, ImageBitmap?>,
     map: Map
 ) {
     tiles.forEach { tile ->
         val bytes = tile.bytes ?: return@forEach
-        val cacheKey = "${tile.coordinate.z}/${tile.coordinate.x}/${tile.coordinate.y}"
-
-        val image = if (bitmapCache.containsKey(cacheKey)) {
-            bitmapCache[cacheKey]
-        } else {
-            tileDecoder(bytes).also { bitmapCache[cacheKey] = it }
-        } ?: return@forEach
+        val image = tileDecoder(bytes) ?: return@forEach
 
         val topLeft     = map.worldToScreen(tile.bounds.topLeft)
         val bottomRight = map.worldToScreen(tile.bounds.bottomRight)
@@ -45,5 +35,3 @@ internal fun DrawScope.drawTiles(
         )
     }
 }
-
-

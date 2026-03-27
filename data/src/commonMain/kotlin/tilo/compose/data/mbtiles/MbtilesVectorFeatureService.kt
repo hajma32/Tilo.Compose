@@ -1,8 +1,9 @@
 package tilo.compose.data.mbtiles
 
-import tilo.compose.core.feature.Feature
-import tilo.compose.core.geometry.Point
-import tilo.compose.core.layers.vector.VectorTileFeatureLoader
+import tilo.compose.core.layers.vector.VectorTileDecodedFeatureCache
+import tilo.compose.core.layers.vector.VectorTileLayer
+import tilo.compose.core.layers.vector.VectorTileStyleConfigMap
+import tilo.compose.core.layers.vector.VectorTileStyleMapCompiler
 
 class MbtilesVectorFeatureService(
     fileProvider: MbtilesFileProvider,
@@ -14,11 +15,30 @@ class MbtilesVectorFeatureService(
         )
     }
 
-    private val featureLoader = VectorTileFeatureLoader(
-        source = SqlDelightMbtilesVectorTileSource(repository = repository)
-    )
+    private val source by lazy {
+        SqlDelightMbtilesVectorTileSource(repository = repository)
+    }
 
-    fun loadFeatures(center: Point, zoom: Double, tileCount: Int): List<Feature> {
-        return featureLoader.loadFeatures(center = center, zoom = zoom, tileCount = tileCount)
+    private val decodedFeatureCache by lazy {
+        VectorTileDecodedFeatureCache(maxTiles = 24)
+    }
+
+    fun createLayers(
+        idPrefix: String,
+        styleConfigMap: VectorTileStyleConfigMap,
+        zIndexStart: Int = 0,
+        tileCount: Int = 9
+    ): List<VectorTileLayer> {
+        val styles = VectorTileStyleMapCompiler.compile(styleConfigMap)
+        return styles.mapIndexed { index, style ->
+            VectorTileLayer(
+                id = "$idPrefix-${style.id}",
+                style = style,
+                zIndex = zIndexStart + index,
+                source = source,
+                tileCount = tileCount,
+                decodedFeatureCache = decodedFeatureCache
+            )
+        }
     }
 }

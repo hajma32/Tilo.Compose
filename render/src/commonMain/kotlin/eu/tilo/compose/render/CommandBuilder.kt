@@ -19,22 +19,15 @@ import tilo.compose.core.map.Map
  */
 object CommandBuilder {
 
-    private const val MAX_BOUNDS_CACHE_SIZE = 10_000
-
-    /**
-     * @param boundsCache owned by the caller (typically a Compose `remember`) so that cache
-     * lifetime matches the composable scope, not a global singleton.
-     */
     internal fun build(
         map: Map,
-        features: List<Feature>,
-        boundsCache: MutableMap<String, BoundingBox> = mutableMapOf()
+        features: List<Feature>
     ): List<RenderCommand> {
         val visible = visibleBounds(map)
 
         return buildList {
             features.forEach { feature ->
-                val featureBounds = cachedBounds(feature, boundsCache)
+                val featureBounds = geometryBounds(feature.geometry)
                 if (!visible.intersects(featureBounds)) return@forEach
 
                 val baseId = feature.key
@@ -48,25 +41,12 @@ object CommandBuilder {
                             RenderLabel(
                                 id = "$baseId:label",
                                 text = label,
-                                anchor = map.worldToScreen(anchor),
+                                anchor = anchor,
                                 style = style
                             )
                         )
                     }
                 }
-            }
-        }
-    }
-
-    private fun cachedBounds(
-        feature: Feature,
-        cache: MutableMap<String, BoundingBox>
-    ): BoundingBox {
-        cache[feature.key]?.let { return it }
-        return geometryBounds(feature.geometry).also { bounds ->
-            cache[feature.key] = bounds
-            if (cache.size > MAX_BOUNDS_CACHE_SIZE) {
-                cache.remove(cache.keys.first())
             }
         }
     }
@@ -94,13 +74,14 @@ object CommandBuilder {
     private fun geometryBounds(geometry: Geometry): BoundingBox =
         BoundingBox.fromPoints(
             when (geometry) {
-            is Point -> listOf(geometry)
-            is MultiPoint -> geometry.points
-            is LineString -> geometry.points
-            is MultiLineString -> geometry.lines.flatMap { it.points }
-            is Polygon -> geometry.rings.flatten()
-            is MultiPolygon -> geometry.polygons.flatMap { it.rings.flatten() }
-        })
+                is Point -> listOf(geometry)
+                is MultiPoint -> geometry.points
+                is LineString -> geometry.points
+                is MultiLineString -> geometry.lines.flatMap { it.points }
+                is Polygon -> geometry.rings.flatten()
+                is MultiPolygon -> geometry.polygons.flatMap { it.rings.flatten() }
+            }
+        )
 
     private fun geometryToCommands(
         baseId: String,
@@ -111,25 +92,25 @@ object CommandBuilder {
         val hidePoints = style.fillColor == 0x00000000L
         return when (geometry) {
             is Point -> if (hidePoints) emptyList() else listOf(
-                RenderPoint(id = "$baseId:point", point = map.worldToScreen(geometry), style = style)
+                RenderPoint(id = "$baseId:point", point = geometry, style = style)
             )
 
             is MultiPoint -> if (hidePoints) emptyList() else geometry.points.mapIndexed { i, p ->
-                RenderPoint(id = "$baseId:point:$i", point = map.worldToScreen(p), style = style)
+                RenderPoint(id = "$baseId:point:$i", point = p, style = style)
             }
 
             is LineString -> listOf(
-                RenderLineString(id = "$baseId:line", points = geometry.points.map(map::worldToScreen), style = style)
+                RenderLineString(id = "$baseId:line", points = geometry.points, style = style)
             )
 
             is MultiLineString -> geometry.lines.mapIndexed { i, line ->
-                RenderLineString(id = "$baseId:line:$i", points = line.points.map(map::worldToScreen), style = style)
+                RenderLineString(id = "$baseId:line:$i", points = line.points, style = style)
             }
 
             is Polygon -> listOf(
                 RenderPolygon(
                     id = "$baseId:polygon",
-                    rings = geometry.rings.map { r -> r.map(map::worldToScreen) },
+                    rings = geometry.rings,
                     style = style
                 )
             )
@@ -137,7 +118,7 @@ object CommandBuilder {
             is MultiPolygon -> geometry.polygons.mapIndexed { i, polygon ->
                 RenderPolygon(
                     id = "$baseId:polygon:$i",
-                    rings = polygon.rings.map { r -> r.map(map::worldToScreen) },
+                    rings = polygon.rings,
                     style = style
                 )
             }

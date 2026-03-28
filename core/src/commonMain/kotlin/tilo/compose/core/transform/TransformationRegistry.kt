@@ -51,9 +51,11 @@ class TransformationRegistry(
             listOf(
                 Wgs84ToWgs84Transformation,
                 Wgs84ToWebMercatorTransformation,
-                WebMercatorToWgs84Transformation
+                WebMercatorToWgs84Transformation,
+                // EPSG:5514 <-> WGS84 transformations via Proj4
+                Wgs84ToEpsg5514Transformation,
+                Epsg5514ToWgs84Transformation
             )
         )
     }
 }
-

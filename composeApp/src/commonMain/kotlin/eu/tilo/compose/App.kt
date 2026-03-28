@@ -44,15 +44,15 @@ import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.layers.Layer
-import tilo.compose.core.layers.raster.WMSTileLayer
+import tilo.compose.core.layers.raster.createOrtofotoTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.layers.vector.DefaultVectorTileBasemapStyleConfig
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.Map
-import tilo.compose.core.projection.Epsg3857Projection
+import tilo.compose.core.projection.Epsg5514Projection
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.tile.TileGrid
-import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
+import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
 
@@ -73,15 +73,7 @@ fun App() {
     val platform = remember { getPlatform() }
 
     val tileLayer = remember {
-        WMSTileLayer(
-            id = "osm-wms",
-            grid = TileGrid.WebMercator,
-            baseUrl = "https://ows.terrestris.de/osm/service",
-            layers = "OSM-WMS",
-            projection = Epsg3857Projection,
-            crs = Epsg3857Projection.id,
-            crsParamName = "SRS"
-        )
+        createOrtofotoTileLayer(id = "cuzk-ortofoto")
     }
 
     val mbtilesLayers = remember { platform.createMbtilesVectorLayers(DefaultVectorTileBasemapStyleConfig.basemap) }
@@ -92,10 +84,10 @@ fun App() {
 
     val map = remember(selectedScreen) {
         Map(
-            center = Wgs84ToWebMercatorTransformation.sourceToTarget(Point(16.6068, 49.1951)),
+            center = Wgs84ToEpsg5514Transformation.sourceToTarget(Point(16.6068, 49.1951)),
             zoom = 11.5,
             config = MapConfig(minZoom = 0.0, maxZoom = 20.0),
-            projection = Epsg3857Projection
+            projection = Epsg5514Projection
         )
     }
 

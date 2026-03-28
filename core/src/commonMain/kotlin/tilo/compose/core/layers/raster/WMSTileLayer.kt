@@ -5,6 +5,7 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.http.isSuccess
+import io.ktor.util.logging.Logger
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg4326Projection
@@ -91,12 +92,15 @@ class WMSTileLayer(
         val north = maxOf(b.topLeft.y, b.bottomRight.y)
         val bbox = "$west,$south,$east,$north"
         val sep = if ('?' in baseUrl) "&" else "?"
-        return "${baseUrl}${sep}" +
+        val url = "${baseUrl}${sep}" +
             "SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1" +
             "&LAYERS=$layers&STYLES=$styles" +
             "&FORMAT=$format&TRANSPARENT=FALSE" +
             "&$crsParamName=$crs" +
             "&WIDTH=${grid.tileSize}&HEIGHT=${grid.tileSize}" +
             "&BBOX=$bbox"
+
+        print(url)
+        return url
     }
 }

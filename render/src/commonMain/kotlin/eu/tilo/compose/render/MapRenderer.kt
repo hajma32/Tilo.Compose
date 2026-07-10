@@ -62,6 +62,7 @@ fun MapRenderer(
     var redrawVersion by remember { mutableStateOf(0) }
     var scene by remember { mutableStateOf(RenderScene.Empty) }
     var lastRasterFrame by remember { mutableStateOf(RasterFrame.Empty) }
+    var lastVectorCommandsByLayer by remember { mutableStateOf<Map<String, List<RenderCommand>>>(emptyMap()) }
 
     LaunchedEffect(
         sortedLayers,
@@ -88,7 +89,7 @@ fun MapRenderer(
             supervisorScope {
                 var tilesByLayer: Map<String, List<Tile>> = emptyMap()
                 var decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap()
-                var commandsByLayer: Map<String, List<RenderCommand>> = emptyMap()
+                var commandsByLayer: Map<String, List<RenderCommand>> = lastVectorCommandsByLayer
                 val placeholderFrame = rasterPipeline.buildPlaceholderFrame(tileLayers, renderMap)
 
                 fun publishScene() {
@@ -115,6 +116,7 @@ fun MapRenderer(
                 launch {
                     runRenderBranch {
                         commandsByLayer = vectorPipeline.buildCommands(vectorLayers, renderMap)
+                        lastVectorCommandsByLayer = commandsByLayer
                         publishScene()
                     }
                 }

@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -14,6 +15,7 @@ import androidx.compose.ui.unit.sp
 
 private const val LABEL_HALO_RADIUS_PX = 1f
 private const val LABEL_BITMAP_PADDING_PX = 2
+private const val DEFAULT_LABEL_CACHE_SIZE = 2_048
 
 private val HALO_OFFSETS = arrayOf(
     Offset(-LABEL_HALO_RADIUS_PX, 0f),
@@ -25,6 +27,63 @@ private val HALO_OFFSETS = arrayOf(
     Offset(-LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX),
     Offset(LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX)
 )
+
+internal class LabelBitmapCache(
+    private val maxEntries: Int = DEFAULT_LABEL_CACHE_SIZE,
+) {
+    private val bitmaps = LinkedHashMap<LabelBitmapKey, ImageBitmap>()
+
+    fun getOrPut(key: LabelBitmapKey, create: () -> ImageBitmap): ImageBitmap {
+        bitmaps.remove(key)?.let { cached ->
+            bitmaps[key] = cached
+            return cached
+        }
+
+        val bitmap = create()
+        bitmaps[key] = bitmap
+        trimToSize()
+        return bitmap
+    }
+
+    private fun trimToSize() {
+        while (bitmaps.size > maxEntries) {
+            val eldestKey = bitmaps.keys.firstOrNull() ?: return
+            bitmaps.remove(eldestKey)
+        }
+    }
+}
+
+internal data class LabelBitmapKey(
+    val text: String,
+    val textColor: ULong,
+    val density: Float,
+    val fontScale: Float,
+    val layoutDirection: LayoutDirection,
+)
+
+internal fun DrawScope.cachedLabelBitmap(
+    text: String,
+    textColor: Color,
+    textMeasurer: TextMeasurer,
+    offscreenDrawScope: CanvasDrawScope,
+    cache: LabelBitmapCache,
+): ImageBitmap =
+    cache.getOrPut(
+        LabelBitmapKey(
+            text = text,
+            textColor = textColor.value,
+            density = density,
+            fontScale = fontScale,
+            layoutDirection = layoutDirection,
+        )
+    ) {
+        createLabelBitmap(
+            text = text,
+            textColor = textColor,
+            textMeasurer = textMeasurer,
+            offscreenDrawScope = offscreenDrawScope,
+        )
+    }
 
 internal fun DrawScope.createLabelBitmap(
     text: String,

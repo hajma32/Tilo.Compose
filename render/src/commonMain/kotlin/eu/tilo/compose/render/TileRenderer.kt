@@ -10,7 +10,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import tilo.compose.core.map.Map
 import tilo.compose.core.tile.Tile
-import kotlin.math.roundToInt
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 
 private val TILE_PLACEHOLDER_FILL = Color(0xFFE3F2FD)
 private val TILE_PLACEHOLDER_BORDER = Color(0xFF90CAF9)
@@ -41,24 +44,42 @@ private fun DrawScope.drawTile(
     image: ImageBitmap?,
     map: Map,
 ) {
-        val topLeft     = map.worldToScreen(tile.bounds.topLeft)
-        val bottomRight = map.worldToScreen(tile.bounds.bottomRight)
+    val rect = tile.screenRect(map)
 
-        val screenX = topLeft.x.roundToInt()
-        val screenY = topLeft.y.roundToInt()
-        val screenW = (bottomRight.x - topLeft.x).roundToInt().coerceAtLeast(1)
-        val screenH = (bottomRight.y - topLeft.y).roundToInt().coerceAtLeast(1)
-
-        if (image == null) {
-            drawTilePlaceholder(screenX, screenY, screenW, screenH)
-        } else {
-            drawImage(
-                image = image,
-                dstOffset = IntOffset(screenX, screenY),
-                dstSize = IntSize(screenW, screenH)
-            )
-        }
+    if (image == null) {
+        drawTilePlaceholder(rect.x, rect.y, rect.width, rect.height)
+    } else {
+        drawImage(
+            image = image,
+            dstOffset = IntOffset(rect.x, rect.y),
+            dstSize = IntSize(rect.width, rect.height)
+        )
+    }
 }
+
+private fun Tile.screenRect(map: Map): TileScreenRect {
+    val topLeft = map.worldToScreen(bounds.topLeft)
+    val bottomRight = map.worldToScreen(bounds.bottomRight)
+
+    val left = floor(min(topLeft.x, bottomRight.x)).toInt()
+    val top = floor(min(topLeft.y, bottomRight.y)).toInt()
+    val right = ceil(max(topLeft.x, bottomRight.x)).toInt()
+    val bottom = ceil(max(topLeft.y, bottomRight.y)).toInt()
+
+    return TileScreenRect(
+        x = left,
+        y = top,
+        width = (right - left).coerceAtLeast(1),
+        height = (bottom - top).coerceAtLeast(1),
+    )
+}
+
+private data class TileScreenRect(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+)
 
 private fun DrawScope.drawTilePlaceholder(
     x: Int,

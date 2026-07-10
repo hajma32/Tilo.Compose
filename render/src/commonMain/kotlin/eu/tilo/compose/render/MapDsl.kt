@@ -1,7 +1,7 @@
 package eu.tilo.compose.map
 
-import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.GeometryStyle
 import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
@@ -10,15 +10,15 @@ import tilo.compose.core.geometry.Polygon
 class MapFeatureBuilder {
     private val items = mutableListOf<Feature>()
 
-    fun point(key: String, x: Double, y: Double, style: BaseStyle? = null, label: String? = null) {
+    fun point(key: String, x: Double, y: Double, style: GeometryStyle? = null, label: String? = null) {
         items += Feature(key = key, geometry = Point(x, y), style = style, label = label)
     }
 
-    fun lineString(key: String, points: List<Point>, style: BaseStyle? = null, label: String? = null) {
+    fun lineString(key: String, points: List<Point>, style: GeometryStyle? = null, label: String? = null) {
         items += Feature(key = key, geometry = LineString(points), style = style, label = label)
     }
 
-    fun polygon(key: String, rings: List<List<Point>>, style: BaseStyle? = null, label: String? = null) {
+    fun polygon(key: String, rings: List<List<Point>>, style: GeometryStyle? = null, label: String? = null) {
         items += Feature(key = key, geometry = Polygon(rings), style = style, label = label)
     }
 
@@ -30,4 +30,3 @@ fun mapFeatures(block: MapFeatureBuilder.() -> Unit): List<Feature> {
     builder.block()
     return builder.build()
 }
-

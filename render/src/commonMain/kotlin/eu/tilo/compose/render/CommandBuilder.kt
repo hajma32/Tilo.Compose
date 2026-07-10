@@ -1,7 +1,14 @@
 package eu.tilo.compose.render
 
 import tilo.compose.core.feature.BaseStyle
+import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.FillStyle
+import tilo.compose.core.feature.GeometryStyle
+import tilo.compose.core.feature.LineStyle
+import tilo.compose.core.feature.PointStyle
+import tilo.compose.core.feature.PolygonStyle
+import tilo.compose.core.feature.StrokeStyle
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Geometry
 import tilo.compose.core.geometry.LineString
@@ -32,7 +39,7 @@ object CommandBuilder {
                 if (!visible.intersects(featureBounds)) return@forEach
 
                 val baseId = feature.key
-                val style = feature.style ?: BaseStyle()
+                val style = feature.style
 
                 addAll(geometryToCommands(baseId, map, feature.geometry, style))
 
@@ -43,7 +50,7 @@ object CommandBuilder {
                                 id = "$baseId:label",
                                 text = label,
                                 anchor = anchor,
-                                style = style
+                                textColor = style.labelColor()
                             )
                         )
                     }
@@ -76,31 +83,32 @@ object CommandBuilder {
         baseId: String,
         map: Map,
         geometry: Geometry,
-        style: BaseStyle
+        style: GeometryStyle?
     ): List<RenderCommand> {
-        val hidePoints = style.fillColor == 0x00000000L
+        val pointStyle = style.toPointStyle()
+        val hidePoints = pointStyle.fill?.color == ColorValue.Transparent && pointStyle.stroke == null
         return when (geometry) {
             is Point -> if (hidePoints) emptyList() else listOf(
-                RenderPoint(id = "$baseId:point", point = geometry, style = style)
+                RenderPoint(id = "$baseId:point", point = geometry, style = pointStyle)
             )
 
             is MultiPoint -> if (hidePoints) emptyList() else geometry.points.mapIndexed { i, p ->
-                RenderPoint(id = "$baseId:point:$i", point = p, style = style)
+                RenderPoint(id = "$baseId:point:$i", point = p, style = pointStyle)
             }
 
             is LineString -> listOf(
-                RenderLineString(id = "$baseId:line", points = geometry.points, style = style)
+                RenderLineString(id = "$baseId:line", points = geometry.points, style = style.toLineStyle())
             )
 
             is MultiLineString -> geometry.lines.mapIndexed { i, line ->
-                RenderLineString(id = "$baseId:line:$i", points = line.points, style = style)
+                RenderLineString(id = "$baseId:line:$i", points = line.points, style = style.toLineStyle())
             }
 
             is Polygon -> listOf(
                 RenderPolygon(
                     id = "$baseId:polygon",
                     rings = geometry.rings,
-                    style = style
+                    style = style.toPolygonStyle()
                 )
             )
 
@@ -108,7 +116,7 @@ object CommandBuilder {
                 RenderPolygon(
                     id = "$baseId:polygon:$i",
                     rings = polygon.rings,
-                    style = style
+                    style = style.toPolygonStyle()
                 )
             }
         }
@@ -130,3 +138,57 @@ object CommandBuilder {
         )
     }
 }
+
+private fun GeometryStyle?.toPointStyle(): PointStyle =
+    when (this) {
+        is PointStyle -> this
+        is BaseStyle -> PointStyle(
+            fill = fillColor?.let { FillStyle(color = it.toColorValue()) },
+            stroke = strokeColor?.let {
+                StrokeStyle(
+                    color = it.toColorValue(),
+                    width = strokeWidth ?: 2.0,
+                )
+            },
+        )
+        else -> PointStyle()
+    }
+
+private fun GeometryStyle?.toLineStyle(): LineStyle =
+    when (this) {
+        is LineStyle -> this
+        is BaseStyle -> LineStyle(
+            stroke = StrokeStyle(
+                color = strokeColor?.toColorValue() ?: ColorValue.Blue,
+                width = strokeWidth ?: 2.0,
+            )
+        )
+        else -> LineStyle()
+    }
+
+private fun GeometryStyle?.toPolygonStyle(): PolygonStyle =
+    when (this) {
+        is PolygonStyle -> this
+        is BaseStyle -> PolygonStyle(
+            fill = fillColor?.let { FillStyle(color = it.toColorValue()) },
+            stroke = strokeColor?.let {
+                StrokeStyle(
+                    color = it.toColorValue(),
+                    width = strokeWidth ?: 1.5,
+                )
+            },
+        )
+        else -> PolygonStyle()
+    }
+
+private fun GeometryStyle?.labelColor(): ColorValue =
+    when (this) {
+        is PointStyle -> stroke?.color ?: fill?.color ?: ColorValue.Black
+        is LineStyle -> stroke.color
+        is PolygonStyle -> stroke?.color ?: fill?.color ?: ColorValue.Black
+        is BaseStyle -> strokeColor?.toColorValue() ?: fillColor?.toColorValue() ?: ColorValue.Black
+        else -> ColorValue.Black
+    }
+
+private fun Long.toColorValue(): ColorValue =
+    ColorValue((this and 0xFFFFFFFFL).toULong())

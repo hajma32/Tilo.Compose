@@ -36,8 +36,18 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
-import tilo.compose.core.feature.BaseStyle
+import tilo.compose.core.feature.ColorValue
+import tilo.compose.core.feature.DashPattern
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.FillPattern
+import tilo.compose.core.feature.FillStyle
+import tilo.compose.core.feature.LineCap
+import tilo.compose.core.feature.LineJoin
+import tilo.compose.core.feature.LineStyle
+import tilo.compose.core.feature.PointShape
+import tilo.compose.core.feature.PointStyle
+import tilo.compose.core.feature.PolygonStyle
+import tilo.compose.core.feature.StrokeStyle
 import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.MultiLineString
 import tilo.compose.core.geometry.MultiPolygon
@@ -55,7 +65,11 @@ import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
 
+private fun color(argb: Long): ColorValue =
+    ColorValue((argb and 0xFFFFFFFFL).toULong())
+
 private enum class TestScreen(val title: String) {
+    StylingTest("Styling"),
     MultipleLabelsTest("Multiple labels"),
     LineTest("Line"),
     PolygonTest("Polygon"),
@@ -154,6 +168,7 @@ fun App() {
 }
 
 private fun buildTestFeatures(screen: TestScreen): List<Feature> = when (screen) {
+    TestScreen.StylingTest -> buildStylingTestFeatures()
     TestScreen.MultipleLabelsTest -> buildMultipleLabelsTestFeatures()
     TestScreen.LineTest -> buildLineTestFeatures()
     TestScreen.PolygonTest -> buildPolygonTestFeatures()
@@ -179,6 +194,92 @@ private fun HamburgerIcon() {
     }
 }
 
+private fun buildStylingTestFeatures(): List<Feature> {
+    fun ring(cx: Double, cy: Double, rx: Double, ry: Double, n: Int = 72): List<Point> {
+        val points = (0 until n).map { i ->
+            val angle = 2.0 * PI * i / n
+            Point(cx + cos(angle) * rx, cy + sin(angle) * ry)
+        }
+        return points + points.first()
+    }
+
+    val dashedLine = (0 until 80).map { i ->
+        val t = i.toDouble() / 79.0
+        Point(12.4 + 5.6 * t, 50.5 + sin(t * PI * 2.5) * 0.25)
+    }
+
+    val pointShapes = PointShape.entries.mapIndexed { index, shape ->
+        Feature(
+            key = "style-point-$shape",
+            geometry = Point(13.0 + index * 1.0, 48.95),
+            label = shape.name,
+            style = PointStyle(
+                shape = shape,
+                size = 18.0,
+                fill = FillStyle(color = color(0xFFFFC107)),
+                stroke = StrokeStyle(color = color(0xFF263238), width = 2.0)
+            )
+        )
+    }
+
+    return listOf(
+        Feature(
+            key = "style-hatch-polygon",
+            geometry = Polygon(rings = listOf(ring(14.0, 49.85, 1.0, 0.55))),
+            label = "Hatch fill",
+            style = PolygonStyle(
+                fill = FillStyle(
+                    color = color(0x3326A69A),
+                    pattern = FillPattern.Hatch(
+                        angleDegrees = 35.0,
+                        spacing = 10.0,
+                        stroke = StrokeStyle(color = color(0xFF00796B), width = 1.2)
+                    )
+                ),
+                stroke = StrokeStyle(
+                    color = color(0xFF004D40),
+                    width = 3.0,
+                    lineJoin = LineJoin.Round,
+                )
+            )
+        ),
+        Feature(
+            key = "style-dots-polygon",
+            geometry = Polygon(rings = listOf(ring(16.2, 49.7, 0.85, 0.45))),
+            label = "Dots fill",
+            style = PolygonStyle(
+                fill = FillStyle(
+                    color = color(0x33AB47BC),
+                    pattern = FillPattern.Dots(
+                        spacing = 12.0,
+                        radius = 2.0,
+                        color = color(0xFF8E24AA),
+                    )
+                ),
+                stroke = StrokeStyle(
+                    color = color(0xFF6A1B9A),
+                    width = 2.0,
+                    dash = DashPattern(listOf(14.0, 8.0)),
+                )
+            )
+        ),
+        Feature(
+            key = "style-dashed-line",
+            geometry = LineString(dashedLine),
+            label = "Dashed round line",
+            style = LineStyle(
+                stroke = StrokeStyle(
+                    color = color(0xFFE53935),
+                    width = 5.0,
+                    lineCap = LineCap.Round,
+                    lineJoin = LineJoin.Round,
+                    dash = DashPattern(listOf(18.0, 10.0, 4.0, 10.0)),
+                )
+            )
+        )
+    ) + pointShapes
+}
+
 private fun buildMultipleLabelsTestFeatures(): List<Feature> {
     val lonMin = 12.0; val lonMax = 19.0; val latMin = 48.5; val latMax = 51.2
     fun lerp(min: Double, max: Double, t: Double) = min + (max - min) * t
@@ -191,7 +292,11 @@ private fun buildMultipleLabelsTestFeatures(): List<Feature> {
                 x = lerp(lonMin, lonMax, t),
                 y = lerp(latMin, latMax, s),
                 label = "Point ${i + 1}",
-                style = BaseStyle(fillColor = 0xFFFF6D00, strokeWidth = 8.0)
+                style = PointStyle(
+                    size = 8.0,
+                    fill = FillStyle(color = color(0xFFFF6D00)),
+                    stroke = null,
+                )
             )
         }
     }
@@ -203,7 +308,11 @@ private fun buildLineTestFeatures(): List<Feature> {
         Point(12.0 + 7.0 * t, 49.6 + sin(t * PI * 3.0) * 0.9)
     }
     return mapFeatures {
-        lineString(key = "line-test", points = linePoints, style = BaseStyle(strokeColor = 0xFF00ACC1, strokeWidth = 3.0))
+        lineString(
+            key = "line-test",
+            points = linePoints,
+            style = LineStyle(stroke = StrokeStyle(color = color(0xFF00ACC1), width = 3.0))
+        )
     }
 }
 
@@ -213,7 +322,14 @@ private fun buildPolygonTestFeatures(): List<Feature> {
         Point(14.8 + cos(a) * 1.2, 49.9 + sin(a) * 0.8)
     } + Point(14.8 + 1.2, 49.9)
     return mapFeatures {
-        polygon(key = "polygon-test", rings = listOf(ring), style = BaseStyle(strokeColor = 0xFF3949AB, fillColor = 0x663949AB, strokeWidth = 2.0))
+        polygon(
+            key = "polygon-test",
+            rings = listOf(ring),
+            style = PolygonStyle(
+                fill = FillStyle(color = color(0x663949AB)),
+                stroke = StrokeStyle(color = color(0xFF3949AB), width = 2.0)
+            )
+        )
     }
 }
 
@@ -225,7 +341,7 @@ private fun buildMultiLineStringTestFeatures(): List<Feature> {
     return listOf(Feature(
         key = "multiline-test",
         geometry = MultiLineString(lines = listOf(LineString(wave(49.2, 0.0)), LineString(wave(49.9, PI / 2)), LineString(wave(50.6, PI)))),
-        style = BaseStyle(strokeColor = 0xFF00897B, strokeWidth = 2.5)
+        style = LineStyle(stroke = StrokeStyle(color = color(0xFF00897B), width = 2.5))
     ))
 }
 
@@ -240,7 +356,10 @@ private fun buildMultiPolygonTestFeatures(): List<Feature> {
     return listOf(Feature(
         key = "multipolygon-test",
         geometry = MultiPolygon(polygons = listOf(ellipse(14.2, 50.1, 0.55, 0.35), ellipse(15.4, 49.7, 0.5, 0.3), ellipse(13.2, 49.4, 0.45, 0.28))),
-        style = BaseStyle(strokeColor = 0xFF5E35B1, fillColor = 0x665E35B1, strokeWidth = 2.0)
+        style = PolygonStyle(
+            fill = FillStyle(color = color(0x665E35B1)),
+            stroke = StrokeStyle(color = color(0xFF5E35B1), width = 2.0)
+        )
     ))
 }
 
@@ -258,7 +377,10 @@ private fun buildPolygonMultiRingTestFeatures(): List<Feature> {
                 ring(14.2, 49.9, 0.25, 0.18, true),
                 ring(15.0, 49.75, 0.22, 0.15, true)
             ),
-            style = BaseStyle(strokeColor = 0xFF6D4C41, fillColor = 0x666D4C41, strokeWidth = 2.0)
+            style = PolygonStyle(
+                fill = FillStyle(color = color(0x666D4C41)),
+                stroke = StrokeStyle(color = color(0xFF6D4C41), width = 2.0)
+            )
         )
     }
 }

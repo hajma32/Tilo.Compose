@@ -225,16 +225,14 @@ Preferred behavior:
 
 ### Namespaces
 
-Before v1, package names should be made consistent.
+Public package names should use one consistent root:
 
-Candidate shape:
+- `tilo.compose.core.*` for platform-agnostic GeoCore models and contracts,
+- `tilo.compose.render.*` for Compose rendering APIs,
+- `tilo.compose.draw.*` for the drawing plugin.
 
-- `eu.tilo.geocore.*`
-- `eu.tilo.compose.map.*`
-- `eu.tilo.compose.draw.*`
-- `eu.tilo.compose.render.*`
-
-Avoid mixing `tilo.compose.core`, `eu.tilo.compose.render`, and `eu.tilo.compose.map` in the public surface.
+The showcase app can keep its own application package, but public examples
+should import only `tilo.compose.*` packages.
 
 ## Step-by-step Plan
 
@@ -298,7 +296,7 @@ Avoid mixing `tilo.compose.core`, `eu.tilo.compose.render`, and `eu.tilo.compose
 ## Open Decisions
 
 - Should the public camera state be called `MapState`, `MapCameraState`, or `CameraState`?
-- Should `TiloMap` live in `eu.tilo.compose.map` or directly in `eu.tilo.compose`?
+- Should `TiloMap` stay in `tilo.compose.render` or move to a shorter public facade package?
 - Should projections use names like `Epsg5514` instead of `Epsg5514Projection` in public examples?
 - Should layer DSL builders return concrete layer objects or register directly into the map builder?
 - How much of style builder API should use `Double` vs Compose units such as `Dp`?

@@ -1,4 +1,4 @@
-package eu.tilo.compose.render.backend
+package tilo.compose.render.backend
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
@@ -10,9 +10,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import eu.tilo.compose.render.LabelBitmapCache
-import eu.tilo.compose.render.drawFeatures
-import eu.tilo.compose.render.drawTiles
+import tilo.compose.render.LabelBitmapCache
+import tilo.compose.render.drawFeatures
+import tilo.compose.render.drawTiles
 import tilo.compose.core.map.Map
 import kotlin.math.pow
 import kotlin.math.roundToInt

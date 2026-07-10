@@ -1,9 +1,9 @@
 @file:Suppress("unused")
 
-package eu.tilo.compose.render.backend
+package tilo.compose.render.backend
 
 import androidx.compose.ui.graphics.ImageBitmap
-import eu.tilo.compose.render.RenderCommand
+import tilo.compose.render.RenderCommand
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.tile.Tile
 

@@ -1,4 +1,4 @@
-package eu.tilo.compose.render
+package tilo.compose.render
 
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlinx.coroutines.CancellationException

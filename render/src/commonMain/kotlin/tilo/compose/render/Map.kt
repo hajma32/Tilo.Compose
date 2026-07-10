@@ -1,11 +1,11 @@
-package eu.tilo.compose.render
+package tilo.compose.render
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
-import eu.tilo.compose.render.backend.ComposeCanvasRenderBackend
-import eu.tilo.compose.render.backend.RenderBackend
+import tilo.compose.render.backend.ComposeCanvasRenderBackend
+import tilo.compose.render.backend.RenderBackend
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Layer

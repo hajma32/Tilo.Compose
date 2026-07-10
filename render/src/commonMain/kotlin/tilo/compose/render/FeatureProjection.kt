@@ -1,4 +1,4 @@
-package eu.tilo.compose.render
+package tilo.compose.render
 
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Geometry

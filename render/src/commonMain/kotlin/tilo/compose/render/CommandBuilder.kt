@@ -1,4 +1,4 @@
-package eu.tilo.compose.render
+package tilo.compose.render
 
 import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.feature.ColorValue

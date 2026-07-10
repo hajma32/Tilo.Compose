@@ -1,12 +1,12 @@
-package eu.tilo.compose.render
+package tilo.compose.render
 
 import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import eu.tilo.compose.render.backend.VectorBitmapRenderSceneLayer
-import eu.tilo.compose.render.backend.VectorBitmapSnapshot
+import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
+import tilo.compose.render.backend.VectorBitmapSnapshot
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

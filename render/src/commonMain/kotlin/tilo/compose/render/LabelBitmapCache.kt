@@ -1,4 +1,4 @@
-package eu.tilo.compose.render
+package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size

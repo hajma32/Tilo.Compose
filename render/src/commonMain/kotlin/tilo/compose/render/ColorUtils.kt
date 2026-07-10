@@ -1,4 +1,4 @@
-package eu.tilo.compose.render
+package tilo.compose.render
 
 import androidx.compose.ui.graphics.Color
 import tilo.compose.core.feature.ColorValue

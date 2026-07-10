@@ -1,4 +1,4 @@
-package eu.tilo.compose.render
+package tilo.compose.render
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,11 +14,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
-import eu.tilo.compose.render.backend.ComposeCanvasRenderBackend
-import eu.tilo.compose.render.backend.RenderBackend
-import eu.tilo.compose.render.backend.RenderScene
-import eu.tilo.compose.render.backend.RenderSceneBuilder
-import eu.tilo.compose.render.backend.VectorBitmapRenderSceneLayer
+import tilo.compose.render.backend.ComposeCanvasRenderBackend
+import tilo.compose.render.backend.RenderBackend
+import tilo.compose.render.backend.RenderScene
+import tilo.compose.render.backend.RenderSceneBuilder
+import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow

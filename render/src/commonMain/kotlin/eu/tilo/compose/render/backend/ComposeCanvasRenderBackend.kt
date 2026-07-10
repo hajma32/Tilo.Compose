@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextMeasurer
-import eu.tilo.compose.render.drawPreparedFeatures
+import eu.tilo.compose.render.drawFeatures
 import eu.tilo.compose.render.drawTiles
 import tilo.compose.core.map.Map
 
@@ -49,20 +49,19 @@ internal fun DrawScope.drawRenderScene(
                     drawTiles(
                         tiles = layer.tiles,
                         tileDecoder = tileDecoder,
-                        map = map
+                        map = map,
+                        decodedImages = layer.decodedImages
                     )
                 }
             }
 
             is VectorRenderSceneLayer -> {
-                layer.preparedFrame?.let { preparedFrame ->
-                    drawPreparedFeatures(
-                        prepared = preparedFrame,
-                        map = map,
-                        offscreenLabelDrawScope = offscreenLabelDrawScope,
-                        textMeasurer = textMeasurer
-                    )
-                }
+                drawFeatures(
+                    commands = layer.commands,
+                    map = map,
+                    offscreenLabelDrawScope = offscreenLabelDrawScope,
+                    textMeasurer = textMeasurer
+                )
             }
         }
     }

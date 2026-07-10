@@ -1,18 +1,16 @@
 package tilo.compose.core.layers.raster
 
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
-import io.ktor.http.isSuccess
-import io.ktor.util.logging.Logger
+import kotlinx.coroutines.CancellationException
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.Map
+import tilo.compose.core.net.sharedHttpClient
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.core.tile.TileRequest
+import tilo.compose.core.tile.TileRequestPlan
 
 /**
  * WMS tile layer (OGC WMS GetMap).
@@ -32,52 +30,70 @@ class WMSTileLayer(
     private val crs: String = projection.id,
     private val styles: String = "",
     private val format: String = "image/png",
-    private val crsParamName: String = "SRS"
+    private val crsParamName: String = "SRS",
+    private val maxVisibleTiles: Int = 9,
+    private val prefetchMargin: Int = 1,
+    private val fetchConfig: TileFetchConfig = TileFetchConfig(),
 ) : TileLayer {
-
     init {
         require(crs == projection.id) {
             "WMS CRS parameter '$crs' must match layer projection ${projection.id}."
         }
     }
 
-    private val http = HttpClient {
-        expectSuccess = false
-        install(HttpTimeout) {
-            requestTimeoutMillis = 10_000
-            connectTimeoutMillis = 5_000
+    // Use shared HttpClient with platform-specific pooling
+    private val http = sharedHttpClient()
+    private val fetcher =
+        TileRequestFetcher(
+            config = fetchConfig,
+            cacheKey = ::buildUrl,
+        ) { url ->
+            try {
+                val response = http.get(url)
+                response.readTileImageBytesOrNull()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                null
+            }
         }
-    }
 
     override suspend fun loadTiles(map: Map): List<Tile> {
         validateProjection(map)
-        val zoom = grid.zoomForViewport(map.zoom, map.viewport, projection)
+        return fetcher.fetchTiles(requestPlan(map).visible)
+    }
 
+    override fun planTiles(map: Map): List<Tile> {
+        validateProjection(map)
+        return requestPlan(map).visible.map { request ->
+            Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = null)
+        }
+    }
+
+    override suspend fun prefetchTiles(map: Map) {
+        validateProjection(map)
+        fetcher.fetchTiles(requestPlan(map).prefetch)
+    }
+
+    private fun requestPlan(map: Map): TileRequestPlan {
         val topLeft = map.screenToWorld(Point(0.0, 0.0))
-        val bottomRight = map.screenToWorld(
-            Point(
-                map.viewport.width.toDouble(),
-                map.viewport.height.toDouble()
+        val bottomRight =
+            map.screenToWorld(
+                Point(
+                    map.viewport.width.toDouble(),
+                    map.viewport.height.toDouble(),
+                ),
             )
-        )
 
-        val requests = grid.visibleTiles(
+        return grid.requestPlan(
             minX = minOf(topLeft.x, bottomRight.x),
             maxX = maxOf(topLeft.x, bottomRight.x),
             minY = minOf(topLeft.y, bottomRight.y),
             maxY = maxOf(topLeft.y, bottomRight.y),
-            zoom = zoom
+            preferredZoom = grid.zoomForViewport(map.zoom, map.viewport, projection),
+            maxVisibleTiles = maxVisibleTiles,
+            prefetchMargin = prefetchMargin,
         )
-
-        return requests.map { request -> fetchTile(request) }
-    }
-
-    private suspend fun fetchTile(request: TileRequest): Tile {
-        val bytes = runCatching {
-            val response = http.get(buildUrl(request))
-            if (response.status.isSuccess()) response.body<ByteArray>() else null
-        }.getOrNull()
-        return Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = bytes)
     }
 
     /**
@@ -92,15 +108,12 @@ class WMSTileLayer(
         val north = maxOf(b.topLeft.y, b.bottomRight.y)
         val bbox = "$west,$south,$east,$north"
         val sep = if ('?' in baseUrl) "&" else "?"
-        val url = "${baseUrl}${sep}" +
+        return "$baseUrl$sep" +
             "SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1" +
             "&LAYERS=$layers&STYLES=$styles" +
             "&FORMAT=$format&TRANSPARENT=FALSE" +
             "&$crsParamName=$crs" +
             "&WIDTH=${grid.tileSize}&HEIGHT=${grid.tileSize}" +
             "&BBOX=$bbox"
-
-        print(url)
-        return url
     }
 }

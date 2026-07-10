@@ -2,7 +2,7 @@
 
 package eu.tilo.compose.render.backend
 
-import eu.tilo.compose.render.PreparedVectorFrame
+import androidx.compose.ui.graphics.ImageBitmap
 import eu.tilo.compose.render.RenderCommand
 import tilo.compose.core.tile.Tile
 
@@ -14,26 +14,15 @@ sealed interface RenderSceneLayer {
 data class RasterRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
-    val tiles: List<Tile>
+    val tiles: List<Tile>,
+    val decodedImages: List<ImageBitmap?>? = null
 ) : RenderSceneLayer
 
 class VectorRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
     val commands: List<RenderCommand>
-) : RenderSceneLayer {
-    internal var preparedFrame: PreparedVectorFrame? = null
-        private set
-
-    internal constructor(
-        id: String,
-        zIndex: Int,
-        commands: List<RenderCommand>,
-        preparedFrame: PreparedVectorFrame?
-    ) : this(id = id, zIndex = zIndex, commands = commands) {
-        this.preparedFrame = preparedFrame
-    }
-}
+) : RenderSceneLayer
 
 data class RenderScene(
     val layers: List<RenderSceneLayer>

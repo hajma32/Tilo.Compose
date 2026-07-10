@@ -24,12 +24,6 @@ kotlin {
                 implementation(libs.kotlin.test)
             }
         }
-        val androidMain by getting {
-            dependencies {
-                implementation(libs.maplibre.earcut4j)
-            }
-        }
-
         val iosMain by creating {
             dependsOn(commonMain)
         }

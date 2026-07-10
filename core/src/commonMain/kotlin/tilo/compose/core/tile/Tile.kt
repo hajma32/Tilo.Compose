@@ -17,10 +17,21 @@ data class TileRequest(
     val bounds: TileBounds
 )
 
+/**
+ * Tile requests split by rendering priority.
+ *
+ * [visible] must be loaded before rendering the current viewport. [prefetch]
+ * covers the surrounding area and can be loaded asynchronously into cache.
+ */
+data class TileRequestPlan(
+    val zoom: Int,
+    val visible: List<TileRequest>,
+    val prefetch: List<TileRequest>,
+)
+
 /** Fetched tile result. bytes = null when download failed. */
 data class Tile(
     val coordinate: TileCoordinate,
     val bounds: TileBounds,
     val bytes: ByteArray?
 )
-

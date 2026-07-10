@@ -46,12 +46,10 @@ import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.raster.createOrtofotoTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
-import tilo.compose.core.layers.vector.DefaultVectorTileBasemapStyleConfig
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg5514Projection
 import tilo.compose.core.projection.Epsg4326Projection
-import tilo.compose.core.tile.TileGrid
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
@@ -62,21 +60,16 @@ private enum class TestScreen(val title: String) {
     PolygonTest("Polygon"),
     MultiLineStringTest("MultiLineString"),
     MultiPolygonTest("MultiPolygon"),
-    PolygonMultiRingTest("Polygon (multi-ring)"),
-    MbtilesVectorTest("MBTiles Vector (.pbf)")
+    PolygonMultiRingTest("Polygon (multi-ring)")
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 @Preview
 fun App() {
-    val platform = remember { getPlatform() }
-
     val tileLayer = remember {
         createOrtofotoTileLayer(id = "cuzk-ortofoto")
     }
-
-    val mbtilesLayers = remember { platform.createMbtilesVectorLayers(DefaultVectorTileBasemapStyleConfig.basemap) }
 
     var selectedScreen by remember { mutableStateOf(TestScreen.MultipleLabelsTest) }
     val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -92,19 +85,15 @@ fun App() {
     }
 
     val layers: List<Layer> = remember(selectedScreen) {
-        if (selectedScreen == TestScreen.MbtilesVectorTest) {
-            mbtilesLayers
-        } else {
-            listOf(
-                tileLayer,
-                FeatureLayer(
-                    id = "test-features",
-                    zIndex = 1,
-                    projection = Epsg4326Projection,
-                    features = buildTestFeatures(selectedScreen)
-                )
+        listOf(
+            tileLayer,
+            FeatureLayer(
+                id = "test-features",
+                zIndex = 1,
+                projection = Epsg4326Projection,
+                features = buildTestFeatures(selectedScreen)
             )
-        }
+        )
     }
 
     MaterialTheme {
@@ -168,7 +157,6 @@ private fun buildTestFeatures(screen: TestScreen): List<Feature> = when (screen)
     TestScreen.MultiLineStringTest -> buildMultiLineStringTestFeatures()
     TestScreen.MultiPolygonTest -> buildMultiPolygonTestFeatures()
     TestScreen.PolygonMultiRingTest -> buildPolygonMultiRingTestFeatures()
-    TestScreen.MbtilesVectorTest -> emptyList()
 }
 
 @Composable

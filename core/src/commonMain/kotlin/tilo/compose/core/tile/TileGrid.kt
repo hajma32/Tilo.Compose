@@ -1,6 +1,5 @@
 package tilo.compose.core.tile
 
-import kotlin.math.floor
 import kotlin.math.log2
 import kotlin.math.roundToInt
 import tilo.compose.core.geometry.Point
@@ -31,18 +30,17 @@ data class TileGrid(
     fun tileSpan(zoom: Int): Double = worldWidth / nTilesX(zoom)
 
     /**
-     * Returns the tile zoom level that places approximately [tilesAcross] tiles
-     * across the shorter viewport dimension (width or height in DIP).
+     * Returns a density-aware tile zoom where a tile is rendered near its
+     * logical size in DIP, not near its physical-pixel size.
      */
     fun zoomForViewport(
         mapZoom: Double,
         viewport: Viewport,
         projection: Projection,
-        tilesAcross: Int = 2
+        targetTileSizeDip: Double = tileSize.toDouble(),
     ): Int {
-        val shortSide = minOf(viewport.dipWidth, viewport.dipHeight)
-        val normalizedWorldWidth = worldWidth / projection.worldUnitsPerMapUnit
-        return (mapZoom + log2(tilesAcross.toDouble() * normalizedWorldWidth / (nTilesX0 * shortSide)))
+        val normalizedWorldWidth = worldWidth / (nTilesX0 * projection.worldUnitsPerMapUnit)
+        return (mapZoom + log2(normalizedWorldWidth / targetTileSizeDip))
             .roundToInt()
             .coerceIn(0, 22)
     }
@@ -60,30 +58,90 @@ data class TileGrid(
     }
 
     /**
-     * All tiles visible within the world-coordinate rectangle minX..maxX × minY..maxY.
+     * All tiles visible within the world-coordinate rectangle minX..maxX  minY..maxY.
      * Pass values directly from Map.screenToWorld — no projection needed.
      */
     fun visibleTiles(
         minX: Double, maxX: Double,
         minY: Double, maxY: Double,
-        zoom: Int
-    ): List<TileRequest> {
+        zoom: Int,
+    ): List<TileRequest> = tileRequests(tileRange(minX, maxX, minY, maxY, zoom), zoom)
+
+    /**
+     * Builds a prioritized request plan for the current viewport.
+     *
+     * If [preferredZoom] would produce too many visible tiles, the zoom is
+     * lowered until the visible request count is at or below [maxVisibleTiles].
+     * Prefetch requests are computed at the same zoom and exclude visible tiles.
+     */
+    fun requestPlan(
+        minX: Double, maxX: Double,
+        minY: Double, maxY: Double,
+        preferredZoom: Int,
+        maxVisibleTiles: Int = 9,
+        prefetchMargin: Int = 1,
+    ): TileRequestPlan {
+        var zoom = preferredZoom
+        var visibleRange = tileRange(minX, maxX, minY, maxY, zoom)
+        while (visibleRange.count > maxVisibleTiles && zoom > 0) {
+            zoom -= 1
+            visibleRange = tileRange(minX, maxX, minY, maxY, zoom)
+        }
+
+        val visible = tileRequests(visibleRange, zoom)
+        val visibleCoordinates = visible.mapTo(mutableSetOf()) { it.coordinate }
+        val prefetch = if (prefetchMargin > 0) {
+            tileRequests(visibleRange.expanded(prefetchMargin, nTilesX(zoom), nTilesY(zoom)), zoom)
+                .filterNot { it.coordinate in visibleCoordinates }
+        } else {
+            emptyList()
+        }
+
+        return TileRequestPlan(zoom = zoom, visible = visible, prefetch = prefetch)
+    }
+
+    private fun tileRange(
+        minX: Double, maxX: Double,
+        minY: Double, maxY: Double,
+        zoom: Int,
+    ): TileRange {
         val nx = nTilesX(zoom)
         val ny = nTilesY(zoom)
         val span = tileSpan(zoom)
+        val epsilon = span * 1e-9
 
-        val x0 = floor((minX - originX) / span).toInt().coerceIn(0, nx - 1)
-        val x1 = floor((maxX - originX) / span).toInt().coerceIn(0, nx - 1)
-        val y0 = floor((originY - maxY) / span).toInt().coerceIn(0, ny - 1)
-        val y1 = floor((originY - minY) / span).toInt().coerceIn(0, ny - 1)
+        val x0 = kotlin.math.floor((minX - originX) / span).toInt().coerceIn(0, nx - 1)
+        val x1 = kotlin.math.floor((maxX - originX - epsilon) / span).toInt().coerceIn(0, nx - 1)
+        val y0 = kotlin.math.floor((originY - maxY) / span).toInt().coerceIn(0, ny - 1)
+        val y1 = kotlin.math.floor((originY - minY - epsilon) / span).toInt().coerceIn(0, ny - 1)
 
-        return buildList {
-            for (y in y0..y1) {
-                for (x in x0..x1) {
+        return TileRange(
+            x0 = minOf(x0, x1),
+            x1 = maxOf(x0, x1),
+            y0 = minOf(y0, y1),
+            y1 = maxOf(y0, y1),
+        )
+    }
+
+    private fun tileRequests(range: TileRange, zoom: Int): List<TileRequest> =
+        buildList {
+            for (y in range.y0..range.y1) {
+                for (x in range.x0..range.x1) {
                     add(TileRequest(TileCoordinate(zoom, x, y), tileBounds(x, y, zoom)))
                 }
             }
         }
+
+    private data class TileRange(val x0: Int, val x1: Int, val y0: Int, val y1: Int) {
+        val count: Int = (x1 - x0 + 1) * (y1 - y0 + 1)
+
+        fun expanded(margin: Int, nx: Int, ny: Int): TileRange =
+            TileRange(
+                x0 = (x0 - margin).coerceAtLeast(0),
+                x1 = (x1 + margin).coerceAtMost(nx - 1),
+                y0 = (y0 - margin).coerceAtLeast(0),
+                y1 = (y1 + margin).coerceAtMost(ny - 1),
+            )
     }
 
     companion object {

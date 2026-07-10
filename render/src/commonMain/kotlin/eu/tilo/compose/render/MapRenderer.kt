@@ -17,25 +17,25 @@ import eu.tilo.compose.render.backend.ComposeCanvasRenderBackend
 import eu.tilo.compose.render.backend.RenderBackend
 import eu.tilo.compose.render.backend.RenderScene
 import eu.tilo.compose.render.backend.RenderSceneBuilder
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.IO
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.vector.VectorLayer
-import tilo.compose.core.map.Map
 import tilo.compose.core.map.Viewport
+import tilo.compose.core.tile.Tile
+import tilo.compose.core.map.Map as MapState
 
 /**
  * Compose-first map renderer that builds a backend-agnostic [RenderScene].
  */
 @Composable
 fun MapRenderer(
-    map: Map,
+    map: MapState,
     layers: List<Layer>,
     tileDecoder: ((ByteArray) -> ImageBitmap?)? = null,
     modifier: Modifier = Modifier,
@@ -44,9 +44,11 @@ fun MapRenderer(
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val offscreenLabelDrawScope = remember { CanvasDrawScope() }
-    val vectorMeshCache = remember { VectorTileMeshCache(maxTiles = 256) }
+    val rasterPipeline = remember { RasterRenderPipeline() }
+    val vectorPipeline = remember { VectorRenderPipeline() }
+
     val renderRequests = remember(sortedLayersKey(layers)) {
-        MutableSharedFlow<Map>(
+        MutableSharedFlow<MapState>(
             replay = 0,
             extraBufferCapacity = 1,
             onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -59,6 +61,7 @@ fun MapRenderer(
 
     var redrawVersion by remember { mutableStateOf(0) }
     var scene by remember { mutableStateOf(RenderScene.Empty) }
+    var lastRasterFrame by remember { mutableStateOf(RasterFrame.Empty) }
 
     LaunchedEffect(
         sortedLayers,
@@ -70,47 +73,75 @@ fun MapRenderer(
         map.viewport.pixelRatio
     ) {
         if (map.viewport.width <= 0 || map.viewport.height <= 0) return@LaunchedEffect
-        val renderMap = Map(
+        val renderMap = MapState(
             center = map.center,
             zoom = map.zoom,
             projection = map.projection,
             config = map.config,
             viewport = map.viewport
         )
-        delay(60)
         renderRequests.tryEmit(renderMap)
     }
 
     LaunchedEffect(sortedLayers) {
         renderRequests.collectLatest { renderMap ->
-            val nextScene = withContext(Dispatchers.IO) {
-                val tilesByLayer = buildMap {
-                    tileLayers.forEach { layer ->
-                        put(layer.id, layer.loadTiles(renderMap))
-                    }
-                }
-                val commandsByLayer = buildMap {
-                    vectorLayers.forEach { layer ->
-                        val features = layer.source.getFeatures(renderMap)
-                        val projected = transformFeaturesToMapProjection(features, layer.projection, renderMap)
-                        put(layer.id, CommandBuilder.build(renderMap, projected))
-                    }
-                }
-                val preparedFramesByLayer = buildMap {
-                    commandsByLayer.forEach { (layerId, commands) ->
-                        put(layerId, vectorMeshCache.prepare(commands, renderMap))
-                    }
-                }
-                RenderSceneBuilder.build(
-                    layers = sortedLayers,
-                    tilesByLayer = tilesByLayer,
-                    commandsByLayer = commandsByLayer,
-                    preparedFramesByLayer = preparedFramesByLayer
-                )
-            }
+            supervisorScope {
+                var tilesByLayer: Map<String, List<Tile>> = emptyMap()
+                var decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap()
+                var commandsByLayer: Map<String, List<RenderCommand>> = emptyMap()
+                val placeholderFrame = rasterPipeline.buildPlaceholderFrame(tileLayers, renderMap)
 
-            scene = nextScene
-            backend.onScene(nextScene)
+                fun publishScene() {
+                    val displayRasterFrame = mergeRasterFrames(
+                        placeholderFrame = placeholderFrame,
+                        fallbackFrame = lastRasterFrame,
+                        currentFrame = RasterFrame(
+                            tilesByLayer = tilesByLayer,
+                            decodedImagesByLayer = decodedImagesByLayer,
+                        ),
+                    )
+                    val nextScene = RenderSceneBuilder.build(
+                        layers = sortedLayers,
+                        tilesByLayer = displayRasterFrame.tilesByLayer,
+                        commandsByLayer = commandsByLayer,
+                        decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
+                    )
+                    scene = nextScene
+                    backend.onScene(nextScene)
+                }
+
+                publishScene()
+
+                launch {
+                    runRenderBranch {
+                        commandsByLayer = vectorPipeline.buildCommands(vectorLayers, renderMap)
+                        publishScene()
+                    }
+                }
+
+                launch {
+                    runRenderBranch {
+                        val rasterFrame = rasterPipeline.buildVisibleFrame(
+                            tileLayers = tileLayers,
+                            map = renderMap,
+                            tileDecoder = tileDecoder,
+                        )
+                        tilesByLayer = rasterFrame.tilesByLayer
+                        decodedImagesByLayer = rasterFrame.decodedImagesByLayer
+                        val renderableRasterFrame = rasterFrame.withRenderableTilesOnly()
+                        if (renderableRasterFrame.hasTiles()) {
+                            lastRasterFrame = renderableRasterFrame
+                        }
+                        publishScene()
+                    }
+                }
+
+                launch {
+                    runRenderBranch {
+                        rasterPipeline.prefetch(tileLayers, renderMap)
+                    }
+                }
+            }
         }
     }
 
@@ -141,3 +172,87 @@ fun MapRenderer(
 
 private fun sortedLayersKey(layers: List<Layer>): String =
     layers.sortedWith(compareBy(Layer::zIndex)).joinToString(separator = "|") { layer -> "${layer.id}:${layer.zIndex}" }
+
+private fun mergeRasterFrames(
+    placeholderFrame: RasterFrame,
+    fallbackFrame: RasterFrame,
+    currentFrame: RasterFrame,
+): RasterFrame {
+    val layerIds = placeholderFrame.tilesByLayer.keys + fallbackFrame.tilesByLayer.keys + currentFrame.tilesByLayer.keys
+    val tilesByLayer = buildMap {
+        layerIds.forEach { layerId ->
+            put(
+                layerId,
+                placeholderFrame.tilesByLayer[layerId].orEmpty() +
+                    fallbackFrame.tilesByLayer[layerId].orEmpty() +
+                    currentFrame.tilesByLayer[layerId].orEmpty(),
+            )
+        }
+    }
+    val decodedImagesByLayer = buildMap {
+        layerIds.forEach { layerId ->
+            put(
+                layerId,
+                placeholderFrame.imagesForLayer(layerId) +
+                    fallbackFrame.imagesForLayer(layerId) +
+                    currentFrame.imagesForLayer(layerId),
+            )
+        }
+    }
+    return RasterFrame(
+        tilesByLayer = tilesByLayer,
+        decodedImagesByLayer = decodedImagesByLayer,
+    )
+}
+
+private fun RasterFrame.imagesForLayer(layerId: String): List<ImageBitmap?> {
+    val tiles = tilesByLayer[layerId].orEmpty()
+    val images = decodedImagesByLayer[layerId].orEmpty()
+    return tiles.indices.map { index -> images.getOrNull(index) }
+}
+
+private fun RasterFrame.withRenderableTilesOnly(): RasterFrame {
+    val keptIndicesByLayer = buildMap {
+        this@withRenderableTilesOnly.tilesByLayer.forEach { (layerId, tiles) ->
+            val decodedImages = decodedImagesByLayer[layerId].orEmpty()
+            put(
+                layerId,
+                tiles.indices.filter { index ->
+                    decodedImages.getOrNull(index) != null
+                },
+            )
+        }
+    }
+    val tilesByLayer = buildMap {
+        this@withRenderableTilesOnly.tilesByLayer.forEach { (layerId, tiles) ->
+            put(layerId, keptIndicesByLayer[layerId].orEmpty().map { index -> tiles[index] })
+        }
+    }
+    val decodedImagesByLayer = buildMap {
+        this@withRenderableTilesOnly.tilesByLayer.keys.forEach { layerId ->
+            val decodedImages = this@withRenderableTilesOnly.decodedImagesByLayer[layerId].orEmpty()
+            put(
+                layerId,
+                keptIndicesByLayer[layerId].orEmpty().map { index -> decodedImages.getOrNull(index) },
+            )
+        }
+    }
+    return RasterFrame(
+        tilesByLayer = tilesByLayer,
+        decodedImagesByLayer = decodedImagesByLayer,
+    )
+}
+
+private fun RasterFrame.hasTiles(): Boolean =
+    tilesByLayer.values.any { tiles -> tiles.isNotEmpty() }
+
+private suspend fun runRenderBranch(block: suspend () -> Unit) {
+    try {
+        block()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Throwable) {
+        // Keep the render collector alive. A failed tile decode/fetch/prefetch should
+        // affect only that render branch; the next pan/zoom must still recover.
+    }
+}

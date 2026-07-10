@@ -1,93 +1,33 @@
 package eu.tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.VertexMode
-import androidx.compose.ui.graphics.Vertices
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import kotlin.math.pow
-import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.Map
 
 private const val LABEL_VERTICAL_PADDING_PX = 8f
 
-internal fun meshWorldToScreen(point: Point, map: Map): Offset {
-    val scalePx = (2.0.pow(map.zoom) / map.projection.worldUnitsPerMapUnit * map.viewport.pixelRatio).toFloat()
-    return Offset(
-        x = map.viewport.width / 2f + (point.x - map.center.x).toFloat() * scalePx,
-        y = map.viewport.height / 2f - (point.y - map.center.y).toFloat() * scalePx
-    )
-}
-
 /**
- * Draws prepared vector content onto the canvas.
+ * Draws simple vector render commands onto the canvas.
  */
-internal fun DrawScope.drawPreparedFeatures(
-    prepared: PreparedVectorFrame,
+internal fun DrawScope.drawFeatures(
+    commands: List<RenderCommand>,
     map: Map,
     offscreenLabelDrawScope: CanvasDrawScope,
     textMeasurer: TextMeasurer
 ) {
-    prepared.meshBatches.forEach { batch ->
-        drawMeshBatch(batch, map)
-    }
-
-    prepared.points.forEach { command ->
-        drawPoint(command, map)
-    }
-
-    // Label rendering is intentionally disabled for now; it's known to be slow and
-    // not part of the current performance work.
-    // prepared.labels.forEach { command ->
-    //     drawLabel(command, map, offscreenLabelDrawScope, textMeasurer)
-    // }
-}
-
-private fun DrawScope.drawMeshBatch(batch: VectorMeshBatch, map: Map) {
-    if (batch.vertices.isEmpty() || batch.indices.isEmpty()) return
-
-    val color = when (batch.primitive) {
-        VectorMeshPrimitive.POLYGON_FILL -> batch.style.fillColor ?: return
-        VectorMeshPrimitive.LINE -> batch.style.strokeColor ?: return
-    }
-
-    val positions = batch.vertices.map { point ->
-        Offset(point.x.toFloat(), point.y.toFloat())
-    }
-    val vertices = Vertices(
-        vertexMode = VertexMode.Triangles,
-        positions = positions,
-        textureCoordinates = List(positions.size) { Offset.Zero },
-        colors = List(positions.size) { Color(color) },
-        indices = batch.indices
-    )
-    val paint = Paint().apply {
-        this.color = Color(color)
-    }
-
-    val scalePx = (2.0.pow(map.zoom) / map.projection.worldUnitsPerMapUnit * map.viewport.pixelRatio).toFloat()
-
-    withTransform({
-        translate(
-            left = map.viewport.width / 2f,
-            top = map.viewport.height / 2f
-        )
-        scale(scaleX = scalePx, scaleY = -scalePx, pivot = Offset.Zero)
-        translate(
-            left = -map.center.x.toFloat(),
-            top = -map.center.y.toFloat()
-        )
-    }) {
-        drawIntoCanvas { canvas ->
-            canvas.drawVertices(vertices, BlendMode.SrcOver, paint)
+    commands.forEach { command ->
+        when (command) {
+            is RenderPoint -> drawPoint(command, map)
+            is RenderLineString -> drawLineString(command, map)
+            is RenderPolygon -> drawPolygon(command, map)
+            is RenderLabel -> drawLabel(command, map, offscreenLabelDrawScope, textMeasurer)
         }
     }
 }
@@ -100,6 +40,60 @@ private fun DrawScope.drawPoint(command: RenderPoint, map: Map) {
         radius = command.radius.toFloat(),
         center = Offset(screenPoint.x.toFloat(), screenPoint.y.toFloat())
     )
+}
+
+private fun DrawScope.drawLineString(command: RenderLineString, map: Map) {
+    if (command.points.size < 2) return
+    val stroke = command.style.strokeColor?.toColor() ?: return
+    command.points.zipWithNext { a, b ->
+        val start = map.worldToScreen(a)
+        val end = map.worldToScreen(b)
+        drawLine(
+            color = stroke,
+            start = Offset(start.x.toFloat(), start.y.toFloat()),
+            end = Offset(end.x.toFloat(), end.y.toFloat()),
+            strokeWidth = command.style.strokeWidth?.toFloat() ?: 2f
+        )
+    }
+}
+
+private fun DrawScope.drawPolygon(command: RenderPolygon, map: Map) {
+    command.style.fillColor?.toColor()?.let { fill ->
+        val path = command.rings.toPath(map)
+        if (!path.isEmpty) {
+            drawPath(path = path, color = fill)
+        }
+    }
+
+    command.style.strokeColor?.toColor()?.let {
+        command.rings.forEach { ring ->
+            drawLineString(
+                RenderLineString(
+                    id = "${command.id}:ring",
+                    points = ring,
+                    style = command.style
+                ),
+                map
+            )
+        }
+    }
+}
+
+private fun List<List<tilo.compose.core.geometry.Point>>.toPath(map: Map): Path {
+    val path = Path().apply {
+        fillType = PathFillType.EvenOdd
+    }
+    forEach { ring ->
+        if (ring.isEmpty()) return@forEach
+        val first = map.worldToScreen(ring.first())
+        path.moveTo(first.x.toFloat(), first.y.toFloat())
+        ring.drop(1).forEach { point ->
+            val screen = map.worldToScreen(point)
+            path.lineTo(screen.x.toFloat(), screen.y.toFloat())
+        }
+        path.close()
+    }
+    return path
 }
 
 private fun DrawScope.drawLabel(

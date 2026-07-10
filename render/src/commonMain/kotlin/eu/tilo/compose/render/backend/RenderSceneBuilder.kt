@@ -2,7 +2,7 @@
 
 package eu.tilo.compose.render.backend
 
-import eu.tilo.compose.render.PreparedVectorFrame
+import androidx.compose.ui.graphics.ImageBitmap
 import eu.tilo.compose.render.RenderCommand
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.raster.TileLayer
@@ -15,7 +15,7 @@ object RenderSceneBuilder {
         layers: List<Layer>,
         tilesByLayer: Map<String, List<Tile>>,
         commandsByLayer: Map<String, List<RenderCommand>>,
-        preparedFramesByLayer: Map<String, PreparedVectorFrame> = emptyMap()
+        decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap()
     ): RenderScene {
         val sceneLayers = buildList {
             layers.forEach { layer ->
@@ -23,20 +23,19 @@ object RenderSceneBuilder {
                     is TileLayer -> {
                         val tiles = tilesByLayer[layer.id].orEmpty()
                         if (tiles.isNotEmpty()) {
-                            add(RasterRenderSceneLayer(id = layer.id, zIndex = layer.zIndex, tiles = tiles))
+                            val images = decodedImagesByLayer[layer.id]
+                            add(RasterRenderSceneLayer(id = layer.id, zIndex = layer.zIndex, tiles = tiles, decodedImages = images))
                         }
                     }
 
                     is VectorLayer -> {
                         val commands = commandsByLayer[layer.id].orEmpty()
-                        val preparedFrame = preparedFramesByLayer[layer.id]
-                        if (commands.isNotEmpty() || preparedFrame != null) {
+                        if (commands.isNotEmpty()) {
                             add(
                                 VectorRenderSceneLayer(
                                     id = layer.id,
                                     zIndex = layer.zIndex,
-                                    commands = commands,
-                                    preparedFrame = preparedFrame
+                                    commands = commands
                                 )
                             )
                         }

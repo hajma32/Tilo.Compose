@@ -21,10 +21,22 @@ interface TileLayer : Layer {
     override val projection: Projection
 
     /**
+     * Returns visible tile positions for the current [map] state without fetching bytes.
+     * Renderers can use these tiles as placeholders while [loadTiles] is still in flight.
+     */
+    fun planTiles(map: Map): List<Tile> = emptyList()
+
+    /**
      * Returns tiles visible for the current [map] state.
      * Implementations should suspend and return tiles with bytes already fetched.
      */
     suspend fun loadTiles(map: Map): List<Tile>
+
+    /**
+     * Prefetches nearby tiles for the current [map] state without changing the
+     * rendered result. Implementations may no-op when prefetching is unsupported.
+     */
+    suspend fun prefetchTiles(map: Map) = Unit
 
     fun validateProjection(map: Map) {
         require(map.projection.id == projection.id) {

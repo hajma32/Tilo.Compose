@@ -20,10 +20,11 @@ internal fun Modifier.mapGestureInput(
             map.panBy(-pan.x.toDouble(), -pan.y.toDouble())
         }
         if (zoom != 1.0f) {
-            val zoomDelta = ln(zoom.toDouble()) / ln(2.0)
-            map.zoomBy(zoomDelta, Point(centroid.x.toDouble(), centroid.y.toDouble()))
+            map.zoomBy(
+                delta = ln(zoom.toDouble()) / ln(2.0),
+                focus = Point(centroid.x.toDouble(), centroid.y.toDouble())
+            )
         }
         onChanged()
     }
 }
-

@@ -15,6 +15,7 @@ object RenderSceneBuilder {
         layers: List<Layer>,
         tilesByLayer: Map<String, List<Tile>>,
         commandsByLayer: Map<String, List<RenderCommand>>,
+        vectorBitmapsByLayer: Map<String, VectorBitmapRenderSceneLayer> = emptyMap(),
         decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap()
     ): RenderScene {
         val sceneLayers = buildList {
@@ -29,6 +30,9 @@ object RenderSceneBuilder {
                     }
 
                     is VectorLayer -> {
+                        vectorBitmapsByLayer[layer.id]?.let { bitmapLayer ->
+                            add(bitmapLayer)
+                        }
                         val commands = commandsByLayer[layer.id].orEmpty()
                         if (commands.isNotEmpty()) {
                             add(

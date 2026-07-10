@@ -50,6 +50,20 @@ internal fun DrawScope.drawFeatures(
     }
 }
 
+internal fun DrawScope.drawFeatureGeometry(
+    commands: List<RenderCommand>,
+    map: Map,
+) {
+    commands.forEach { command ->
+        when (command) {
+            is RenderPoint -> drawPoint(command, map)
+            is RenderLineString -> drawLineString(command, map)
+            is RenderPolygon -> drawPolygon(command, map)
+            is RenderLabel -> Unit
+        }
+    }
+}
+
 private fun DrawScope.drawPoint(command: RenderPoint, map: Map) {
     val screenPoint = map.worldToScreen(command.point)
     val center = Offset(screenPoint.x.toFloat(), screenPoint.y.toFloat())

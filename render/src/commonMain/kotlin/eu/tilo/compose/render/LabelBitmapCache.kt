@@ -28,12 +28,12 @@ private val HALO_OFFSETS = arrayOf(
     Offset(LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX)
 )
 
-internal class LabelBitmapCache(
+class LabelBitmapCache(
     private val maxEntries: Int = DEFAULT_LABEL_CACHE_SIZE,
 ) {
     private val bitmaps = LinkedHashMap<LabelBitmapKey, ImageBitmap>()
 
-    fun getOrPut(key: LabelBitmapKey, create: () -> ImageBitmap): ImageBitmap {
+    internal fun getOrPut(key: LabelBitmapKey, create: () -> ImageBitmap): ImageBitmap {
         bitmaps.remove(key)?.let { cached ->
             bitmaps[key] = cached
             return cached

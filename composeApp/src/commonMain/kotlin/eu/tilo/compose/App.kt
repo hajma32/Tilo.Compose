@@ -56,6 +56,7 @@ import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.raster.createOrtofotoTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
+import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg5514Projection
@@ -108,7 +109,8 @@ fun App() {
                 id = "test-features",
                 zIndex = 1,
                 projection = Epsg4326Projection,
-                features = buildTestFeatures(selectedScreen)
+                features = buildTestFeatures(selectedScreen),
+                renderStrategy = selectedScreen.vectorRenderStrategy(),
             )
         )
     }
@@ -176,6 +178,16 @@ private fun buildTestFeatures(screen: TestScreen): List<Feature> = when (screen)
     TestScreen.MultiPolygonTest -> buildMultiPolygonTestFeatures()
     TestScreen.PolygonMultiRingTest -> buildPolygonMultiRingTestFeatures()
 }
+
+private fun TestScreen.vectorRenderStrategy(): VectorRenderStrategy =
+    when (this) {
+        TestScreen.StylingTest -> VectorRenderStrategy.CachedBitmap(
+            scale = 1.5,
+            paddingPx = 192,
+            invalidateOnZoomDelta = 0.35,
+        )
+        else -> VectorRenderStrategy.Immediate
+    }
 
 @Composable
 private fun HamburgerIcon() {

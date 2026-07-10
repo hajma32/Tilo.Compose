@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.text.TextMeasurer
+import eu.tilo.compose.render.LabelBitmapCache
 import tilo.compose.core.map.Map
 
 interface RenderBackend {
@@ -22,7 +23,8 @@ interface RenderBackend {
         map: Map,
         tileDecoder: ((ByteArray) -> ImageBitmap?)?,
         offscreenLabelDrawScope: CanvasDrawScope,
-        textMeasurer: TextMeasurer
+        textMeasurer: TextMeasurer,
+        labelBitmapCache: LabelBitmapCache,
     ) {
         Box(modifier = modifier)
     }

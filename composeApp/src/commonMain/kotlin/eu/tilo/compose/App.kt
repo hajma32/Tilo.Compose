@@ -50,6 +50,7 @@ import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Epsg5514Projection
 import tilo.compose.core.projection.Epsg4326Projection
+import tilo.compose.core.transform.Epsg5514ToWgs84Transformation
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
@@ -79,7 +80,9 @@ fun App() {
         Map(
             center = Wgs84ToEpsg5514Transformation.sourceToTarget(Point(16.6068, 49.1951)),
             zoom = 11.5,
-            config = MapConfig(minZoom = 0.0, maxZoom = 20.0),
+            config = MapConfig(minZoom = 0.0, maxZoom = 20.0)
+                .withTransformation(Wgs84ToEpsg5514Transformation)
+                .withTransformation(Epsg5514ToWgs84Transformation),
             projection = Epsg5514Projection
         )
     }

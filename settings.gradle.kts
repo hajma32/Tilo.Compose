@@ -30,5 +30,6 @@ dependencyResolutionManagement {
 
 include(":composeApp")
 include(":core")
+include(":geocore")
 include(":render")
 include(":spatial-index")

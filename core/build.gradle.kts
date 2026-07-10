@@ -14,8 +14,8 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
+                api(project(":geocore"))
                 implementation(libs.ktor.client.core)
-                implementation(project(":spatial-index"))
             }
         }
         val androidMain by getting {

@@ -4,8 +4,9 @@ Compose-first Kotlin Multiplatform map framework, currently in active
 development.
 
 Tilo.Compose is being built as a small, modular map stack for Compose apps:
-core map state and layer contracts, raster tile loading, simple vector layers,
-projection handling, and a renderer that stays independent of CRS details.
+GeoCore map state and layer contracts, runtime tile loading, simple vector
+layers, projection handling, and a renderer that stays independent of CRS
+details.
 
 The table below is the current project shape: what the framework is intended to
 contain, and how much of that is already implemented.
@@ -24,14 +25,15 @@ contain, and how much of that is already implemented.
 | Simple vector features | ✅ Done | Points, line strings, multi-line strings, polygons, multi-polygons, and polygon holes. |
 | Labels | ✅ Done | Basic labels are rendered for vector features. |
 | Feature styling | 🟡 Basic | Basic fill, stroke, and point styling exists; this is not yet a full style system. |
+| GeoCore split | ✅ Done | Platform-agnostic map/geometry/tile/projection contracts live in `Tilo.GeoCore`. |
 | In-memory feature indexing | ✅ Done | Feature sources use `Tilo.SpatialIndex` for viewport queries. |
 | CRS model | 🟡 Basic | Projection metadata exists for EPSG:4326, EPSG:3857, EPSG:5514, and identity projection. |
-| CRS transformations | 🟡 Partial | Built-in WGS84/WebMercator transforms exist; Android uses `proj4j` for EPSG:5514. iOS projection work is intentionally deferred. |
+| CRS transformations | 🟡 Partial | GeoCore exposes contracts/registry only. Concrete transforms are injected by the app/runtime layer; Android demo currently wires EPSG:5514 explicitly. |
 | Renderer CRS separation | ✅ Done | Renderer uses `Map.worldToScreen` / `screenToWorld` and does not contain projection-specific logic. |
 | Vector tiles | ⚪ Not planned for current phase | Old vector tile and vector MBTiles experiments were removed. Current focus is simple vector layers. |
 | MBTiles raster loading | ⬜ Not done | Raster MBTiles support can be added later if needed. |
 | iOS production support | ⬜ Not done | KMP targets exist, but current validation focuses on Android/JVM. |
-| Public Maven artifacts | ⬜ Not done | `Tilo.SpatialIndex` is split into its own repo; Maven publishing is planned later. |
+| Public Maven artifacts | ⬜ Not done | `Tilo.GeoCore` and `Tilo.SpatialIndex` are split into their own repos; Maven publishing is planned later. |
 
 ## Current Demo
 
@@ -54,8 +56,13 @@ application.
 ## Modules
 
 - `:composeApp` - Android demo app.
-- `:core` - map state, projections, geometry, feature sources, and raster/vector
-  layer definitions.
+- `:geocore` - Git submodule pointing to
+  [hajma32/Tilo.GeoCore](https://github.com/hajma32/Tilo.GeoCore). Contains
+  platform-agnostic map state, projections, geometry, feature sources, tile
+  planning, and layer contracts.
+- `:core` - runtime glue that should not live in GeoCore: HTTP-backed raster
+  tile layers, tile byte fetching/cache/prefetch orchestration, and concrete
+  transformation adapters used by the demo.
 - `:render` - Compose renderer, gesture input, raster/vector render pipelines,
   labels, and canvas backend.
 - `:spatial-index` - Git submodule pointing to
@@ -76,8 +83,9 @@ Or, after a normal clone:
 git submodule update --init --recursive
 ```
 
-The spatial index submodule is required because `:core` depends on
-`:spatial-index` for fast viewport queries over in-memory features.
+The `geocore` and `spatial-index` submodules are required for local development.
+`Tilo.GeoCore` depends on `Tilo.SpatialIndex` for fast viewport queries over
+in-memory features.
 
 ## Build And Test
 
@@ -85,6 +93,7 @@ Android/JVM checks used during development:
 
 ```bash
 ./gradlew :spatial-index:jvmTest \
+  :geocore:jvmTest \
   :core:testDebugUnitTest \
   :core:compileDebugKotlinAndroid \
   :render:compileDebugKotlinAndroid \
@@ -129,8 +138,13 @@ MapRenderer(
 
 ## Design Direction
 
-- Keep `core` independent of Compose rendering.
+- Keep `Tilo.GeoCore` platform-agnostic: no Compose, no HTTP, no image decode,
+  and no concrete licensed projection engines.
+- Keep `core` as runtime glue for platform/network-backed behavior that does
+  not belong in GeoCore.
 - Keep `render` CRS-agnostic.
+- Inject concrete CRS transformations through `MapConfig` /
+  `TransformationRegistry`; do not hard-wire them into GeoCore defaults.
 - Prefer simple, explicit layer APIs over a large implicit style pipeline.
 - Keep raster tiles and simple vector layers working well before reintroducing
   larger data-loading formats.
@@ -141,4 +155,5 @@ MapRenderer(
 
 MIT License. See [LICENSE](LICENSE).
 
-The spatial index submodule is also MIT licensed in its own repository.
+The GeoCore and SpatialIndex submodules are also MIT licensed in their own
+repositories.

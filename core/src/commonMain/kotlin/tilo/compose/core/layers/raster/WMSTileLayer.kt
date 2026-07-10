@@ -30,6 +30,7 @@ class WMSTileLayer(
     private val crs: String = projection.id,
     private val styles: String = "",
     private val format: String = "image/png",
+    private val version: String = "1.1.1",
     private val crsParamName: String = "SRS",
     private val maxVisibleTiles: Int = 9,
     private val prefetchMargin: Int = 1,
@@ -109,7 +110,7 @@ class WMSTileLayer(
         val bbox = "$west,$south,$east,$north"
         val sep = if ('?' in baseUrl) "&" else "?"
         return "$baseUrl$sep" +
-            "SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1" +
+            "SERVICE=WMS&REQUEST=GetMap&VERSION=$version" +
             "&LAYERS=$layers&STYLES=$styles" +
             "&FORMAT=$format&TRANSPARENT=FALSE" +
             "&$crsParamName=$crs" +

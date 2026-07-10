@@ -1,7 +1,10 @@
 package tilo.compose.draw
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
@@ -152,3 +155,23 @@ fun createDrawState(
         onSave = onSave,
         onChange = onChange,
     )
+
+@Composable
+fun rememberDrawState(
+    initialMode: DrawMode = DrawMode.Point,
+    style: DrawStyle = DefaultDrawStyle(),
+    onSave: (Feature) -> Unit = {},
+    onChange: (DrawState) -> Unit = {},
+): DrawState {
+    val currentOnSave by rememberUpdatedState(onSave)
+    val currentOnChange by rememberUpdatedState(onChange)
+
+    return remember(initialMode, style) {
+        DrawState(
+            initialMode = initialMode,
+            featureFactory = DrawingFeatureFactory(style),
+            onSave = { feature -> currentOnSave(feature) },
+            onChange = { state -> currentOnChange(state) },
+        )
+    }
+}

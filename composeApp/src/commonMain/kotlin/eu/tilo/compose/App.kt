@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,60 +42,44 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import eu.tilo.compose.map.mapFeatures
-import eu.tilo.compose.render.Map
-import eu.tilo.compose.render.MapLayerBuilder
+import eu.tilo.compose.render.TiloMap
+import eu.tilo.compose.render.cachedBitmap
+import eu.tilo.compose.render.lineStyle
+import eu.tilo.compose.render.pointStyle
+import eu.tilo.compose.render.polygonStyle
+import eu.tilo.compose.render.rememberMapCameraState
+import eu.tilo.compose.render.rememberWMSTileLayer
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
-import tilo.compose.core.feature.ColorValue
-import tilo.compose.core.feature.DashPattern
 import tilo.compose.core.feature.Feature
-import tilo.compose.core.feature.FillPattern
-import tilo.compose.core.feature.FillStyle
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
-import tilo.compose.core.feature.LineStyle
 import tilo.compose.core.feature.PointShape
-import tilo.compose.core.feature.PointStyle
-import tilo.compose.core.feature.PolygonStyle
-import tilo.compose.core.feature.StrokeStyle
 import tilo.compose.core.geometry.LineString
-import tilo.compose.core.geometry.MultiLineString
-import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
-import tilo.compose.core.layers.raster.createOrtofotoTileLayer
-import tilo.compose.core.layers.vector.FeatureLayer
-import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.projection.Epsg5514Projection
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.transform.Epsg5514ToWgs84Transformation
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
-import tilo.compose.core.map.Map as MapState
-import tilo.compose.draw.DrawLayer
 import tilo.compose.draw.DrawMode
 import tilo.compose.draw.DrawState
+import tilo.compose.draw.drawLayer
+import tilo.compose.draw.rememberDrawState
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
+private const val CUZK_ORTOFOTO_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer"
+private const val CUZK_ZTM_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ZTM/MapServer/WMSServer"
 
-private fun color(argb: Long): ColorValue =
-    ColorValue((argb and 0xFFFFFFFFL).toULong())
-
-private enum class TestScreen(val title: String) {
-    StylingTest("Styling"),
-    MultipleLabelsTest("Multiple labels"),
-    LineTest("Line"),
-    PolygonTest("Polygon"),
-    MultiLineStringTest("MultiLineString"),
-    MultiPolygonTest("MultiPolygon"),
-    PolygonMultiRingTest("Polygon (multi-ring)")
+private enum class BasemapOption(val title: String) {
+    CuzkOrtofoto("CUZK ortofoto"),
+    CuzkZtm("CUZK basic map"),
 }
 
 private enum class DemoLayerOption(val title: String) {
-    CuzkOrtofoto("CUZK ortofoto"),
     DashedPolygons("Dashed polygons"),
     FullLines("Full lines"),
 }
@@ -103,55 +88,34 @@ private enum class DemoLayerOption(val title: String) {
 @Composable
 @Preview
 fun App() {
-    val ortofotoLayer = remember {
-        createOrtofotoTileLayer(id = "cuzk-ortofoto")
-    }
-    val dashedPolygonsLayer = remember {
-        FeatureLayer(
-            id = "dashed-polygons",
-            zIndex = 1,
-            projection = Epsg4326Projection,
-            features = buildDashedPolygonLayerFeatures(),
-            renderStrategy = VectorRenderStrategy.CachedBitmap(
-                scale = 1.5,
-                paddingPx = 192,
-                invalidateOnZoomDelta = 0.35,
-            ),
-        )
-    }
-    val fullLinesLayer = remember {
-        FeatureLayer(
-            id = "full-lines",
-            zIndex = 2,
-            projection = Epsg4326Projection,
-            features = buildFullLineLayerFeatures(),
-            renderStrategy = VectorRenderStrategy.Immediate,
-        )
-    }
+    val ortofotoLayer = rememberWMSTileLayer(
+        id = "cuzk-ortofoto",
+        capabilitiesUrl = CUZK_ORTOFOTO_WMS_URL,
+        layerName = "0",
+        projection = Epsg5514Projection,
+        format = "image/jpeg",
+    )
+    val ztmLayer = rememberWMSTileLayer(
+        id = "cuzk-ztm",
+        capabilitiesUrl = CUZK_ZTM_WMS_URL,
+        layerName = "0",
+        projection = Epsg5514Projection,
+        format = "image/png",
+    )
+    val dashedPolygonFeatures = remember { buildDashedPolygonLayerFeatures() }
+    val fullLineFeatures = remember { buildFullLineLayerFeatures() }
 
     var savedDrawingFeatures by remember { mutableStateOf<List<Feature>>(emptyList()) }
-    val drawState = remember {
-        DrawState(
-            onSave = { feature ->
-                savedDrawingFeatures = savedDrawingFeatures + feature.withSavedDrawingStyle()
-            },
-        )
-    }
+    val drawState = rememberDrawState(
+        onSave = { feature ->
+            savedDrawingFeatures = savedDrawingFeatures + feature.withSavedDrawingStyle()
+        },
+    )
 
-    val savedDrawingsLayer = remember(savedDrawingFeatures) {
-        FeatureLayer(
-            id = "saved-drawings",
-            zIndex = 10,
-            projection = Epsg5514Projection,
-            features = savedDrawingFeatures,
-            renderStrategy = VectorRenderStrategy.Immediate,
-        )
-    }
-
+    var selectedBasemap by remember { mutableStateOf(BasemapOption.CuzkOrtofoto) }
     var selectedLayers by remember {
         mutableStateOf(
             setOf(
-                DemoLayerOption.CuzkOrtofoto,
                 DemoLayerOption.DashedPolygons,
                 DemoLayerOption.FullLines,
             )
@@ -160,42 +124,39 @@ fun App() {
     val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
-    val map = remember {
-        MapState(
-            center = Wgs84ToEpsg5514Transformation.sourceToTarget(Point(16.6068, 49.1951)),
-            zoom = 11.5,
-            config = MapConfig(minZoom = 0.0, maxZoom = 20.0)
-                .withTransformation(Wgs84ToEpsg5514Transformation)
-                .withTransformation(Epsg5514ToWgs84Transformation),
-            projection = Epsg5514Projection
-        )
-    }
-
-    fun MapLayerBuilder.CuzkOrtofoto() {
-        layer(ortofotoLayer)
-    }
-
-    fun MapLayerBuilder.DashedPolygonsLayer() {
-        layer(dashedPolygonsLayer)
-    }
-
-    fun MapLayerBuilder.FullLinesLayer() {
-        layer(fullLinesLayer)
-    }
-
-    fun MapLayerBuilder.DrawLayer() {
-        layer(DrawLayer(state = drawState, projection = Epsg5514Projection))
-    }
-
-    fun MapLayerBuilder.SavedDrawingsLayer() {
-        layer(savedDrawingsLayer)
-    }
+    val cameraState = rememberMapCameraState(
+        center = Wgs84ToEpsg5514Transformation.sourceToTarget(Point(16.6068, 49.1951)),
+        zoom = 11.5,
+        config = MapConfig(minZoom = 0.0, maxZoom = 20.0)
+            .withTransformation(Wgs84ToEpsg5514Transformation)
+            .withTransformation(Epsg5514ToWgs84Transformation),
+        projection = Epsg5514Projection,
+    )
 
     MaterialTheme {
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
                 ModalDrawerSheet {
+                    Text(
+                        text = "Basemap",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
+                    )
+                    BasemapOption.entries.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = selectedBasemap == option,
+                                onClick = { selectedBasemap = option },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(option.title)
+                        }
+                    }
                     Text(
                         text = "Layers",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
@@ -249,18 +210,39 @@ fun App() {
                         .fillMaxSize()
                         .background(Color(MAP_BACKGROUND_COLOR))
                 ) {
-                    Map(
-                        state = map,
+                    TiloMap(
+                        cameraState = cameraState,
                         tileDecoder = ::decodeImageBitmap,
                         modifier = Modifier.fillMaxSize(),
                         onTapWorld = drawState::onMapTap,
                         invalidationKey = drawState.revision,
                         layers = {
-                            if (DemoLayerOption.CuzkOrtofoto in selectedLayers) CuzkOrtofoto()
-                            if (DemoLayerOption.DashedPolygons in selectedLayers) DashedPolygonsLayer()
-                            if (DemoLayerOption.FullLines in selectedLayers) FullLinesLayer()
-                            SavedDrawingsLayer()
-                            DrawLayer()
+                            when (selectedBasemap) {
+                                BasemapOption.CuzkOrtofoto -> tileLayer(ortofotoLayer)
+                                BasemapOption.CuzkZtm -> tileLayer(ztmLayer)
+                            }
+                            if (DemoLayerOption.DashedPolygons in selectedLayers) {
+                                featureLayer("dashed-polygons", dashedPolygonFeatures) {
+                                    zIndex = 1
+                                    projection = Epsg4326Projection
+                                    renderStrategy = cachedBitmap(
+                                        scale = 1.5,
+                                        paddingPx = 192,
+                                        invalidateOnZoomDelta = 0.35,
+                                    )
+                                }
+                            }
+                            if (DemoLayerOption.FullLines in selectedLayers) {
+                                featureLayer("full-lines", fullLineFeatures) {
+                                    zIndex = 2
+                                    projection = Epsg4326Projection
+                                }
+                            }
+                            featureLayer("saved-drawings", savedDrawingFeatures) {
+                                zIndex = 10
+                                projection = Epsg5514Projection
+                            }
+                            +drawLayer(state = drawState, projection = Epsg5514Projection)
                         },
                     )
                     DrawingControls(
@@ -271,26 +253,6 @@ fun App() {
         }
     }
 }
-
-private fun buildTestFeatures(screen: TestScreen): List<Feature> = when (screen) {
-    TestScreen.StylingTest -> buildStylingTestFeatures()
-    TestScreen.MultipleLabelsTest -> buildMultipleLabelsTestFeatures()
-    TestScreen.LineTest -> buildLineTestFeatures()
-    TestScreen.PolygonTest -> buildPolygonTestFeatures()
-    TestScreen.MultiLineStringTest -> buildMultiLineStringTestFeatures()
-    TestScreen.MultiPolygonTest -> buildMultiPolygonTestFeatures()
-    TestScreen.PolygonMultiRingTest -> buildPolygonMultiRingTestFeatures()
-}
-
-private fun TestScreen.vectorRenderStrategy(): VectorRenderStrategy =
-    when (this) {
-        TestScreen.StylingTest -> VectorRenderStrategy.CachedBitmap(
-            scale = 1.5,
-            paddingPx = 192,
-            invalidateOnZoomDelta = 0.35,
-        )
-        else -> VectorRenderStrategy.Immediate
-    }
 
 @Composable
 private fun BoxScope.DrawingControls(
@@ -366,28 +328,24 @@ private fun DrawMode.title(): String =
 private fun Feature.withSavedDrawingStyle(): Feature =
     copy(
         style = when (geometry) {
-            is Point -> PointStyle(
-                shape = PointShape.Circle,
-                size = 14.0,
-                fill = FillStyle(color = color(0xFF43A047)),
-                stroke = StrokeStyle(color = color(0xFF263238), width = 2.0),
-            )
-            is LineString -> LineStyle(
-                stroke = StrokeStyle(
-                    color = color(0xFF43A047),
-                    width = 4.0,
-                    lineCap = LineCap.Round,
-                    lineJoin = LineJoin.Round,
-                )
-            )
-            is Polygon -> PolygonStyle(
-                fill = FillStyle(color = color(0x5543A047)),
-                stroke = StrokeStyle(
-                    color = color(0xFF2E7D32),
-                    width = 3.0,
-                    lineJoin = LineJoin.Round,
-                )
-            )
+            is Point -> pointStyle {
+                shape = PointShape.Circle
+                size = 14.0
+                fill(0xFF43A047)
+                stroke(0xFF263238, width = 2.0)
+            }
+            is LineString -> lineStyle {
+                stroke(0xFF43A047, width = 4.0) {
+                    lineCap = LineCap.Round
+                    lineJoin = LineJoin.Round
+                }
+            }
+            is Polygon -> polygonStyle {
+                fill(0x5543A047)
+                stroke(0xFF2E7D32, width = 3.0) {
+                    lineJoin = LineJoin.Round
+                }
+            }
             else -> style
         }
     )
@@ -406,42 +364,37 @@ private fun buildDashedPolygonLayerFeatures(): List<Feature> {
             key = "dashed-polygon-west",
             geometry = Polygon(rings = listOf(ring(14.4, 49.75, 0.85, 0.45))),
             label = "Dashed polygon",
-            style = PolygonStyle(
-                fill = FillStyle(
-                    color = color(0x3326A69A),
-                    pattern = FillPattern.Hatch(
+            style = polygonStyle {
+                fill(0x3326A69A) {
+                    hatch(
                         angleDegrees = 35.0,
                         spacing = 10.0,
-                        stroke = StrokeStyle(color = color(0xFF00796B), width = 1.2)
+                        strokeColor = 0xFF00796B,
+                        strokeWidth = 1.2,
                     )
-                ),
-                stroke = StrokeStyle(
-                    color = color(0xFF004D40),
-                    width = 3.0,
-                    lineJoin = LineJoin.Round,
-                    dash = DashPattern(listOf(18.0, 8.0)),
-                )
-            )
+                }
+                stroke(0xFF004D40, width = 3.0) {
+                    lineJoin = LineJoin.Round
+                    dash(18.0, 8.0)
+                }
+            }
         ),
         Feature(
             key = "dashed-polygon-east",
             geometry = Polygon(rings = listOf(ring(16.1, 49.95, 0.75, 0.4))),
             label = "Pattern fill",
-            style = PolygonStyle(
-                fill = FillStyle(
-                    color = color(0x33AB47BC),
-                    pattern = FillPattern.Dots(
+            style = polygonStyle {
+                fill(0x33AB47BC) {
+                    dots(
                         spacing = 12.0,
                         radius = 2.0,
-                        color = color(0xFF8E24AA),
+                        color = 0xFF8E24AA,
                     )
-                ),
-                stroke = StrokeStyle(
-                    color = color(0xFF6A1B9A),
-                    width = 2.5,
-                    dash = DashPattern(listOf(12.0, 7.0)),
-                )
-            )
+                }
+                stroke(0xFF6A1B9A, width = 2.5) {
+                    dash(12.0, 7.0)
+                }
+            }
         ),
     )
 }
@@ -456,14 +409,12 @@ private fun buildFullLineLayerFeatures(): List<Feature> {
             key = key,
             geometry = LineString(points),
             label = key,
-            style = LineStyle(
-                stroke = StrokeStyle(
-                    color = color(strokeArgb),
-                    width = 4.0,
-                    lineCap = LineCap.Round,
-                    lineJoin = LineJoin.Round,
-                )
-            )
+            style = lineStyle {
+                stroke(strokeArgb, width = 4.0) {
+                    lineCap = LineCap.Round
+                    lineJoin = LineJoin.Round
+                }
+            }
         )
     }
 
@@ -487,196 +438,5 @@ private fun HamburgerIcon() {
                     .background(Color(0xFF111827))
             )
         }
-    }
-}
-
-private fun buildStylingTestFeatures(): List<Feature> {
-    fun ring(cx: Double, cy: Double, rx: Double, ry: Double, n: Int = 72): List<Point> {
-        val points = (0 until n).map { i ->
-            val angle = 2.0 * PI * i / n
-            Point(cx + cos(angle) * rx, cy + sin(angle) * ry)
-        }
-        return points + points.first()
-    }
-
-    val dashedLine = (0 until 80).map { i ->
-        val t = i.toDouble() / 79.0
-        Point(12.4 + 5.6 * t, 50.5 + sin(t * PI * 2.5) * 0.25)
-    }
-
-    val pointShapes = PointShape.entries.mapIndexed { index, shape ->
-        Feature(
-            key = "style-point-$shape",
-            geometry = Point(13.0 + index * 1.0, 48.95),
-            label = shape.name,
-            style = PointStyle(
-                shape = shape,
-                size = 18.0,
-                fill = FillStyle(color = color(0xFFFFC107)),
-                stroke = StrokeStyle(color = color(0xFF263238), width = 2.0)
-            )
-        )
-    }
-
-    return listOf(
-        Feature(
-            key = "style-hatch-polygon",
-            geometry = Polygon(rings = listOf(ring(14.0, 49.85, 1.0, 0.55))),
-            label = "Hatch fill",
-            style = PolygonStyle(
-                fill = FillStyle(
-                    color = color(0x3326A69A),
-                    pattern = FillPattern.Hatch(
-                        angleDegrees = 35.0,
-                        spacing = 10.0,
-                        stroke = StrokeStyle(color = color(0xFF00796B), width = 1.2)
-                    )
-                ),
-                stroke = StrokeStyle(
-                    color = color(0xFF004D40),
-                    width = 3.0,
-                    lineJoin = LineJoin.Round,
-                )
-            )
-        ),
-        Feature(
-            key = "style-dots-polygon",
-            geometry = Polygon(rings = listOf(ring(16.2, 49.7, 0.85, 0.45))),
-            label = "Dots fill",
-            style = PolygonStyle(
-                fill = FillStyle(
-                    color = color(0x33AB47BC),
-                    pattern = FillPattern.Dots(
-                        spacing = 12.0,
-                        radius = 2.0,
-                        color = color(0xFF8E24AA),
-                    )
-                ),
-                stroke = StrokeStyle(
-                    color = color(0xFF6A1B9A),
-                    width = 2.0,
-                    dash = DashPattern(listOf(14.0, 8.0)),
-                )
-            )
-        ),
-        Feature(
-            key = "style-dashed-line",
-            geometry = LineString(dashedLine),
-            label = "Dashed round line",
-            style = LineStyle(
-                stroke = StrokeStyle(
-                    color = color(0xFFE53935),
-                    width = 5.0,
-                    lineCap = LineCap.Round,
-                    lineJoin = LineJoin.Round,
-                    dash = DashPattern(listOf(18.0, 10.0, 4.0, 10.0)),
-                )
-            )
-        )
-    ) + pointShapes
-}
-
-private fun buildMultipleLabelsTestFeatures(): List<Feature> {
-    val lonMin = 12.0; val lonMax = 19.0; val latMin = 48.5; val latMax = 51.2
-    fun lerp(min: Double, max: Double, t: Double) = min + (max - min) * t
-    return mapFeatures {
-        repeat(100) { i ->
-            val t = (i + 1).toDouble() / 101.0
-            val s = ((i * 7) % 100 + 1).toDouble() / 101.0
-            point(
-                key = "pt-$i",
-                x = lerp(lonMin, lonMax, t),
-                y = lerp(latMin, latMax, s),
-                label = "Point ${i + 1}",
-                style = PointStyle(
-                    size = 8.0,
-                    fill = FillStyle(color = color(0xFFFF6D00)),
-                    stroke = null,
-                )
-            )
-        }
-    }
-}
-
-private fun buildLineTestFeatures(): List<Feature> {
-    val linePoints = (0 until 100).map { i ->
-        val t = i.toDouble() / 99.0
-        Point(12.0 + 7.0 * t, 49.6 + sin(t * PI * 3.0) * 0.9)
-    }
-    return mapFeatures {
-        lineString(
-            key = "line-test",
-            points = linePoints,
-            style = LineStyle(stroke = StrokeStyle(color = color(0xFF00ACC1), width = 3.0))
-        )
-    }
-}
-
-private fun buildPolygonTestFeatures(): List<Feature> {
-    val ring = (0 until 99).map { i ->
-        val a = (2.0 * PI * i) / 99.0
-        Point(14.8 + cos(a) * 1.2, 49.9 + sin(a) * 0.8)
-    } + Point(14.8 + 1.2, 49.9)
-    return mapFeatures {
-        polygon(
-            key = "polygon-test",
-            rings = listOf(ring),
-            style = PolygonStyle(
-                fill = FillStyle(color = color(0x663949AB)),
-                stroke = StrokeStyle(color = color(0xFF3949AB), width = 2.0)
-            )
-        )
-    }
-}
-
-private fun buildMultiLineStringTestFeatures(): List<Feature> {
-    fun wave(baseLat: Double, phase: Double) = (0 until 100).map { i ->
-        val t = i.toDouble() / 99.0
-        Point(12.0 + 7.0 * t, baseLat + sin(t * PI * 2.0 + phase) * 0.45)
-    }
-    return listOf(Feature(
-        key = "multiline-test",
-        geometry = MultiLineString(lines = listOf(LineString(wave(49.2, 0.0)), LineString(wave(49.9, PI / 2)), LineString(wave(50.6, PI)))),
-        style = LineStyle(stroke = StrokeStyle(color = color(0xFF00897B), width = 2.5))
-    ))
-}
-
-private fun buildMultiPolygonTestFeatures(): List<Feature> {
-    fun ellipse(cx: Double, cy: Double, rx: Double, ry: Double): Polygon {
-        val ring = (0 until 99).map { i ->
-            val a = (2.0 * PI * i) / 99.0
-            Point(cx + cos(a) * rx, cy + sin(a) * ry)
-        } + Point(cx + rx, cy)
-        return Polygon(rings = listOf(ring))
-    }
-    return listOf(Feature(
-        key = "multipolygon-test",
-        geometry = MultiPolygon(polygons = listOf(ellipse(14.2, 50.1, 0.55, 0.35), ellipse(15.4, 49.7, 0.5, 0.3), ellipse(13.2, 49.4, 0.45, 0.28))),
-        style = PolygonStyle(
-            fill = FillStyle(color = color(0x665E35B1)),
-            stroke = StrokeStyle(color = color(0xFF5E35B1), width = 2.0)
-        )
-    ))
-}
-
-private fun buildPolygonMultiRingTestFeatures(): List<Feature> {
-    fun ring(cx: Double, cy: Double, rx: Double, ry: Double, cw: Boolean, n: Int = 96): List<Point> {
-        val dir = if (cw) -1.0 else 1.0
-        val pts = (0 until n).map { i -> Point(cx + cos(dir * 2.0 * PI * i / n) * rx, cy + sin(dir * 2.0 * PI * i / n) * ry) }
-        return pts + pts.first()
-    }
-    return mapFeatures {
-        polygon(
-            key = "polygon-multiring-test",
-            rings = listOf(
-                ring(14.6, 49.9, 1.2, 0.8, false),
-                ring(14.2, 49.9, 0.25, 0.18, true),
-                ring(15.0, 49.75, 0.22, 0.15, true)
-            ),
-            style = PolygonStyle(
-                fill = FillStyle(color = color(0x666D4C41)),
-                stroke = StrokeStyle(color = color(0xFF6D4C41), width = 2.0)
-            )
-        )
     }
 }

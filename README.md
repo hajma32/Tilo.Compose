@@ -106,34 +106,47 @@ the `composeApp` Android configuration.
 ## Basic Usage Shape
 
 ```kotlin
-val map = Map(
+val cameraState = rememberMapCameraState(
     center = Point(-650_000.0, -1_100_000.0),
     zoom = 11.5,
     projection = Epsg5514Projection
 )
 
-val layers = listOf(
-    createOrtofotoTileLayer(id = "cuzk-ortofoto"),
-    FeatureLayer(
-        id = "features",
-        zIndex = 1,
-        projection = Epsg4326Projection,
-        features = mapFeatures {
-            point(
-                key = "brno",
-                x = 16.6068,
-                y = 49.1951,
-                label = "Brno"
-            )
-        }
-    )
+val ortofoto = rememberWMSTileLayer(
+    id = "cuzk-ortofoto",
+    capabilitiesUrl = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer",
+    layerName = "0",
+    projection = Epsg5514Projection,
+    format = "image/jpeg",
 )
 
-MapRenderer(
-    map = map,
-    layers = layers,
+val features = remember {
+    val cityStyle = pointStyle {
+        size = 14.0
+        fill(0xFF43A047)
+        stroke(0xFF263238, width = 2.0)
+    }
+
+    listOf(
+        Feature(
+            key = "brno",
+            geometry = Point(16.6068, 49.1951),
+            label = "Brno",
+            style = cityStyle,
+        )
+    )
+}
+
+TiloMap(
+    cameraState = cameraState,
     tileDecoder = ::decodeImageBitmap
-)
+) {
+    tileLayer(ortofoto)
+    featureLayer("features", features) {
+        zIndex = 1
+        projection = Epsg4326Projection
+    }
+}
 ```
 
 ## Design Direction

@@ -4,7 +4,7 @@ import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.projection.Projection
 
-fun DrawLayer(
+fun drawLayer(
     state: DrawState,
     id: String = "draw-layer",
     zIndex: Int = 20,

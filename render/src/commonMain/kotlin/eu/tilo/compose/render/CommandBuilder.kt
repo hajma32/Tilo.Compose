@@ -10,6 +10,7 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
+import tilo.compose.core.geometry.bounds
 import tilo.compose.core.map.Map
 
 /**
@@ -27,7 +28,7 @@ object CommandBuilder {
 
         return buildList {
             features.forEach { feature ->
-                val featureBounds = geometryBounds(feature.geometry)
+                val featureBounds = feature.geometry.bounds()
                 if (!visible.intersects(featureBounds)) return@forEach
 
                 val baseId = feature.key
@@ -70,18 +71,6 @@ object CommandBuilder {
             bottomRight = Point(maxX + padX, minY - padY)
         )
     }
-
-    private fun geometryBounds(geometry: Geometry): BoundingBox =
-        BoundingBox.fromPoints(
-            when (geometry) {
-                is Point -> listOf(geometry)
-                is MultiPoint -> geometry.points
-                is LineString -> geometry.points
-                is MultiLineString -> geometry.lines.flatMap { it.points }
-                is Polygon -> geometry.rings.flatten()
-                is MultiPolygon -> geometry.polygons.flatMap { it.rings.flatten() }
-            }
-        )
 
     private fun geometryToCommands(
         baseId: String,

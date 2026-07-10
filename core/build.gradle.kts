@@ -15,6 +15,7 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 implementation(libs.ktor.client.core)
+                implementation(project(":spatial-index"))
             }
         }
         val androidMain by getting {

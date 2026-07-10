@@ -1,0 +1,3 @@
+[submodule "spatial-index"]
+	path = spatial-index
+	url = git@github.com:hajma32/Tilo.SpatialIndex.git

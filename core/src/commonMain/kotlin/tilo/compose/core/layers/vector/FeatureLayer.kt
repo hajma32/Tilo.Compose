@@ -19,5 +19,5 @@ class FeatureLayer(
     override val projection: Projection? = null,
     features: List<Feature>
 ) : VectorLayer {
-    override val source = FeatureListSource(features)
+    override val source = FeatureListSource(features, projection)
 }

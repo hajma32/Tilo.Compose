@@ -56,6 +56,9 @@ TiloMap(
 }
 ```
 
+See [DSL documentation](docs/dsl/README.md) for the current public API shape,
+including map layers, WMS, features, styles, and projections.
+
 ## Current Status
 
 | Area | Status | Notes |

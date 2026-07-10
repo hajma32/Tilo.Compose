@@ -25,9 +25,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.vector.VectorLayer
+import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.map.Map as MapState
@@ -41,7 +43,9 @@ fun MapRenderer(
     layers: List<Layer>,
     tileDecoder: ((ByteArray) -> ImageBitmap?)? = null,
     modifier: Modifier = Modifier,
-    backend: RenderBackend = ComposeCanvasRenderBackend
+    backend: RenderBackend = ComposeCanvasRenderBackend,
+    onTapWorld: ((Point) -> Unit)? = null,
+    invalidationKey: Any? = null,
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -53,7 +57,7 @@ fun MapRenderer(
 
     val renderRequests = remember(sortedLayersKey(layers)) {
         MutableSharedFlow<MapState>(
-            replay = 0,
+            replay = 1,
             extraBufferCapacity = 1,
             onBufferOverflow = BufferOverflow.DROP_OLDEST
         )
@@ -63,6 +67,7 @@ fun MapRenderer(
     val tileLayers = sortedLayers.filterIsInstance<TileLayer>()
     val vectorLayers = sortedLayers.filterIsInstance<VectorLayer>()
     val vectorLayerCacheSignature = vectorLayers.cacheSignature()
+    val currentVectorCacheKeys = vectorLayers.associate { layer -> layer.id to layer.cacheKey() }
 
     var redrawVersion by remember { mutableStateOf(0) }
     var scene by remember { mutableStateOf(RenderScene.Empty) }
@@ -70,6 +75,28 @@ fun MapRenderer(
     var lastVectorCommandsByLayer by remember { mutableStateOf<Map<String, List<RenderCommand>>>(emptyMap()) }
     var lastVectorBitmapsByLayer by remember { mutableStateOf<Map<String, VectorBitmapRenderSceneLayer>>(emptyMap()) }
     var lastVectorCacheKeysByLayer by remember { mutableStateOf<Map<String, VectorLayerCacheKey>>(emptyMap()) }
+
+    LaunchedEffect(sortedLayers, vectorLayerCacheSignature, invalidationKey) {
+        val validVectorCommands =
+            lastVectorCommandsByLayer.validCommandsFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+        val validVectorBitmaps = lastVectorBitmapsByLayer.validFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+        if (validVectorCommands.size != lastVectorCommandsByLayer.size) {
+            lastVectorCommandsByLayer = validVectorCommands
+        }
+        if (validVectorBitmaps.size != lastVectorBitmapsByLayer.size) {
+            lastVectorBitmapsByLayer = validVectorBitmaps
+        }
+
+        val nextScene = RenderSceneBuilder.build(
+            layers = sortedLayers,
+            tilesByLayer = lastRasterFrame.tilesByLayer,
+            commandsByLayer = validVectorCommands,
+            vectorBitmapsByLayer = validVectorBitmaps,
+            decodedImagesByLayer = lastRasterFrame.decodedImagesByLayer,
+        )
+        scene = nextScene
+        backend.onScene(nextScene)
+    }
 
     LaunchedEffect(
         sortedLayers,
@@ -82,6 +109,7 @@ fun MapRenderer(
         density,
         layoutDirection,
         vectorLayerCacheSignature,
+        invalidationKey,
     ) {
         if (map.viewport.width <= 0 || map.viewport.height <= 0) return@LaunchedEffect
         val renderMap = MapState(
@@ -91,7 +119,7 @@ fun MapRenderer(
             config = map.config,
             viewport = map.viewport
         )
-        renderRequests.tryEmit(renderMap)
+        renderRequests.emit(renderMap)
     }
 
     LaunchedEffect(sortedLayers) {
@@ -99,9 +127,8 @@ fun MapRenderer(
             supervisorScope {
                 var tilesByLayer: Map<String, List<Tile>> = emptyMap()
                 var decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap()
-                val currentVectorCacheKeys = vectorLayers.associate { layer -> layer.id to layer.cacheKey() }
                 var commandsByLayer: Map<String, List<RenderCommand>> =
-                    lastVectorCommandsByLayer.validFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+                    lastVectorCommandsByLayer.validCommandsFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
                 var vectorBitmapsByLayer: Map<String, VectorBitmapRenderSceneLayer> =
                     lastVectorBitmapsByLayer.validFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
                 val placeholderFrame = rasterPipeline.buildPlaceholderFrame(tileLayers, renderMap)
@@ -181,6 +208,7 @@ fun MapRenderer(
             redrawVersion++
         }
         .mapGestureInput(map) { redrawVersion++ }
+        .mapTapInput(map, onTapWorld) { redrawVersion++ }
         .drawWithContent {
             redrawVersion
             drawContent()
@@ -208,6 +236,15 @@ private fun <T> Map<String, T>.validFor(
     previousKeys: Map<String, VectorLayerCacheKey>,
 ): Map<String, T> =
     filterKeys { layerId -> previousKeys[layerId] == currentKeys[layerId] }
+
+private fun Map<String, List<RenderCommand>>.validCommandsFor(
+    currentKeys: Map<String, VectorLayerCacheKey>,
+    previousKeys: Map<String, VectorLayerCacheKey>,
+): Map<String, List<RenderCommand>> =
+    filterKeys { layerId ->
+        val currentKey = currentKeys[layerId] ?: return@filterKeys false
+        previousKeys[layerId] == currentKey || currentKey.renderStrategy is VectorRenderStrategy.Immediate
+    }
 
 private fun mergeRasterFrames(
     placeholderFrame: RasterFrame,

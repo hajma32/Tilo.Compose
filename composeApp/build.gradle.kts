@@ -39,6 +39,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(project(":core"))
+            implementation(project(":draw"))
             implementation(project(":geocore"))
             implementation(project(":render"))
         }

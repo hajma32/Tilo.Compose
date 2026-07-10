@@ -1,6 +1,7 @@
 package eu.tilo.compose.render
 
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import tilo.compose.core.geometry.Point
@@ -26,5 +27,19 @@ internal fun Modifier.mapGestureInput(
             )
         }
         onChanged()
+    }
+}
+
+internal fun Modifier.mapTapInput(
+    map: Map,
+    onTapWorld: ((Point) -> Unit)?,
+    onChanged: () -> Unit,
+): Modifier {
+    if (onTapWorld == null) return this
+    return pointerInput(map, onTapWorld) {
+        detectTapGestures { offset ->
+            onTapWorld(map.screenToWorld(Point(offset.x.toDouble(), offset.y.toDouble())))
+            onChanged()
+        }
     }
 }

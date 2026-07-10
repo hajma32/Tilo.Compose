@@ -42,13 +42,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import tilo.compose.render.TiloMap
-import tilo.compose.render.cachedBitmap
-import tilo.compose.render.lineStyle
-import tilo.compose.render.pointStyle
-import tilo.compose.render.polygonStyle
-import tilo.compose.render.rememberMapCameraState
-import tilo.compose.render.rememberWMSTileLayer
+import tilo.compose.dsl.TiloMap
+import tilo.compose.dsl.cachedBitmap
+import tilo.compose.dsl.FeatureOptions
+import tilo.compose.dsl.features
+import tilo.compose.dsl.lineStyle
+import tilo.compose.dsl.pointStyle
+import tilo.compose.dsl.polygonStyle
+import tilo.compose.dsl.rememberMapCameraState
+import tilo.compose.dsl.rememberWMSLayer
+import tilo.compose.dsl.sjtsk
+import tilo.compose.dsl.wgs84
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -61,8 +65,6 @@ import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.map.MapConfig
-import tilo.compose.core.projection.Epsg5514Projection
-import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.transform.Epsg5514ToWgs84Transformation
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 import tilo.compose.draw.DrawMode
@@ -88,18 +90,18 @@ private enum class DemoLayerOption(val title: String) {
 @Composable
 @Preview
 fun App() {
-    val ortofotoLayer = rememberWMSTileLayer(
+    val ortofotoLayer = rememberWMSLayer(
         id = "cuzk-ortofoto",
         capabilitiesUrl = CUZK_ORTOFOTO_WMS_URL,
         layerName = "0",
-        projection = Epsg5514Projection,
+        projection = sjtsk(),
         format = "image/jpeg",
     )
-    val ztmLayer = rememberWMSTileLayer(
+    val ztmLayer = rememberWMSLayer(
         id = "cuzk-ztm",
         capabilitiesUrl = CUZK_ZTM_WMS_URL,
         layerName = "0",
-        projection = Epsg5514Projection,
+        projection = sjtsk(),
         format = "image/png",
     )
     val dashedPolygonFeatures = remember { buildDashedPolygonLayerFeatures() }
@@ -130,7 +132,7 @@ fun App() {
         config = MapConfig(minZoom = 0.0, maxZoom = 20.0)
             .withTransformation(Wgs84ToEpsg5514Transformation)
             .withTransformation(Epsg5514ToWgs84Transformation),
-        projection = Epsg5514Projection,
+        projection = sjtsk(),
     )
 
     MaterialTheme {
@@ -212,20 +214,19 @@ fun App() {
                 ) {
                     TiloMap(
                         cameraState = cameraState,
-                        tileDecoder = ::decodeImageBitmap,
                         modifier = Modifier.fillMaxSize(),
                         onTapWorld = drawState::onMapTap,
                         invalidationKey = drawState.revision,
                         layers = {
                             when (selectedBasemap) {
-                                BasemapOption.CuzkOrtofoto -> tileLayer(ortofotoLayer)
-                                BasemapOption.CuzkZtm -> tileLayer(ztmLayer)
+                                BasemapOption.CuzkOrtofoto -> wmsTileLayer(ortofotoLayer)
+                                BasemapOption.CuzkZtm -> wmsTileLayer(ztmLayer)
                             }
                             if (DemoLayerOption.DashedPolygons in selectedLayers) {
                                 featureLayer("dashed-polygons", dashedPolygonFeatures) {
                                     zIndex = 1
-                                    projection = Epsg4326Projection
-                                    renderStrategy = cachedBitmap(
+                                    projection = wgs84()
+                                    renderMode = cachedBitmap(
                                         scale = 1.5,
                                         paddingPx = 192,
                                         invalidateOnZoomDelta = 0.35,
@@ -235,14 +236,14 @@ fun App() {
                             if (DemoLayerOption.FullLines in selectedLayers) {
                                 featureLayer("full-lines", fullLineFeatures) {
                                     zIndex = 2
-                                    projection = Epsg4326Projection
+                                    projection = wgs84()
                                 }
                             }
                             featureLayer("saved-drawings", savedDrawingFeatures) {
                                 zIndex = 10
-                                projection = Epsg5514Projection
+                                projection = sjtsk()
                             }
-                            +drawLayer(state = drawState, projection = Epsg5514Projection)
+                            drawLayer(state = drawState, projection = sjtsk())
                         },
                     )
                     DrawingControls(
@@ -359,11 +360,12 @@ private fun buildDashedPolygonLayerFeatures(): List<Feature> {
         return points + points.first()
     }
 
-    return listOf(
-        Feature(
+    return features {
+        polygon(
             key = "dashed-polygon-west",
-            geometry = Polygon(rings = listOf(ring(14.4, 49.75, 0.85, 0.45))),
-            label = "Dashed polygon",
+            rings = listOf(ring(14.4, 49.75, 0.85, 0.45)),
+        ) {
+            label = "Dashed polygon"
             style = polygonStyle {
                 fill(0x3326A69A) {
                     hatch(
@@ -378,11 +380,12 @@ private fun buildDashedPolygonLayerFeatures(): List<Feature> {
                     dash(18.0, 8.0)
                 }
             }
-        ),
-        Feature(
+        }
+        polygon(
             key = "dashed-polygon-east",
-            geometry = Polygon(rings = listOf(ring(16.1, 49.95, 0.75, 0.4))),
-            label = "Pattern fill",
+            rings = listOf(ring(16.1, 49.95, 0.75, 0.4)),
+        ) {
+            label = "Pattern fill"
             style = polygonStyle {
                 fill(0x33AB47BC) {
                     dots(
@@ -395,33 +398,35 @@ private fun buildDashedPolygonLayerFeatures(): List<Feature> {
                     dash(12.0, 7.0)
                 }
             }
-        ),
-    )
+        }
+    }
 }
 
 private fun buildFullLineLayerFeatures(): List<Feature> {
-    fun wave(key: String, baseLat: Double, strokeArgb: Long, phase: Double): Feature {
-        val points = (0 until 120).map { i ->
+    fun wavePoints(baseLat: Double, phase: Double): List<Point> =
+        (0 until 120).map { i ->
             val t = i.toDouble() / 119.0
             Point(12.4 + 5.8 * t, baseLat + sin(t * PI * 2.5 + phase) * 0.28)
         }
-        return Feature(
-            key = key,
-            geometry = LineString(points),
-            label = key,
-            style = lineStyle {
-                stroke(strokeArgb, width = 4.0) {
-                    lineCap = LineCap.Round
-                    lineJoin = LineJoin.Round
-                }
+
+    fun FeatureOptions.wave(key: String, strokeArgb: Long) {
+        label = key
+        style = lineStyle {
+            stroke(strokeArgb, width = 4.0) {
+                lineCap = LineCap.Round
+                lineJoin = LineJoin.Round
             }
-        )
+        }
     }
 
-    return listOf(
-        wave("Full line A", 50.35, 0xFFE53935, 0.0),
-        wave("Full line B", 49.25, 0xFF1E88E5, PI / 2.0),
-    )
+    return features {
+        line("Full line A", wavePoints(50.35, 0.0)) {
+            wave(key = "Full line A", strokeArgb = 0xFFE53935)
+        }
+        line("Full line B", wavePoints(49.25, PI / 2.0)) {
+            wave(key = "Full line B", strokeArgb = 0xFF1E88E5)
+        }
+    }
 }
 
 @Composable

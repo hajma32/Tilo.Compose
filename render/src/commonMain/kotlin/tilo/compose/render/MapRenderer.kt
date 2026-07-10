@@ -41,7 +41,7 @@ import tilo.compose.core.map.Map as MapState
 fun MapRenderer(
     map: MapState,
     layers: List<Layer>,
-    tileDecoder: ((ByteArray) -> ImageBitmap?)? = null,
+    tileDecoder: (ByteArray) -> ImageBitmap? = ::decodeTileImageBitmap,
     modifier: Modifier = Modifier,
     backend: RenderBackend = ComposeCanvasRenderBackend,
     onTapWorld: ((Point) -> Unit)? = null,

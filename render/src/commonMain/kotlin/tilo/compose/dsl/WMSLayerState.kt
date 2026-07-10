@@ -1,4 +1,4 @@
-package tilo.compose.render
+package tilo.compose.dsl
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -12,8 +12,11 @@ import tilo.compose.core.layers.raster.WMSTileLayer
 import tilo.compose.core.layers.raster.createWMSTileLayerFromCapabilities
 import tilo.compose.core.projection.Projection
 
-class WMSTileLayerState internal constructor() {
-    var layer: WMSTileLayer? by mutableStateOf(null)
+/**
+ * State holder for a WMS tile layer loaded from GetCapabilities.
+ */
+class WMSLayerState internal constructor() {
+    internal var layer: WMSTileLayer? by mutableStateOf(null)
         internal set
 
     var isLoading: Boolean by mutableStateOf(false)
@@ -23,8 +26,13 @@ class WMSTileLayerState internal constructor() {
         internal set
 }
 
+/**
+ * Loads WMS GetCapabilities and remembers the resulting tile layer state.
+ *
+ * Pass the returned state to `wmsTileLayer(state)` inside [TiloMap].
+ */
 @Composable
-fun rememberWMSTileLayer(
+fun rememberWMSLayer(
     id: String,
     capabilitiesUrl: String,
     layerName: String,
@@ -36,8 +44,8 @@ fun rememberWMSTileLayer(
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
     fetchConfig: TileFetchConfig = TileFetchConfig(),
-): WMSTileLayerState {
-    val state = remember { WMSTileLayerState() }
+): WMSLayerState {
+    val state = remember { WMSLayerState() }
 
     LaunchedEffect(
         id,

@@ -1,4 +1,4 @@
-package tilo.compose.render
+package tilo.compose.dsl
 
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.DashPattern
@@ -13,18 +13,33 @@ import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.PolygonStyle
 import tilo.compose.core.feature.StrokeStyle
 
+/**
+ * Converts an ARGB long literal, for example `0xFF1E88E5`, to a GeoCore color.
+ */
 fun argb(value: Long): ColorValue =
     ColorValue((value and 0xFFFFFFFFL).toULong())
 
+/**
+ * Builds style for point geometries.
+ */
 fun pointStyle(block: PointStyleBuilder.() -> Unit = {}): PointStyle =
     PointStyleBuilder().apply(block).build()
 
+/**
+ * Builds style for line geometries.
+ */
 fun lineStyle(block: LineStyleBuilder.() -> Unit = {}): LineStyle =
     LineStyleBuilder().apply(block).build()
 
+/**
+ * Builds style for polygon geometries.
+ */
 fun polygonStyle(block: PolygonStyleBuilder.() -> Unit = {}): PolygonStyle =
     PolygonStyleBuilder().apply(block).build()
 
+/**
+ * Style builder used by [pointStyle].
+ */
 class PointStyleBuilder {
     var shape: PointShape = PointShape.Circle
     var size: Double = 10.0
@@ -64,6 +79,9 @@ class PointStyleBuilder {
         )
 }
 
+/**
+ * Style builder used by [lineStyle].
+ */
 class LineStyleBuilder {
     private var stroke: StrokeStyle = StrokeStyle(color = ColorValue.Blue, width = 2.0)
 
@@ -80,6 +98,9 @@ class LineStyleBuilder {
         LineStyle(stroke = stroke)
 }
 
+/**
+ * Style builder used by [polygonStyle].
+ */
 class PolygonStyleBuilder {
     private var fill: FillStyle? = FillStyle(color = argb(0x331E88E5))
     private var stroke: StrokeStyle? = StrokeStyle(color = ColorValue.Blue, width = 1.5)
@@ -109,6 +130,9 @@ class PolygonStyleBuilder {
         PolygonStyle(fill = fill, stroke = stroke)
 }
 
+/**
+ * Fill options shared by point and polygon styles.
+ */
 class FillStyleBuilder internal constructor(
     private val color: ColorValue,
     private val opacity: Double,
@@ -144,6 +168,9 @@ class FillStyleBuilder internal constructor(
         FillStyle(color = color, opacity = opacity, pattern = pattern)
 }
 
+/**
+ * Stroke options shared by point, line, and polygon styles.
+ */
 class StrokeStyleBuilder internal constructor(
     private val color: ColorValue,
     private val width: Double,

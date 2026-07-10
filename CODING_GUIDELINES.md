@@ -13,7 +13,7 @@ This document defines coding standards and best practices for the TiloCompose pr
 This repository hosts a multiplatform library for working with maps: tile layers, vector features, drawing, and a plugin system. Public API design and binary compatibility should be considered when changing public symbols.
 
 ## Project structure and naming
-- Public library packages: use the `tilo.compose` root package (`tilo.compose.core`, `tilo.compose.render`, `tilo.compose.draw`). The showcase application may keep its Android application package under `eu.tilo.compose`. Use lowercase package names without underscores.
+- Public library packages: use the `tilo.compose` root package (`tilo.compose.core`, `tilo.compose.dsl`, `tilo.compose.render`, `tilo.compose.draw`). The showcase application may keep its Android application package under `eu.tilo.compose`. Use lowercase package names without underscores.
 - Files: prefer one public top-level class/interface per file. Exceptions: small helpers or tightly related Composables for the same screen/component.
 - File names: PascalCase for primary classes/components (`MapView.kt`, `TileLayer.kt`).
 

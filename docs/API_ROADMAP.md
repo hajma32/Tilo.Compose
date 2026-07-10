@@ -20,7 +20,7 @@ TiloMap(
 
     features("parcels", parcels) {
         projection = Epsg4326
-        renderStrategy = cachedBitmap()
+        renderMode = cachedBitmap()
     }
 
     draw(drawState)
@@ -51,6 +51,7 @@ The weak spot is API ergonomics: the public surface still exposes too much engin
 - `viewport`, tile planning, cache invalidation, and render scheduling should be mostly hidden.
 - Layer content changes should invalidate immediately.
 - Projection and transformation behavior should be explicit, but not noisy.
+- Public examples should use projection helpers such as `wgs84()`, `webMercator()`, and `sjtsk()` instead of raw EPSG object names.
 - Plugins such as drawing should be usable with default UI or custom headless controls.
 
 ## Proposed Public Shape
@@ -151,14 +152,14 @@ Keep `Layer` as the advanced abstraction, but add high-level layer builders:
 
 ```kotlin
 TiloMap(cameraState) {
-    tileLayer("osm") {
-        xyz("https://tile.openstreetmap.org/{z}/{x}/{y}.png")
-    }
+    wmsTileLayer(ortofoto)
 
     featureLayer("roads", roads) {
-        projection = Epsg4326
-        renderStrategy = immediate()
+        projection = wgs84()
+        renderMode = immediate()
     }
+
+    drawLayer(drawState)
 }
 ```
 
@@ -228,11 +229,12 @@ Preferred behavior:
 Public package names should use one consistent root:
 
 - `tilo.compose.core.*` for platform-agnostic GeoCore models and contracts,
-- `tilo.compose.render.*` for Compose rendering APIs,
+- `tilo.compose.dsl.*` for user-facing Compose-first APIs,
+- `tilo.compose.render.*` for renderer implementation and advanced backends,
 - `tilo.compose.draw.*` for the drawing plugin.
 
 The showcase app can keep its own application package, but public examples
-should import only `tilo.compose.*` packages.
+should import public helpers from `tilo.compose.dsl.*` plus optional plugins.
 
 ## Step-by-step Plan
 
@@ -252,11 +254,11 @@ should import only `tilo.compose.*` packages.
 
 ### 3. Add high-level layer builders
 
-- `tileLayer(id) { xyz(...) }`
-- `tileLayer(id) { wms(...) }` should be capabilities-first: load WMS `GetCapabilities`, derive GetMap URL, CRS parameter, formats, and layer bounds, and keep manual grid/bounds only as an advanced fallback. Started with `rememberWMSTileLayer`.
-- `tileLayer(layer)`. Started.
+- `rememberWMSLayer(...)` + `wmsTileLayer(state)` for capabilities-loaded WMS layers. Done.
+- `rasterLayer(layer)` for pre-built raster tile layers. Done.
+- `tileLayer(layer)` and `tileLayer(state)` stay as advanced aliases.
 - `featureLayer(id, features) { ... }`. Done.
-- `drawLayer(drawState)`. Started as a lowercase draw-layer factory.
+- `drawLayer(drawState)` is provided by the draw plugin. Done.
 - Keep `+layer` for advanced usage.
 
 ### 4. Clean feature and style ergonomics
@@ -296,8 +298,8 @@ should import only `tilo.compose.*` packages.
 ## Open Decisions
 
 - Should the public camera state be called `MapState`, `MapCameraState`, or `CameraState`?
-- Should `TiloMap` stay in `tilo.compose.render` or move to a shorter public facade package?
-- Should projections use names like `Epsg5514` instead of `Epsg5514Projection` in public examples?
+- `TiloMap` and high-level helpers live in `tilo.compose.dsl`; renderer internals stay in `tilo.compose.render`.
+- Projection helpers should stay as human-readable functions (`wgs84()`, `webMercator()`, `sjtsk()`) while precise EPSG objects remain available in GeoCore for advanced use.
 - Should layer DSL builders return concrete layer objects or register directly into the map builder?
 - How much of style builder API should use `Double` vs Compose units such as `Dp`?
 

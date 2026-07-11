@@ -50,6 +50,7 @@ fun MapRenderer(
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
+    onMapChanged: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -215,8 +216,12 @@ fun MapRenderer(
                 pixelRatio = density.density.toDouble()
             )
             redrawVersion++
+            onMapChanged?.invoke()
         }
-        .mapGestureInput(map) { redrawVersion++ }
+        .mapGestureInput(map) {
+            redrawVersion++
+            onMapChanged?.invoke()
+        }
         .mapTapInput(
             map = map,
             onTap = if (onTapWorld == null && onFeatureSelect == null) {
@@ -227,7 +232,10 @@ fun MapRenderer(
                     onTapWorld?.invoke(worldPoint)
                 }
             },
-        ) { redrawVersion++ }
+        ) {
+            redrawVersion++
+            onMapChanged?.invoke()
+        }
         .drawWithContent {
             redrawVersion
             drawContent()

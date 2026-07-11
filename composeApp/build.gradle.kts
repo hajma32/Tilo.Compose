@@ -42,6 +42,7 @@ kotlin {
             implementation(project(":draw"))
             implementation(project(":geocore"))
             implementation(project(":render"))
+            implementation(project(":ui"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

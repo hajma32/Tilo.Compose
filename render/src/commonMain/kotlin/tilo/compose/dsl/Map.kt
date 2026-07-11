@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import tilo.compose.render.MapRenderer
 import tilo.compose.render.backend.ComposeCanvasRenderBackend
 import tilo.compose.render.backend.RenderBackend
-import tilo.compose.ui.DefaultAttributionOverlay
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.geometry.Point
@@ -30,6 +32,8 @@ import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.selection.FeatureSelection
 import tilo.compose.core.selection.FeatureSelectionRef
+import tilo.compose.core.scale.ScaleBar
+import tilo.compose.core.scale.ScaleBarCalculator
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 
@@ -44,6 +48,12 @@ typealias FeatureRenderMode = VectorRenderStrategy
 class MapCameraState internal constructor(
     internal val mapState: MapState,
 ) {
+    internal var revision by mutableIntStateOf(0)
+        private set
+
+    internal var cameraControlRevision by mutableIntStateOf(0)
+        private set
+
     val center: Point
         get() = mapState.center
 
@@ -55,6 +65,38 @@ class MapCameraState internal constructor(
 
     val config: MapConfig
         get() = mapState.config
+
+    /**
+     * Zooms in by [step] map zoom levels around the current viewport center.
+     */
+    fun zoomIn(step: Double = 1.0) {
+        zoomBy(step)
+    }
+
+    /**
+     * Zooms out by [step] map zoom levels around the current viewport center.
+     */
+    fun zoomOut(step: Double = 1.0) {
+        zoomBy(-step)
+    }
+
+    /**
+     * Changes zoom by [delta] levels. Pass [focus] in screen pixels to zoom
+     * around a particular point; omit it for centered UI controls.
+     */
+    fun zoomBy(delta: Double, focus: Point? = null) {
+        val previousCenter = mapState.center
+        val previousZoom = mapState.zoom
+        mapState.zoomBy(delta = delta, focus = focus)
+        if (mapState.center != previousCenter || mapState.zoom != previousZoom) {
+            markChanged()
+            cameraControlRevision += 1
+        }
+    }
+
+    internal fun markChanged() {
+        revision += 1
+    }
 }
 
 /**
@@ -296,8 +338,9 @@ fun TiloMap(
     onTapWorld: ((Point) -> Unit)? = null,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    showAttribution: Boolean = true,
-    attributionContent: @Composable BoxScope.(List<Attribution>) -> Unit = { DefaultAttributionOverlay(it) },
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
+    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
+    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
     invalidationKey: Any? = null,
     layers: MapLayerBuilder.() -> Unit,
 ) {
@@ -305,21 +348,64 @@ fun TiloMap(
     layerBuilder.layers()
     val builtLayers = layerBuilder.build()
     Box(modifier = modifier) {
-        MapRenderer(
-            map = cameraState.mapState,
+        MapRendererLayer(
+            cameraState = cameraState,
             layers = builtLayers,
-            modifier = Modifier.fillMaxSize(),
             backend = backend,
             onTapWorld = onTapWorld,
             onFeatureSelect = onFeatureSelect,
             selectedFeatures = selectedFeatures,
             invalidationKey = invalidationKey,
         )
-        if (showAttribution) {
+        if (scaleBarContent != null) {
+            ScaleBarOverlay(
+                cameraState = cameraState,
+                content = scaleBarContent,
+            )
+        }
+        if (attributionContent != null) {
             val attributions = builtLayers.attributions()
             if (attributions.isNotEmpty()) {
                 attributionContent(attributions)
             }
         }
+        if (cameraControlsContent != null) {
+            cameraControlsContent(cameraState)
+        }
+    }
+}
+
+@Composable
+private fun MapRendererLayer(
+    cameraState: MapCameraState,
+    layers: List<Layer>,
+    backend: RenderBackend,
+    onTapWorld: ((Point) -> Unit)?,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
+    selectedFeatures: Set<FeatureSelectionRef>,
+    invalidationKey: Any?,
+) {
+    val cameraControlRevision = cameraState.cameraControlRevision
+    MapRenderer(
+        map = cameraState.mapState,
+        layers = layers,
+        modifier = Modifier.fillMaxSize(),
+        backend = backend,
+        onTapWorld = onTapWorld,
+        onFeatureSelect = onFeatureSelect,
+        selectedFeatures = selectedFeatures,
+        invalidationKey = invalidationKey to cameraControlRevision,
+        onMapChanged = cameraState::markChanged,
+    )
+}
+
+@Composable
+private fun BoxScope.ScaleBarOverlay(
+    cameraState: MapCameraState,
+    content: @Composable BoxScope.(ScaleBar) -> Unit,
+) {
+    cameraState.revision
+    ScaleBarCalculator.calculate(cameraState.mapState)?.let { scaleBar ->
+        content(scaleBar)
     }
 }

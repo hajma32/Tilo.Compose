@@ -80,6 +80,9 @@ import tilo.compose.draw.DrawMode
 import tilo.compose.draw.DrawState
 import tilo.compose.draw.drawLayer
 import tilo.compose.draw.rememberDrawState
+import tilo.compose.ui.defaultAttributionContent
+import tilo.compose.ui.defaultScaleBarContent
+import tilo.compose.ui.defaultZoomControlsContent
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
 private const val CUZK_ORTOFOTO_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer"
@@ -315,6 +318,9 @@ private fun SjtksShowcaseMap(
         modifier = Modifier.fillMaxSize(),
         onTapWorld = drawState::onMapTap,
         invalidationKey = drawState.revision,
+        attributionContent = defaultAttributionContent(),
+        scaleBarContent = defaultScaleBarContent(),
+        cameraControlsContent = defaultZoomControlsContent(),
         layers = {
             when (selectedBasemap) {
                 BasemapOption.CuzkOrtofoto -> wmsTileLayer(ortofotoLayer)
@@ -364,6 +370,9 @@ private fun BoxScope.WebMercatorXyzExampleMap(
             }
         },
         selectedFeatures = selectedPlaceRefs,
+        attributionContent = defaultAttributionContent(),
+        scaleBarContent = defaultScaleBarContent(),
+        cameraControlsContent = defaultZoomControlsContent(),
         layers = {
             xyzTileLayer(
                 id = "osm-standard",
@@ -445,25 +454,6 @@ private fun BoxScope.WebMercatorXyzExampleMap(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-        }
-    }
-    Surface(
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(16.dp),
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 4.dp,
-        shadowElevation = 4.dp,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text("XYZ / Web Mercator")
-            Text(
-                text = "EPSG:3857 camera, OSM XYZ tiles, WGS84 features",
-                style = MaterialTheme.typography.bodySmall,
-            )
         }
     }
 }

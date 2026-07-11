@@ -6,7 +6,9 @@ plugins {
 }
 
 kotlin {
-    androidTarget()
+    androidTarget {
+        publishLibraryVariants("debug", "release")
+    }
     iosArm64()
     iosSimulatorArm64()
 
@@ -14,9 +16,11 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 implementation(project(":geocore"))
+                implementation(project(":render"))
                 implementation(libs.compose.runtime)
                 implementation(libs.compose.foundation)
                 implementation(libs.compose.ui)
+                implementation(libs.compose.components.resources)
             }
         }
         val commonTest by getting {

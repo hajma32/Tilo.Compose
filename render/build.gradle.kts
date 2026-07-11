@@ -15,7 +15,6 @@ kotlin {
             dependencies {
                 implementation(project(":core"))
                 implementation(project(":geocore"))
-                implementation(project(":ui"))
                 implementation(libs.compose.runtime)
                 implementation(libs.compose.foundation)
                 implementation(libs.compose.ui)

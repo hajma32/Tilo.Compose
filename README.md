@@ -24,6 +24,10 @@ selection callouts, attribution, scale bar, and zoom controls.
     <td><img src="docs/images/showcase-vector-styles.png" alt="Tilo.Compose map with styled points, lines, polygons, labels, attribution and scale bar" width="360"></td>
     <td><img src="docs/images/showcase-callout.png" alt="Tilo.Compose map feature selection callout with linked source" width="360"></td>
   </tr>
+  <tr>
+    <td><img src="docs/images/showcase-sjtsk-drawing-overview.png" alt="Tilo.Compose S-JTSK ortofoto map with dense labels, scale bar, attribution, zoom controls, and drawing FAB" width="360"></td>
+    <td><img src="docs/images/showcase-sjtsk-drawing-controls.png" alt="Tilo.Compose polygon drawing controls with orange draft geometry on S-JTSK ortofoto" width="360"></td>
+  </tr>
 </table>
 
 ## Quick Example

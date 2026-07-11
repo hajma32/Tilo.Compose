@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.raster.WMSTileLayer
 import tilo.compose.core.layers.raster.createWMSTileLayerFromCapabilities
 import tilo.compose.core.projection.Projection
@@ -43,6 +44,8 @@ fun rememberWMSLayer(
     tileSize: Int = 256,
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
+    attribution: Attribution? = null,
+    attributions: List<Attribution> = emptyList(),
 ): WMSLayerState {
     val state = remember { WMSLayerState() }
 
@@ -58,6 +61,8 @@ fun rememberWMSLayer(
         tileSize,
         maxVisibleTiles,
         prefetchMargin,
+        attribution,
+        attributions,
     ) {
         state.isLoading = true
         state.error = null
@@ -74,6 +79,7 @@ fun rememberWMSLayer(
                 tileSize = tileSize,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
+                attributions = attributions.withSingle(attribution),
             )
         } catch (error: CancellationException) {
             throw error

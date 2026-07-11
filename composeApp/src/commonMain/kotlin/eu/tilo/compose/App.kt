@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.WMSLayerState
+import tilo.compose.dsl.attribution
 import tilo.compose.dsl.cachedBitmap
 import tilo.compose.dsl.FeatureOptions
 import tilo.compose.dsl.featureLayerStyle
@@ -370,6 +371,10 @@ private fun BoxScope.WebMercatorXyzExampleMap(
                 projection = webMercator(),
                 maxVisibleTiles = 9,
                 prefetchMargin = 1,
+                attribution = attribution(
+                    label = "© OpenStreetMap contributors",
+                    url = "https://www.openstreetmap.org/copyright",
+                ),
             )
             featureLayer("mercator-places", places) {
                 zIndex = 1
@@ -458,11 +463,6 @@ private fun BoxScope.WebMercatorXyzExampleMap(
             Text(
                 text = "EPSG:3857 camera, OSM XYZ tiles, WGS84 features",
                 style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = "© OpenStreetMap contributors",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

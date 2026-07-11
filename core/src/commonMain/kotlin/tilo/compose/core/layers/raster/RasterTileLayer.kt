@@ -1,6 +1,7 @@
 package tilo.compose.core.layers.raster
 
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.map.Map
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.Tile
@@ -20,6 +21,7 @@ open class RasterTileLayer(
     override val zIndex: Int = 0,
     private val maxVisibleTiles: Int = 9,
     private val prefetchMargin: Int = 1,
+    override val attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
 ) : TileLayer {
     override val projection: Projection = source.projection

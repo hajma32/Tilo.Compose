@@ -1,14 +1,19 @@
 package tilo.compose.dsl
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import tilo.compose.render.MapRenderer
 import tilo.compose.render.backend.ComposeCanvasRenderBackend
 import tilo.compose.render.backend.RenderBackend
+import tilo.compose.ui.DefaultAttributionOverlay
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.LayerSink
 import tilo.compose.core.layers.raster.RasterTileLayer
@@ -110,6 +115,8 @@ class MapLayerBuilder : LayerSink {
         tms: Boolean = false,
         maxVisibleTiles: Int = 9,
         prefetchMargin: Int = 1,
+        attribution: Attribution? = null,
+        attributions: List<Attribution> = emptyList(),
     ) {
         layer(
             XYZTileLayer(
@@ -121,6 +128,7 @@ class MapLayerBuilder : LayerSink {
                 zIndex = zIndex,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
+                attributions = attributions.withSingle(attribution),
             )
         )
     }
@@ -142,6 +150,8 @@ class MapLayerBuilder : LayerSink {
         sourceId: String = id,
         maxVisibleTiles: Int = 9,
         prefetchMargin: Int = 1,
+        attribution: Attribution? = null,
+        attributions: List<Attribution> = emptyList(),
     ) {
         layer(
             RasterTileLayer(
@@ -156,6 +166,7 @@ class MapLayerBuilder : LayerSink {
                 zIndex = zIndex,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
+                attributions = attributions.withSingle(attribution),
             )
         )
     }
@@ -285,19 +296,30 @@ fun TiloMap(
     onTapWorld: ((Point) -> Unit)? = null,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
+    showAttribution: Boolean = true,
+    attributionContent: @Composable BoxScope.(List<Attribution>) -> Unit = { DefaultAttributionOverlay(it) },
     invalidationKey: Any? = null,
     layers: MapLayerBuilder.() -> Unit,
 ) {
     val layerBuilder = MapLayerBuilder()
     layerBuilder.layers()
-    MapRenderer(
-        map = cameraState.mapState,
-        layers = layerBuilder.build(),
-        modifier = modifier,
-        backend = backend,
-        onTapWorld = onTapWorld,
-        onFeatureSelect = onFeatureSelect,
-        selectedFeatures = selectedFeatures,
-        invalidationKey = invalidationKey,
-    )
+    val builtLayers = layerBuilder.build()
+    Box(modifier = modifier) {
+        MapRenderer(
+            map = cameraState.mapState,
+            layers = builtLayers,
+            modifier = Modifier.fillMaxSize(),
+            backend = backend,
+            onTapWorld = onTapWorld,
+            onFeatureSelect = onFeatureSelect,
+            selectedFeatures = selectedFeatures,
+            invalidationKey = invalidationKey,
+        )
+        if (showAttribution) {
+            val attributions = builtLayers.attributions()
+            if (attributions.isNotEmpty()) {
+                attributionContent(attributions)
+            }
+        }
+    }
 }

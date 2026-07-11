@@ -1,5 +1,6 @@
 package tilo.compose.core.layers.raster
 
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.TileGrid
@@ -27,6 +28,7 @@ class WMSTileLayer(
     zIndex: Int = 0,
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
+    attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
 ) : RasterTileLayer(
     id = id,
@@ -44,5 +46,6 @@ class WMSTileLayer(
     zIndex = zIndex,
     maxVisibleTiles = maxVisibleTiles,
     prefetchMargin = prefetchMargin,
+    attributions = attributions,
     fetchConfig = fetchConfig,
 )

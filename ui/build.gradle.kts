@@ -13,9 +13,7 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(project(":core"))
                 implementation(project(":geocore"))
-                implementation(project(":ui"))
                 implementation(libs.compose.runtime)
                 implementation(libs.compose.foundation)
                 implementation(libs.compose.ui)
@@ -39,7 +37,7 @@ kotlin {
 }
 
 android {
-    namespace = "tilo.compose.render"
+    namespace = "tilo.compose.ui"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {

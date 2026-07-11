@@ -4,6 +4,7 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.CancellationException
 import tilo.compose.core.geometry.BoundingBox
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.net.sharedHttpClient
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.TileGrid
@@ -58,6 +59,7 @@ data class WMSCapabilities(
         tileSize: Int = 256,
         maxVisibleTiles: Int = 9,
         prefetchMargin: Int = 1,
+        attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
     ): WMSTileLayer {
         val resolvedBaseUrl = requireNotNull(baseUrl) {
@@ -78,6 +80,7 @@ data class WMSCapabilities(
             zIndex = zIndex,
             maxVisibleTiles = maxVisibleTiles,
             prefetchMargin = prefetchMargin,
+            attributions = attributions,
             fetchConfig = fetchConfig,
         )
     }
@@ -124,6 +127,7 @@ suspend fun createWMSTileLayerFromCapabilities(
     tileSize: Int = 256,
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
+    attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
 ): WMSTileLayer {
     val capabilities = WMSCapabilitiesLoader().load(capabilitiesUrl)
@@ -138,6 +142,7 @@ suspend fun createWMSTileLayerFromCapabilities(
         tileSize = tileSize,
         maxVisibleTiles = maxVisibleTiles,
         prefetchMargin = prefetchMargin,
+        attributions = attributions,
         fetchConfig = fetchConfig,
     )
 }

@@ -35,6 +35,7 @@ internal fun Modifier.mapGestureInput(
 ): Modifier = pointerInput(map) {
     coroutineScope {
         var panFlingJob: Job? = null
+        var zoomFlingJob: Job? = null
         awaitEachGesture {
             var accumulatedZoom = 1f
             var accumulatedRotation = 0f
@@ -43,10 +44,14 @@ internal fun Modifier.mapGestureInput(
             var cleanSinglePointerPan = true
             val down = awaitFirstDown(requireUnconsumed = false)
             panFlingJob?.cancel()
+            zoomFlingJob?.cancel()
             val downTimeMillis = down.uptimeMillis
             var lastEventTimeMillis = down.uptimeMillis
             var touchSlopReachedAtMillis = down.uptimeMillis
             var panVelocity = Offset.Zero
+            var zoomVelocity = 0.0
+            var zoomFocus: Point? = null
+            var hadZoomGesture = false
 
             do {
                 val event = awaitPointerEvent()
@@ -93,9 +98,16 @@ internal fun Modifier.mapGestureInput(
                             panVelocity = panVelocity * 0.25f + instantVelocity * 0.75f
                         }
                         if (zoomChange != 1f) {
+                            val zoomDelta = ln(zoomChange.toDouble()) / ln(2.0)
+                            val deltaSeconds = ((lastEventTimeMillis - previousEventTimeMillis).coerceAtLeast(1L))
+                                .toDouble() / 1_000.0
+                            val instantZoomVelocity = zoomDelta / deltaSeconds
+                            zoomVelocity = zoomVelocity * 0.25 + instantZoomVelocity * 0.75
+                            zoomFocus = Point(centroid.x.toDouble(), centroid.y.toDouble())
+                            hadZoomGesture = true
                             map.zoomBy(
-                                delta = ln(zoomChange.toDouble()) / ln(2.0),
-                                focus = Point(centroid.x.toDouble(), centroid.y.toDouble())
+                                delta = zoomDelta,
+                                focus = zoomFocus
                             )
                         }
                         if (panChange != Offset.Zero || zoomChange != 1f) {
@@ -115,6 +127,16 @@ internal fun Modifier.mapGestureInput(
                 panFlingJob = launch {
                     animateInertialPan(
                         initialVelocity = panVelocity.clampDistance(MaxPanVelocity),
+                        map = map,
+                        onChanged = onChanged,
+                    )
+                }
+            }
+            if (pastTouchSlop && hadZoomGesture && !startedAsLongPress) {
+                zoomFlingJob = launch {
+                    animateInertialZoom(
+                        initialVelocity = zoomVelocity.coerceIn(-MaxZoomVelocity, MaxZoomVelocity),
+                        focus = zoomFocus,
                         map = map,
                         onChanged = onChanged,
                     )
@@ -148,6 +170,13 @@ private const val MaximumVelocityBoost = 1.25f
 private const val PanFlingFriction = 3.6f
 private const val MaximumPanFlingDurationNanos = 1_200_000_000L
 private const val MaximumFrameSeconds = 0.05f
+private const val MinimumZoomFlingVelocity = 0.25
+private const val MaxZoomVelocity = 4.5
+private const val ZoomVelocityBoostStart = 0.8
+private const val ZoomVelocityBoostEnd = 3.5
+private const val MaximumZoomVelocityBoost = 1.3
+private const val ZoomFlingFriction = 5.4
+private const val MaximumZoomFlingDurationNanos = 700_000_000L
 
 private suspend fun animateInertialPan(
     initialVelocity: Offset,
@@ -172,6 +201,41 @@ private suspend fun animateInertialPan(
         onChanged()
         velocity *= exp(-PanFlingFriction * deltaSeconds)
     }
+}
+
+private suspend fun animateInertialZoom(
+    initialVelocity: Double,
+    focus: Point?,
+    map: Map,
+    onChanged: () -> Unit,
+) {
+    var velocity = initialVelocity * initialVelocity.zoomBoostMultiplier()
+    if (abs(velocity) < MinimumZoomFlingVelocity) return
+
+    var previousFrame = withFrameNanos { it }
+    val startedAt = previousFrame
+    while (abs(velocity) >= MinimumZoomFlingVelocity) {
+        val frame = withFrameNanos { it }
+        if (frame - startedAt > MaximumZoomFlingDurationNanos) break
+
+        val deltaSeconds = ((frame - previousFrame).toDouble() / 1_000_000_000.0)
+            .coerceIn(0.0, MaximumFrameSeconds.toDouble())
+        previousFrame = frame
+
+        val previousZoom = map.zoom
+        map.zoomBy(delta = velocity * deltaSeconds, focus = focus)
+        if (map.zoom == previousZoom) break
+        onChanged()
+
+        velocity *= exp(-ZoomFlingFriction * deltaSeconds)
+    }
+}
+
+private fun Double.zoomBoostMultiplier(): Double {
+    val speed = abs(this)
+    val intensity = ((speed - ZoomVelocityBoostStart) / (ZoomVelocityBoostEnd - ZoomVelocityBoostStart))
+        .coerceIn(0.0, 1.0)
+    return 1.0 + (MaximumZoomVelocityBoost - 1.0) * intensity * intensity
 }
 
 private fun PointerEvent.pressedCount(): Int =

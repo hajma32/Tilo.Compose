@@ -31,6 +31,8 @@ import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.Viewport
+import tilo.compose.core.selection.FeatureSelection
+import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.map.Map as MapState
 
@@ -45,6 +47,8 @@ fun MapRenderer(
     modifier: Modifier = Modifier,
     backend: RenderBackend = ComposeCanvasRenderBackend,
     onTapWorld: ((Point) -> Unit)? = null,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
 ) {
     val density = LocalDensity.current
@@ -54,6 +58,7 @@ fun MapRenderer(
     val labelBitmapCache = remember { LabelBitmapCache() }
     val rasterPipeline = remember { RasterRenderPipeline() }
     val vectorPipeline = remember { VectorRenderPipeline() }
+    val featureHitTester = remember { FeatureHitTester() }
 
     val renderRequests = remember(sortedLayersKey(layers)) {
         MutableSharedFlow<MapState>(
@@ -67,7 +72,9 @@ fun MapRenderer(
     val tileLayers = sortedLayers.filterIsInstance<TileLayer>()
     val vectorLayers = sortedLayers.filterIsInstance<VectorLayer>()
     val vectorLayerCacheSignature = vectorLayers.cacheSignature()
-    val currentVectorCacheKeys = vectorLayers.associate { layer -> layer.id to layer.cacheKey() }
+    val currentVectorCacheKeys = vectorLayers.associate { layer ->
+        layer.id to layer.cacheKey(selectedFeatures.keysForLayer(layer.id))
+    }
 
     var redrawVersion by remember { mutableStateOf(0) }
     var scene by remember { mutableStateOf(RenderScene.Empty) }
@@ -109,6 +116,7 @@ fun MapRenderer(
         density,
         layoutDirection,
         vectorLayerCacheSignature,
+        selectedFeatures,
         invalidationKey,
     ) {
         if (map.viewport.width <= 0 || map.viewport.height <= 0) return@LaunchedEffect
@@ -162,6 +170,7 @@ fun MapRenderer(
                             map = renderMap,
                             density = density,
                             layoutDirection = layoutDirection,
+                            selectedFeatures = selectedFeatures,
                         )
                         commandsByLayer = vectorFrame.commandsByLayer
                         vectorBitmapsByLayer = vectorFrame.bitmapLayersByLayer
@@ -208,7 +217,17 @@ fun MapRenderer(
             redrawVersion++
         }
         .mapGestureInput(map) { redrawVersion++ }
-        .mapTapInput(map, onTapWorld) { redrawVersion++ }
+        .mapTapInput(
+            map = map,
+            onTap = if (onTapWorld == null && onFeatureSelect == null) {
+                null
+            } else {
+                { screenPoint, worldPoint ->
+                    onFeatureSelect?.invoke(featureHitTester.hitTest(map, vectorLayers, screenPoint))
+                    onTapWorld?.invoke(worldPoint)
+                }
+            },
+        ) { redrawVersion++ }
         .drawWithContent {
             redrawVersion
             drawContent()
@@ -230,6 +249,12 @@ private fun sortedLayersKey(layers: List<Layer>): String =
 
 private fun List<VectorLayer>.cacheSignature(): String =
     joinToString(separator = "|") { layer -> layer.cacheKey().toString() }
+
+private fun Set<FeatureSelectionRef>.keysForLayer(layerId: String): Set<String> =
+    asSequence()
+        .filter { it.layerId == layerId }
+        .map { it.featureKey }
+        .toSet()
 
 private fun <T> Map<String, T>.validFor(
     currentKeys: Map<String, VectorLayerCacheKey>,

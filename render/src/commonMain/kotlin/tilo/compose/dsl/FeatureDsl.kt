@@ -38,6 +38,7 @@ class FeatureListBuilder {
             key = key,
             geometry = geometry,
             style = options.style,
+            selectedStyle = options.selectedStyle,
             label = options.label,
             callout = options.callout,
             data = options.data,
@@ -144,6 +145,7 @@ class FeatureListBuilder {
 class FeatureOptions {
     var label: String? = null
     var style: GeometryStyle? = null
+    var selectedStyle: GeometryStyle? = null
     var callout: Callout? = null
     var data: Data? = null
 }

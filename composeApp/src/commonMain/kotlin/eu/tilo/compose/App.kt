@@ -47,6 +47,7 @@ import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.WMSLayerState
 import tilo.compose.dsl.cachedBitmap
 import tilo.compose.dsl.FeatureOptions
+import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
 import tilo.compose.dsl.lineStyle
 import tilo.compose.dsl.pointStyle
@@ -60,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import tilo.compose.core.feature.Data
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
@@ -68,6 +70,7 @@ import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.map.MapConfig
+import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.transform.Epsg5514ToWgs84Transformation
 import tilo.compose.core.transform.WebMercatorToWgs84Transformation
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
@@ -96,6 +99,11 @@ private enum class DemoLayerOption(val title: String) {
     DashedPolygons("Dashed polygons"),
     FullLines("Full lines"),
 }
+
+private data class PlaceDetails(
+    val name: String,
+    val description: String,
+)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -342,9 +350,19 @@ private fun BoxScope.WebMercatorXyzExampleMap(
     cameraState: MapCameraState,
     places: List<Feature>,
 ) {
+    var selectedPlace by remember { mutableStateOf<PlaceDetails?>(null) }
+    var selectedPlaceRefs by remember { mutableStateOf<Set<FeatureSelectionRef>>(emptySet()) }
+
     TiloMap(
         cameraState = cameraState,
         modifier = Modifier.fillMaxSize(),
+        onFeatureSelect = { selections ->
+            selectedPlaceRefs = selections.map { it.ref }.toSet()
+            selectedPlace = selections.firstNotNullOfOrNull { selection ->
+                selection.feature.data?.payload as? PlaceDetails
+            }
+        },
+        selectedFeatures = selectedPlaceRefs,
         layers = {
             xyzTileLayer(
                 id = "osm-standard",
@@ -356,12 +374,77 @@ private fun BoxScope.WebMercatorXyzExampleMap(
             featureLayer("mercator-places", places) {
                 zIndex = 1
                 projection = wgs84()
+                style = featureLayerStyle {
+                    point {
+                        shape = PointShape.Circle
+                        size = 16.0
+                        fill(0xFFE53935)
+                        stroke(0xFFFFFFFF, width = 3.0)
+                    }
+                    line {
+                        stroke(0xFF7E57C2, width = 5.0) {
+                            lineCap = LineCap.Round
+                            lineJoin = LineJoin.Round
+                        }
+                    }
+                    polygon {
+                        fill(0x3343A047)
+                        stroke(0xFF2E7D32, width = 3.0) {
+                            lineJoin = LineJoin.Round
+                        }
+                    }
+                    label(0xFF111827)
+                    selectedPoint {
+                        shape = PointShape.Circle
+                        size = 26.0
+                        fill(0xFFFFD54F)
+                        stroke(0xFF111827, width = 4.0)
+                    }
+                    selectedLine {
+                        stroke(0xFFFFD54F, width = 9.0) {
+                            lineCap = LineCap.Round
+                            lineJoin = LineJoin.Round
+                        }
+                    }
+                    selectedPolygon {
+                        fill(0x55FFD54F)
+                        stroke(0xFFFFD54F, width = 6.0) {
+                            lineJoin = LineJoin.Round
+                        }
+                    }
+                    selectedLabel(0xFF111827)
+                }
             }
         },
     )
+    selectedPlace?.let { place ->
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(8.dp),
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = place.name,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = place.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
     Surface(
         modifier = Modifier
-            .align(Alignment.BottomStart)
+            .align(Alignment.TopStart)
             .padding(16.dp),
         shape = RoundedCornerShape(8.dp),
         tonalElevation = 4.dp,
@@ -563,6 +646,12 @@ private fun buildMercatorPlaceFeatures(): List<Feature> =
     features {
         point("prague", 14.4378, 50.0755) {
             label = "Prague"
+            data = Data(
+                PlaceDetails(
+                    name = "Praha",
+                    description = "Hlavni mesto Ceska a vychozi bod XYZ/Web Mercator ukazky.",
+                )
+            )
             style = pointStyle {
                 shape = PointShape.Circle
                 size = 16.0
@@ -572,6 +661,12 @@ private fun buildMercatorPlaceFeatures(): List<Feature> =
         }
         point("brno", 16.6068, 49.1951) {
             label = "Brno"
+            data = Data(
+                PlaceDetails(
+                    name = "Brno",
+                    description = "Moravske centrum a prakticky test vyberu feature mimo stred mapy.",
+                )
+            )
             style = pointStyle {
                 shape = PointShape.Square
                 size = 14.0
@@ -581,12 +676,56 @@ private fun buildMercatorPlaceFeatures(): List<Feature> =
         }
         point("ostrava", 18.2625, 49.8209) {
             label = "Ostrava"
+            data = Data(
+                PlaceDetails(
+                    name = "Ostrava",
+                    description = "Treti ukazkove mesto s vlastnim payloadem v Feature.data.",
+                )
+            )
             style = pointStyle {
                 shape = PointShape.Diamond
                 size = 14.0
                 fill(0xFF43A047)
                 stroke(0xFFFFFFFF, width = 2.5)
             }
+        }
+        line(
+            key = "prague-selection-line",
+            points = listOf(
+                Point(14.3880, 50.0920),
+                Point(14.4170, 50.1060),
+                Point(14.4610, 50.0960),
+                Point(14.4900, 50.0740),
+            ),
+        ) {
+            label = "Selection line"
+            data = Data(
+                PlaceDetails(
+                    name = "Praha test line",
+                    description = "Kliknutelna linie v XYZ/Web Mercator ukazce pro overeni line hit-testu.",
+                )
+            )
+        }
+        polygon(
+            key = "prague-selection-polygon",
+            rings = listOf(
+                listOf(
+                    Point(14.4050, 50.0600),
+                    Point(14.4550, 50.0580),
+                    Point(14.4720, 50.0370),
+                    Point(14.4250, 50.0280),
+                    Point(14.3920, 50.0420),
+                    Point(14.4050, 50.0600),
+                )
+            ),
+        ) {
+            label = "Selection polygon"
+            data = Data(
+                PlaceDetails(
+                    name = "Praha test polygon",
+                    description = "Kliknutelny polygon s vlastnim selected stylem pro overeni polygon selekce.",
+                )
+            )
         }
     }
 

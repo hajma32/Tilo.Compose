@@ -32,13 +32,14 @@ internal fun Modifier.mapGestureInput(
 
 internal fun Modifier.mapTapInput(
     map: Map,
-    onTapWorld: ((Point) -> Unit)?,
+    onTap: ((screenPoint: Point, worldPoint: Point) -> Unit)?,
     onChanged: () -> Unit,
 ): Modifier {
-    if (onTapWorld == null) return this
-    return pointerInput(map, onTapWorld) {
+    if (onTap == null) return this
+    return pointerInput(map, onTap) {
         detectTapGestures { offset ->
-            onTapWorld(map.screenToWorld(Point(offset.x.toDouble(), offset.y.toDouble())))
+            val screenPoint = Point(offset.x.toDouble(), offset.y.toDouble())
+            onTap(screenPoint, map.screenToWorld(screenPoint))
             onChanged()
         }
     }

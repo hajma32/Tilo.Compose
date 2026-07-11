@@ -2,9 +2,11 @@ package tilo.compose.render
 
 import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.feature.ColorValue
+import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FillStyle
 import tilo.compose.core.feature.GeometryStyle
+import tilo.compose.core.feature.LabelStyle
 import tilo.compose.core.feature.LineStyle
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.PolygonStyle
@@ -29,7 +31,10 @@ object CommandBuilder {
 
     internal fun build(
         map: Map,
-        features: List<Feature>
+        features: List<Feature>,
+        layerId: String? = null,
+        selectedFeatureKeys: Set<String> = emptySet(),
+        layerStyle: FeatureLayerStyle = FeatureLayerStyle(),
     ): List<RenderCommand> {
         val visible = visibleBounds(map)
 
@@ -39,9 +44,10 @@ object CommandBuilder {
                 if (!visible.intersects(featureBounds)) return@forEach
 
                 val baseId = feature.key
-                val style = feature.style
+                val isSelected = layerId != null && feature.key in selectedFeatureKeys
+                val style = feature.resolvedStyle(isSelected, layerStyle)
 
-                addAll(geometryToCommands(baseId, map, feature.geometry, style))
+                addAll(geometryToCommands(baseId, map, feature.geometry, style.geometry))
 
                 feature.label?.takeIf { it.isNotBlank() }?.let { label ->
                     labelAnchorWorld(feature.geometry)?.let { anchor ->
@@ -50,7 +56,7 @@ object CommandBuilder {
                                 id = "$baseId:label",
                                 text = label,
                                 anchor = anchor,
-                                textColor = style.labelColor()
+                                textColor = style.label.color
                             )
                         )
                     }
@@ -138,6 +144,67 @@ object CommandBuilder {
         )
     }
 }
+
+private data class ResolvedFeatureStyle(
+    val geometry: GeometryStyle?,
+    val label: LabelStyle,
+)
+
+private fun Feature.resolvedStyle(isSelected: Boolean, layerStyle: FeatureLayerStyle): ResolvedFeatureStyle {
+    val baseGeometryStyle = style ?: layerStyle.geometryStyleFor(geometry)
+    if (!isSelected) {
+        return ResolvedFeatureStyle(
+            geometry = baseGeometryStyle,
+            label = layerStyle.label ?: LabelStyle(color = baseGeometryStyle.labelColor()),
+        )
+    }
+
+    return ResolvedFeatureStyle(
+        geometry = selectedStyle ?: layerStyle.selectedGeometryStyleFor(geometry) ?: geometry.defaultSelectedStyle(baseGeometryStyle),
+        label = layerStyle.selectedLabel ?: layerStyle.label ?: LabelStyle(color = baseGeometryStyle.labelColor()),
+    )
+}
+
+private fun FeatureLayerStyle.geometryStyleFor(geometry: Geometry): GeometryStyle? =
+    when (geometry) {
+        is Point, is MultiPoint -> point
+        is LineString, is MultiLineString -> line
+        is Polygon, is MultiPolygon -> polygon
+    }
+
+private fun FeatureLayerStyle.selectedGeometryStyleFor(geometry: Geometry): GeometryStyle? =
+    when (geometry) {
+        is Point, is MultiPoint -> selectedPoint
+        is LineString, is MultiLineString -> selectedLine
+        is Polygon, is MultiPolygon -> selectedPolygon
+    }
+
+private fun Geometry.defaultSelectedStyle(baseStyle: GeometryStyle?): GeometryStyle =
+    when (this) {
+        is Point, is MultiPoint -> PointStyle(
+            shape = (baseStyle as? PointStyle)?.shape ?: PointStyle().shape,
+            size = maxOf((baseStyle as? PointStyle)?.size ?: PointStyle().size, 22.0),
+            fill = (baseStyle as? PointStyle)?.fill ?: FillStyle(color = ColorValue(0xFFFFD54Fu)),
+            stroke = StrokeStyle(color = ColorValue(0xFF111827u), width = 4.0),
+            icon = (baseStyle as? PointStyle)?.icon,
+        )
+        is LineString, is MultiLineString -> LineStyle(
+            stroke = StrokeStyle(
+                color = ColorValue(0xFFFFD54Fu),
+                width = maxOf((baseStyle as? LineStyle)?.stroke?.width ?: 2.0, 7.0),
+                lineCap = (baseStyle as? LineStyle)?.stroke?.lineCap ?: tilo.compose.core.feature.LineCap.Round,
+                lineJoin = (baseStyle as? LineStyle)?.stroke?.lineJoin ?: tilo.compose.core.feature.LineJoin.Round,
+            )
+        )
+        is Polygon, is MultiPolygon -> PolygonStyle(
+            fill = (baseStyle as? PolygonStyle)?.fill ?: FillStyle(color = ColorValue(0x33FFD54Fu)),
+            stroke = StrokeStyle(
+                color = ColorValue(0xFFFFD54Fu),
+                width = maxOf((baseStyle as? PolygonStyle)?.stroke?.width ?: 2.0, 5.0),
+                lineJoin = tilo.compose.core.feature.LineJoin.Round,
+            )
+        )
+    }
 
 private fun GeometryStyle?.toPointStyle(): PointStyle =
     when (this) {

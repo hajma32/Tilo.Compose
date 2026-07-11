@@ -2,8 +2,10 @@ package tilo.compose.dsl
 
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.DashPattern
+import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.feature.FillPattern
 import tilo.compose.core.feature.FillStyle
+import tilo.compose.core.feature.LabelStyle
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.LineStyle
@@ -36,6 +38,68 @@ fun lineStyle(block: LineStyleBuilder.() -> Unit = {}): LineStyle =
  */
 fun polygonStyle(block: PolygonStyleBuilder.() -> Unit = {}): PolygonStyle =
     PolygonStyleBuilder().apply(block).build()
+
+/**
+ * Builds a layer-level style object with defaults for every vector geometry
+ * type and its selected state.
+ */
+fun featureLayerStyle(block: FeatureLayerStyleBuilder.() -> Unit = {}): FeatureLayerStyle =
+    FeatureLayerStyleBuilder().apply(block).build()
+
+class FeatureLayerStyleBuilder {
+    private var point: PointStyle? = null
+    private var line: LineStyle? = null
+    private var polygon: PolygonStyle? = null
+    private var label: LabelStyle? = null
+    private var selectedPoint: PointStyle? = null
+    private var selectedLine: LineStyle? = null
+    private var selectedPolygon: PolygonStyle? = null
+    private var selectedLabel: LabelStyle? = null
+
+    fun point(block: PointStyleBuilder.() -> Unit) {
+        point = pointStyle(block)
+    }
+
+    fun line(block: LineStyleBuilder.() -> Unit) {
+        line = lineStyle(block)
+    }
+
+    fun polygon(block: PolygonStyleBuilder.() -> Unit) {
+        polygon = polygonStyle(block)
+    }
+
+    fun label(color: Long = 0xFF111827) {
+        label = LabelStyle(color = argb(color))
+    }
+
+    fun selectedPoint(block: PointStyleBuilder.() -> Unit) {
+        selectedPoint = pointStyle(block)
+    }
+
+    fun selectedLine(block: LineStyleBuilder.() -> Unit) {
+        selectedLine = lineStyle(block)
+    }
+
+    fun selectedPolygon(block: PolygonStyleBuilder.() -> Unit) {
+        selectedPolygon = polygonStyle(block)
+    }
+
+    fun selectedLabel(color: Long = 0xFF111827) {
+        selectedLabel = LabelStyle(color = argb(color))
+    }
+
+    internal fun build(): FeatureLayerStyle =
+        FeatureLayerStyle(
+            point = point,
+            line = line,
+            polygon = polygon,
+            label = label,
+            selectedPoint = selectedPoint,
+            selectedLine = selectedLine,
+            selectedPolygon = selectedPolygon,
+            selectedLabel = selectedLabel,
+        )
+}
 
 /**
  * Style builder used by [pointStyle].

@@ -1,0 +1,116 @@
+package tilo.compose.render
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import tilo.compose.core.feature.Feature
+import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.vector.FeatureLayer
+import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapConfig
+import tilo.compose.core.map.Viewport
+import tilo.compose.core.projection.Epsg3857Projection
+import tilo.compose.core.projection.Epsg4326Projection
+import tilo.compose.core.transform.WebMercatorToWgs84Transformation
+import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
+
+class FeatureHitTesterTest {
+    @Test
+    fun selectsPointFromLayerProjection() {
+        val pragueWgs84 = Point(14.4378, 50.0755)
+        val pragueMercator = Wgs84ToWebMercatorTransformation.sourceToTarget(pragueWgs84)
+        val map = mercatorMap(center = pragueMercator)
+        val layer = FeatureLayer(
+            id = "places",
+            projection = Epsg4326Projection,
+            features = listOf(
+                Feature(
+                    key = "prague",
+                    geometry = pragueWgs84,
+                )
+            )
+        )
+
+        val selections = FeatureHitTester().hitTest(
+            map = map,
+            layers = listOf(layer),
+            screenPoint = map.worldToScreen(pragueMercator),
+        )
+
+        assertEquals("places", selections.firstOrNull()?.layerId)
+        assertEquals("prague", selections.firstOrNull()?.feature?.key)
+    }
+
+    @Test
+    fun returnsAllFeaturesHitByTapInTopMostOrder() {
+        val pragueWgs84 = Point(14.4378, 50.0755)
+        val pragueMercator = Wgs84ToWebMercatorTransformation.sourceToTarget(pragueWgs84)
+        val map = mercatorMap(center = pragueMercator)
+        val lowerLayer = FeatureLayer(
+            id = "lower",
+            zIndex = 1,
+            projection = Epsg4326Projection,
+            features = listOf(
+                Feature(
+                    key = "lower-prague",
+                    geometry = pragueWgs84,
+                )
+            )
+        )
+        val upperLayer = FeatureLayer(
+            id = "upper",
+            zIndex = 2,
+            projection = Epsg4326Projection,
+            features = listOf(
+                Feature(
+                    key = "upper-prague",
+                    geometry = pragueWgs84,
+                )
+            )
+        )
+
+        val selections = FeatureHitTester().hitTest(
+            map = map,
+            layers = listOf(lowerLayer, upperLayer),
+            screenPoint = map.worldToScreen(pragueMercator),
+        )
+
+        assertEquals(listOf("upper-prague", "lower-prague"), selections.map { it.feature.key })
+    }
+
+    @Test
+    fun returnsEmptyListWhenTapMissesFeatures() {
+        val pragueWgs84 = Point(14.4378, 50.0755)
+        val pragueMercator = Wgs84ToWebMercatorTransformation.sourceToTarget(pragueWgs84)
+        val map = mercatorMap(center = pragueMercator)
+        val layer = FeatureLayer(
+            id = "places",
+            projection = Epsg4326Projection,
+            features = listOf(
+                Feature(
+                    key = "prague",
+                    geometry = pragueWgs84,
+                )
+            )
+        )
+
+        val selections = FeatureHitTester().hitTest(
+            map = map,
+            layers = listOf(layer),
+            screenPoint = Point(20.0, 20.0),
+        )
+
+        assertTrue(selections.isEmpty())
+    }
+
+    private fun mercatorMap(center: Point): Map =
+        Map(
+            center = center,
+            zoom = 11.5,
+            projection = Epsg3857Projection,
+            config = MapConfig(minZoom = 0.0, maxZoom = 20.0)
+                .withTransformation(Wgs84ToWebMercatorTransformation)
+                .withTransformation(WebMercatorToWgs84Transformation),
+            viewport = Viewport(width = 1080, height = 2100, pixelRatio = 2.625),
+        )
+}

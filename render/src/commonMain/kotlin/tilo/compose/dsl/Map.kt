@@ -7,6 +7,7 @@ import tilo.compose.render.MapRenderer
 import tilo.compose.render.backend.ComposeCanvasRenderBackend
 import tilo.compose.render.backend.RenderBackend
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.LayerSink
@@ -22,6 +23,8 @@ import tilo.compose.core.map.MapState
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.projection.Projection
+import tilo.compose.core.selection.FeatureSelection
+import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 
@@ -184,6 +187,7 @@ class MapLayerBuilder : LayerSink {
         zIndex: Int = 0,
         projection: Projection? = null,
         renderMode: FeatureRenderMode = VectorRenderStrategy.Immediate,
+        style: FeatureLayerStyle = FeatureLayerStyle(),
     ) {
         layer(
             FeatureLayer(
@@ -192,6 +196,7 @@ class MapLayerBuilder : LayerSink {
                 projection = projection,
                 features = features,
                 renderStrategy = renderMode,
+                style = style,
             )
         )
     }
@@ -208,6 +213,7 @@ class MapLayerBuilder : LayerSink {
             zIndex = options.zIndex,
             projection = options.projection,
             renderMode = options.renderMode,
+            style = options.style,
         )
     }
 
@@ -221,6 +227,7 @@ class FeatureLayerOptions {
     var zIndex: Int = 0
     var projection: Projection? = null
     var renderMode: FeatureRenderMode = VectorRenderStrategy.Immediate
+    var style: FeatureLayerStyle = FeatureLayerStyle()
 }
 
 /**
@@ -276,6 +283,8 @@ fun TiloMap(
     modifier: Modifier = Modifier,
     backend: RenderBackend = ComposeCanvasRenderBackend,
     onTapWorld: ((Point) -> Unit)? = null,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
     layers: MapLayerBuilder.() -> Unit,
 ) {
@@ -287,6 +296,8 @@ fun TiloMap(
         modifier = modifier,
         backend = backend,
         onTapWorld = onTapWorld,
+        onFeatureSelect = onFeatureSelect,
+        selectedFeatures = selectedFeatures,
         invalidationKey = invalidationKey,
     )
 }

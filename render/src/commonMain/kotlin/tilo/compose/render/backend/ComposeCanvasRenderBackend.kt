@@ -11,7 +11,10 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import tilo.compose.render.LabelBitmapCache
-import tilo.compose.render.drawFeatures
+import tilo.compose.render.LabelLayoutEngine
+import tilo.compose.render.RenderLabel
+import tilo.compose.render.drawFeatureGeometry
+import tilo.compose.render.drawPlacedLabels
 import tilo.compose.render.drawTiles
 import tilo.compose.core.map.Map
 import kotlin.math.pow
@@ -19,6 +22,7 @@ import kotlin.math.roundToInt
 
 object ComposeCanvasRenderBackend : RenderBackend {
     override val id: String = "compose-canvas"
+    private val labelLayoutEngine = LabelLayoutEngine()
 
     @Composable
     override fun Content(
@@ -35,6 +39,7 @@ object ComposeCanvasRenderBackend : RenderBackend {
                 scene = scene,
                 map = map,
                 tileDecoder = tileDecoder,
+                labelLayoutEngine = labelLayoutEngine,
                 offscreenLabelDrawScope = offscreenLabelDrawScope,
                 textMeasurer = textMeasurer,
                 labelBitmapCache = labelBitmapCache,
@@ -47,10 +52,12 @@ internal fun DrawScope.drawRenderScene(
     scene: RenderScene,
     map: Map,
     tileDecoder: ((ByteArray) -> ImageBitmap?)?,
+    labelLayoutEngine: LabelLayoutEngine = LabelLayoutEngine(),
     offscreenLabelDrawScope: CanvasDrawScope,
     textMeasurer: TextMeasurer,
     labelBitmapCache: LabelBitmapCache,
 ) {
+    val labels = mutableListOf<RenderLabel>()
     scene.layers.forEach { layer ->
         when (layer) {
             is RasterRenderSceneLayer -> {
@@ -65,13 +72,15 @@ internal fun DrawScope.drawRenderScene(
             }
 
             is VectorRenderSceneLayer -> {
-                drawFeatures(
+                drawFeatureGeometry(
                     commands = layer.commands,
                     map = map,
-                    offscreenLabelDrawScope = offscreenLabelDrawScope,
-                    textMeasurer = textMeasurer,
-                    labelBitmapCache = labelBitmapCache,
                 )
+                layer.commands.forEach { command ->
+                    if (command is RenderLabel) {
+                        labels += command
+                    }
+                }
             }
 
             is VectorBitmapRenderSceneLayer -> {
@@ -79,6 +88,18 @@ internal fun DrawScope.drawRenderScene(
             }
         }
     }
+
+    drawPlacedLabels(
+        labels = labelLayoutEngine.layout(
+            labels = labels,
+            map = map,
+            drawScope = this,
+            textMeasurer = textMeasurer,
+        ),
+        offscreenDrawScope = offscreenLabelDrawScope,
+        textMeasurer = textMeasurer,
+        labelBitmapCache = labelBitmapCache,
+    )
 }
 
 private fun DrawScope.drawVectorBitmapLayer(

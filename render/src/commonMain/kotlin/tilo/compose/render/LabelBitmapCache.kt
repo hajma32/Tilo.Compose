@@ -2,31 +2,27 @@ package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
+import tilo.compose.core.feature.LabelFontStyle
+import tilo.compose.core.feature.LabelFontWeight
+import tilo.compose.core.feature.LabelStyle
+import kotlin.math.ceil
 
-private const val LABEL_HALO_RADIUS_PX = 1f
-private const val LABEL_BITMAP_PADDING_PX = 2
 private const val DEFAULT_LABEL_CACHE_SIZE = 2_048
-
-private val HALO_OFFSETS = arrayOf(
-    Offset(-LABEL_HALO_RADIUS_PX, 0f),
-    Offset(LABEL_HALO_RADIUS_PX, 0f),
-    Offset(0f, -LABEL_HALO_RADIUS_PX),
-    Offset(0f, LABEL_HALO_RADIUS_PX),
-    Offset(-LABEL_HALO_RADIUS_PX, -LABEL_HALO_RADIUS_PX),
-    Offset(LABEL_HALO_RADIUS_PX, -LABEL_HALO_RADIUS_PX),
-    Offset(-LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX),
-    Offset(LABEL_HALO_RADIUS_PX, LABEL_HALO_RADIUS_PX)
-)
 
 class LabelBitmapCache(
     private val maxEntries: Int = DEFAULT_LABEL_CACHE_SIZE,
@@ -55,15 +51,20 @@ class LabelBitmapCache(
 
 internal data class LabelBitmapKey(
     val text: String,
-    val textColor: ULong,
+    val style: LabelStyle,
     val density: Float,
     val fontScale: Float,
     val layoutDirection: LayoutDirection,
 )
 
+internal data class LabelBitmapMetrics(
+    val width: Int,
+    val height: Int,
+)
+
 internal fun DrawScope.cachedLabelBitmap(
     text: String,
-    textColor: Color,
+    style: LabelStyle,
     textMeasurer: TextMeasurer,
     offscreenDrawScope: CanvasDrawScope,
     cache: LabelBitmapCache,
@@ -71,7 +72,7 @@ internal fun DrawScope.cachedLabelBitmap(
     cache.getOrPut(
         LabelBitmapKey(
             text = text,
-            textColor = textColor.value,
+            style = style,
             density = density,
             fontScale = fontScale,
             layoutDirection = layoutDirection,
@@ -79,29 +80,46 @@ internal fun DrawScope.cachedLabelBitmap(
     ) {
         createLabelBitmap(
             text = text,
-            textColor = textColor,
+            style = style,
             textMeasurer = textMeasurer,
             offscreenDrawScope = offscreenDrawScope,
         )
     }
 
+internal fun DrawScope.measureLabelBitmap(
+    text: String,
+    style: LabelStyle,
+    textMeasurer: TextMeasurer,
+): LabelBitmapMetrics {
+    val textLayout = textMeasurer.measure(text = text, style = style.toTextStyle())
+    val padding = labelBitmapPadding(style)
+    return LabelBitmapMetrics(
+        width = (textLayout.size.width + padding.x * 2).coerceAtLeast(1),
+        height = (textLayout.size.height + padding.y * 2).coerceAtLeast(1),
+    )
+}
+
 internal fun DrawScope.createLabelBitmap(
     text: String,
-    textColor: Color,
+    style: LabelStyle,
     textMeasurer: TextMeasurer,
     offscreenDrawScope: CanvasDrawScope
 ): ImageBitmap {
-    val labelStyle = TextStyle(color = textColor, fontSize = 12.sp)
-    val textLayout = textMeasurer.measure(text = text, style = labelStyle)
+    val textColor = style.color.toColor()
+    val haloColor = style.haloColor.toColor()
+    val textLayout = textMeasurer.measure(text = text, style = style.toTextStyle())
+    val padding = labelBitmapPadding(style)
 
-    val haloPadding = LABEL_BITMAP_PADDING_PX + LABEL_HALO_RADIUS_PX.toInt()
-    val width = (textLayout.size.width + haloPadding * 2).coerceAtLeast(1)
-    val height = (textLayout.size.height + haloPadding * 2).coerceAtLeast(1)
+    val haloWidthPx = (style.haloWidth * density).toFloat()
+    val background = style.background
+    val backgroundPaddingX = ((background?.paddingHorizontal ?: 0.0) * density).toFloat()
+    val backgroundPaddingY = ((background?.paddingVertical ?: 0.0) * density).toFloat()
+    val width = (textLayout.size.width + padding.x * 2).coerceAtLeast(1)
+    val height = (textLayout.size.height + padding.y * 2).coerceAtLeast(1)
 
     val bitmap = ImageBitmap(width, height)
     val canvas = GraphicsCanvas(bitmap)
-    val baseTopLeft = Offset(haloPadding.toFloat(), haloPadding.toFloat())
-    val haloStyle = labelStyle.copy(color = Color.White)
+    val baseTopLeft = Offset(padding.x.toFloat(), padding.y.toFloat())
 
     offscreenDrawScope.draw(
         density = this,
@@ -109,11 +127,77 @@ internal fun DrawScope.createLabelBitmap(
         canvas = canvas,
         size = Size(width.toFloat(), height.toFloat())
     ) {
-        HALO_OFFSETS.forEach { offset ->
-            drawText(textMeasurer = textMeasurer, text = text, topLeft = baseTopLeft + offset, style = haloStyle)
+        if (background != null) {
+            drawRoundRect(
+                color = background.color.toColor().copy(alpha = background.opacity.toFloat()),
+                topLeft = Offset(
+                    x = baseTopLeft.x - backgroundPaddingX,
+                    y = baseTopLeft.y - backgroundPaddingY,
+                ),
+                size = Size(
+                    width = textLayout.size.width + backgroundPaddingX * 2,
+                    height = textLayout.size.height + backgroundPaddingY * 2,
+                ),
+                cornerRadius = CornerRadius(
+                    x = (background.cornerRadius * density).toFloat(),
+                    y = (background.cornerRadius * density).toFloat(),
+                ),
+            )
         }
-        drawText(textMeasurer = textMeasurer, text = text, topLeft = baseTopLeft, style = labelStyle)
+        if (haloWidthPx > 0f) {
+            drawText(
+                textLayoutResult = textLayout,
+                color = haloColor,
+                topLeft = baseTopLeft,
+                drawStyle = Stroke(width = haloWidthPx),
+            )
+        }
+        drawText(
+            textLayoutResult = textLayout,
+            color = textColor,
+            topLeft = baseTopLeft,
+            drawStyle = Fill,
+        )
     }
 
     return bitmap
 }
+
+private data class LabelBitmapPadding(
+    val x: Int,
+    val y: Int,
+)
+
+private fun DrawScope.labelBitmapPadding(style: LabelStyle): LabelBitmapPadding {
+    val haloWidthPx = (style.haloWidth * density).toFloat()
+    val bitmapPaddingPx = (style.bitmapPadding * density).toFloat()
+    val background = style.background
+    val backgroundPaddingX = ((background?.paddingHorizontal ?: 0.0) * density).toFloat()
+    val backgroundPaddingY = ((background?.paddingVertical ?: 0.0) * density).toFloat()
+    return LabelBitmapPadding(
+        x = ceil(bitmapPaddingPx + maxOf(haloWidthPx, backgroundPaddingX)).toInt(),
+        y = ceil(bitmapPaddingPx + maxOf(haloWidthPx, backgroundPaddingY)).toInt(),
+    )
+}
+
+private fun LabelStyle.toTextStyle(): TextStyle =
+    TextStyle(
+        color = color.toColor(),
+        fontSize = fontSize.sp,
+        fontWeight = fontWeight.toComposeFontWeight(),
+        fontStyle = fontStyle.toComposeFontStyle(),
+    )
+
+private fun LabelFontWeight.toComposeFontWeight(): FontWeight =
+    when (this) {
+        LabelFontWeight.Normal -> FontWeight.Normal
+        LabelFontWeight.Medium -> FontWeight.Medium
+        LabelFontWeight.SemiBold -> FontWeight.SemiBold
+        LabelFontWeight.Bold -> FontWeight.Bold
+    }
+
+private fun LabelFontStyle.toComposeFontStyle(): FontStyle =
+    when (this) {
+        LabelFontStyle.Normal -> FontStyle.Normal
+        LabelFontStyle.Italic -> FontStyle.Italic
+    }

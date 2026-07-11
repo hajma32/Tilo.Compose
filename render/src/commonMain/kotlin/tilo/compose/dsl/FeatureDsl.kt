@@ -4,6 +4,7 @@ import tilo.compose.core.feature.Callout
 import tilo.compose.core.feature.Data
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.GeometryStyle
+import tilo.compose.core.feature.LabelStyle
 import tilo.compose.core.geometry.Geometry
 import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.MultiLineString
@@ -40,6 +41,9 @@ class FeatureListBuilder {
             style = options.style,
             selectedStyle = options.selectedStyle,
             label = options.label,
+            labelPriority = options.labelPriority,
+            labelStyle = options.labelStyle,
+            selectedLabelStyle = options.selectedLabelStyle,
             callout = options.callout,
             data = options.data,
         )
@@ -143,9 +147,36 @@ class FeatureListBuilder {
  * Optional metadata applied to a feature created in [features].
  */
 class FeatureOptions {
+    /**
+     * Text rendered near the feature geometry.
+     */
     var label: String? = null
+
+    /**
+     * Optional collision priority. Higher values win; when not set, larger
+     * labels are kept before smaller labels.
+     */
+    var labelPriority: Int? = null
     var style: GeometryStyle? = null
     var selectedStyle: GeometryStyle? = null
+    var labelStyle: LabelStyle? = null
+    var selectedLabelStyle: LabelStyle? = null
     var callout: Callout? = null
     var data: Data? = null
+
+    /**
+     * Configures label text, collision priority, and optional styles in one
+     * call.
+     */
+    fun label(
+        text: String,
+        priority: Int? = null,
+        style: LabelStyle? = null,
+        selectedStyle: LabelStyle? = null,
+    ) {
+        label = text
+        labelPriority = priority
+        labelStyle = style
+        selectedLabelStyle = selectedStyle
+    }
 }

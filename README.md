@@ -34,11 +34,11 @@ val ortofoto = rememberWMSLayer(
 val places = remember {
     features {
         point("brno", 16.6068, 49.1951) {
-            label = "Brno"
+            label("Brno", style = largeLabelStyle())
             style = pointStyle {
-                size = 14.0
+                size = 14.dp
                 fill(0xFF43A047)
-                stroke(0xFF263238, width = 2.0)
+                stroke(0xFF263238, width = 2.dp)
             }
         }
     }
@@ -57,7 +57,8 @@ TiloMap(
 ```
 
 See [DSL documentation](docs/dsl/README.md) for the current public API shape,
-including map layers, WMS, features, styles, and projections.
+including map layers, raster sources, features, styles, labels, selection,
+default UI overlays, drawing, tile grids, and projections.
 
 ## Roadmap to v1
 
@@ -74,17 +75,19 @@ predictable, documented, and safe for other apps to adopt.
 | CRS model | ✅ Done | WGS84, Web Mercator, S-JTSK/Krovak, and identity projections have readable DSL helpers. |
 | CRS transformations | 🟡 Partial | Keep transform contracts injectable and document how apps provide licensed or project-specific transform implementations. |
 | Vector features | ✅ Done | Points, lines, polygons, multi-geometries, holes, labels, and common styles render from in-memory features. |
-| Vector performance | 🟡 Planned | Move toward layer-level styles, feature-level overrides, viewport culling contracts, and batched rendering by layer/style/geometry. |
+| Vector styling | ✅ Done | Layer-level point/line/polygon/label styles exist, with feature-level geometry and label overrides plus selected styles. |
+| Vector performance | 🟡 Partial | Immediate and cached-bitmap render modes exist; v1 still needs batching by style/geometry and stronger diagnostics. |
 | Spatial indexing | ✅ Done | In-memory feature sources can use `Tilo.SpatialIndex` for viewport queries. |
-| Labels | 🟡 Partial | Bitmap cache exists; v1 still needs placement priority, collision handling, zoom visibility, and stronger label diagnostics. |
+| Labels | ✅ Done | Label styles, presets, bitmap cache, line rotation, selected labels, priorities, and global collision handling are implemented. |
 | Drawing plugin | ✅ Done | Drawing supports point/line/polygon drafts, undo/redo, custom controls, configurable style, and app-owned save callbacks. |
-| Selection | ⬜ Planned | Add first-class hit testing, selected feature state, selected styling, and feature click callbacks. |
+| Selection | ✅ Done | `onFeatureSelect`, multi-hit selection results, selected feature refs, and selected styles are available. |
 | Editing plugin | ⬜ Planned | Build edit as a plugin on top of selection: vertex handles, move/insert/delete, save/cancel, and history. |
-| Camera control | ⬜ Planned | Add programmatic camera APIs: animate, fit bounds, zoom helpers, and rotation/bearing support. |
+| Camera control | 🟡 Partial | Programmatic zoom helpers and default zoom controls exist; v1 still needs animate, fit bounds, and rotation/bearing support. |
 | Event routing | ⬜ Planned | Define gesture priority between overlays, draw, edit, selection, and default pan/zoom/rotate interactions. |
-| Layer lifecycle | ⬜ Planned | Add visibility, min/max zoom, opacity, grouping, priority, attribution metadata, and dispose hooks. |
+| Layer lifecycle | 🟡 Partial | Layer ordering and attribution metadata exist; v1 still needs visibility, min/max zoom, opacity, grouping, and dispose hooks. |
 | Loading and errors | ⬜ Planned | Expose per-layer loading, tile failures, retry state, empty/offline state, and structured diagnostics. |
-| Attribution | ⬜ Planned | Make attribution metadata and a default attribution overlay available for OSM, CUZK, offline, and custom layers. |
+| Attribution | ✅ Done | Layers carry attribution metadata and the UI module provides a clickable default attribution overlay. |
+| Default map UI | ✅ Done | Scale bar, attribution overlay, and zoom controls are available as optional content helpers. |
 | Performance tooling | ⬜ Planned | Add an opt-in debug overlay for FPS, tile counts, cache stats, visible features, labels, projection, and bounds. |
 | Testing strategy | 🟡 Partial | Unit tests and CI exist; v1 still needs fake tile providers, hit-test tests, tile-grid coverage, batching tests, and screenshots/goldens. |
 | Accessibility | ⬜ Planned | Plan semantic descriptions, accessible default controls, keyboard interactions, and large edit/draw handles. |

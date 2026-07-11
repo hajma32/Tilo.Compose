@@ -48,14 +48,18 @@ import tilo.compose.dsl.WMSLayerState
 import tilo.compose.dsl.attribution
 import tilo.compose.dsl.cachedBitmap
 import tilo.compose.dsl.FeatureOptions
+import tilo.compose.dsl.extraLargeLabelStyle
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
+import tilo.compose.dsl.largeLabelStyle
 import tilo.compose.dsl.lineStyle
+import tilo.compose.dsl.mediumLabelStyle
 import tilo.compose.dsl.pointStyle
 import tilo.compose.dsl.polygonStyle
 import tilo.compose.dsl.rememberMapCameraState
 import tilo.compose.dsl.rememberWMSLayer
 import tilo.compose.dsl.sjtsk
+import tilo.compose.dsl.smallLabelStyle
 import tilo.compose.dsl.webMercator
 import tilo.compose.dsl.wgs84
 import kotlinx.coroutines.launch
@@ -64,6 +68,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import tilo.compose.core.feature.Data
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.LabelFontStyle
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.PointShape
@@ -256,15 +261,16 @@ fun App() {
         ) {
             Scaffold(
                 topBar = {
-                    TopAppBar(
-                        title = { Text("Tilo.Compose") },
-                        subtitle = { Text(selectedDemo.subtitle) },
-                        navigationIcon = {
-                            IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
-                                HamburgerIcon()
+                    Surface(shadowElevation = 4.dp) {
+                        TopAppBar(
+                            title = { Text("Tilo.Compose") },
+                            navigationIcon = {
+                                IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                                    HamburgerIcon()
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             ) { innerPadding ->
                 Box(
@@ -391,38 +397,52 @@ private fun BoxScope.WebMercatorXyzExampleMap(
                 style = featureLayerStyle {
                     point {
                         shape = PointShape.Circle
-                        size = 16.0
-                        fill(0xFFE53935)
-                        stroke(0xFFFFFFFF, width = 3.0)
+                        size = 18.dp
+                        fill(0xFF2563EB)
+                        stroke(0xFFFFFFFF, width = 3.75.dp)
                     }
                     line {
-                        stroke(0xFF7E57C2, width = 5.0) {
+                        casing(0xFFFFFFFF, width = 7.dp) {
+                            lineCap = LineCap.Round
+                            lineJoin = LineJoin.Round
+                        }
+                        stroke(0xFF2563EB, width = 3.75.dp) {
                             lineCap = LineCap.Round
                             lineJoin = LineJoin.Round
                         }
                     }
                     polygon {
-                        fill(0x3343A047)
-                        stroke(0xFF2E7D32, width = 3.0) {
+                        fill(0x332563EB)
+                        casing(0xFFFFFFFF, width = 7.dp) {
+                            lineJoin = LineJoin.Round
+                        }
+                        stroke(0xFF2563EB, width = 3.75.dp) {
                             lineJoin = LineJoin.Round
                         }
                     }
-                    label(0xFF111827)
+                    label(mediumLabelStyle())
                     selectedPoint {
                         shape = PointShape.Circle
-                        size = 26.0
+                        size = 26.dp
                         fill(0xFFFFD54F)
-                        stroke(0xFF111827, width = 4.0)
+                        stroke(0xFF111827, width = 4.dp)
                     }
                     selectedLine {
-                        stroke(0xFFFFD54F, width = 9.0) {
+                        casing(0xFFFFFFFF, width = 10.dp) {
+                            lineCap = LineCap.Round
+                            lineJoin = LineJoin.Round
+                        }
+                        stroke(0xFFFFD54F, width = 7.dp) {
                             lineCap = LineCap.Round
                             lineJoin = LineJoin.Round
                         }
                     }
                     selectedPolygon {
                         fill(0x55FFD54F)
-                        stroke(0xFFFFD54F, width = 6.0) {
+                        casing(0xFFFFFFFF, width = 10.dp) {
+                            lineJoin = LineJoin.Round
+                        }
+                        stroke(0xFFFFD54F, width = 7.dp) {
                             lineJoin = LineJoin.Round
                         }
                     }
@@ -534,19 +554,21 @@ private fun Feature.withSavedDrawingStyle(): Feature =
         style = when (geometry) {
             is Point -> pointStyle {
                 shape = PointShape.Circle
-                size = 14.0
+                size = 14.dp
                 fill(0xFF43A047)
-                stroke(0xFF263238, width = 2.0)
+                stroke(0xFF263238, width = 2.dp)
             }
             is LineString -> lineStyle {
-                stroke(0xFF43A047, width = 4.0) {
+                noCasing()
+                stroke(0xFF43A047, width = 4.dp) {
                     lineCap = LineCap.Round
                     lineJoin = LineJoin.Round
                 }
             }
             is Polygon -> polygonStyle {
                 fill(0x5543A047)
-                stroke(0xFF2E7D32, width = 3.0) {
+                noCasing()
+                stroke(0xFF2E7D32, width = 3.dp) {
                     lineJoin = LineJoin.Round
                 }
             }
@@ -573,14 +595,15 @@ private fun buildDashedPolygonLayerFeatures(): List<Feature> {
                 fill(0x3326A69A) {
                     hatch(
                         angleDegrees = 35.0,
-                        spacing = 10.0,
+                        spacing = 10.dp,
                         strokeColor = 0xFF00796B,
-                        strokeWidth = 1.2,
+                        strokeWidth = 1.2.dp,
                     )
                 }
-                stroke(0xFF004D40, width = 3.0) {
+                noCasing()
+                stroke(0xFF004D40, width = 3.dp) {
                     lineJoin = LineJoin.Round
-                    dash(18.0, 8.0)
+                    dash(18.dp, 8.dp)
                 }
             }
         }
@@ -592,13 +615,14 @@ private fun buildDashedPolygonLayerFeatures(): List<Feature> {
             style = polygonStyle {
                 fill(0x33AB47BC) {
                     dots(
-                        spacing = 12.0,
-                        radius = 2.0,
+                        spacing = 12.dp,
+                        radius = 2.dp,
                         color = 0xFF8E24AA,
                     )
                 }
-                stroke(0xFF6A1B9A, width = 2.5) {
-                    dash(12.0, 7.0)
+                noCasing()
+                stroke(0xFF6A1B9A, width = 2.5.dp) {
+                    dash(12.dp, 7.dp)
                 }
             }
         }
@@ -615,7 +639,8 @@ private fun buildFullLineLayerFeatures(): List<Feature> {
     fun FeatureOptions.wave(key: String, strokeArgb: Long) {
         label = key
         style = lineStyle {
-            stroke(strokeArgb, width = 4.0) {
+            noCasing()
+            stroke(strokeArgb, width = 4.dp) {
                 lineCap = LineCap.Round
                 lineJoin = LineJoin.Round
             }
@@ -634,86 +659,176 @@ private fun buildFullLineLayerFeatures(): List<Feature> {
 
 private fun buildMercatorPlaceFeatures(): List<Feature> =
     features {
-        point("prague", 14.4378, 50.0755) {
-            label = "Prague"
+        point("praha", 14.4378, 50.0755) {
+            label = "Praha"
+            labelStyle = extraLargeLabelStyle()
             data = Data(
                 PlaceDetails(
                     name = "Praha",
-                    description = "Hlavni mesto Ceska a vychozi bod XYZ/Web Mercator ukazky.",
+                    description = "Extra large label testovaci bod pro hlavni mesto.",
                 )
             )
-            style = pointStyle {
-                shape = PointShape.Circle
-                size = 16.0
-                fill(0xFFE53935)
-                stroke(0xFFFFFFFF, width = 3.0)
-            }
         }
-        point("brno", 16.6068, 49.1951) {
-            label = "Brno"
+        point("plzen", 13.3776, 49.7384) {
+            label = "Plzeň"
+            labelStyle = largeLabelStyle()
             data = Data(
                 PlaceDetails(
-                    name = "Brno",
-                    description = "Moravske centrum a prakticky test vyberu feature mimo stred mapy.",
+                    name = "Plzeň",
+                    description = "Bodova feature pro ladeni large label stylu a selekce.",
                 )
             )
-            style = pointStyle {
-                shape = PointShape.Square
-                size = 14.0
-                fill(0xFF1E88E5)
-                stroke(0xFFFFFFFF, width = 2.5)
-            }
         }
-        point("ostrava", 18.2625, 49.8209) {
-            label = "Ostrava"
+        point("strakonice", 13.9024, 49.2614) {
+            label = "Strakonice"
             data = Data(
                 PlaceDetails(
-                    name = "Ostrava",
-                    description = "Treti ukazkove mesto s vlastnim payloadem v Feature.data.",
+                    name = "Strakonice",
+                    description = "Bodova feature v EPSG:3857 XYZ ukazce, zadana ve WGS84 souradnicich.",
                 )
             )
-            style = pointStyle {
-                shape = PointShape.Diamond
-                size = 14.0
-                fill(0xFF43A047)
-                stroke(0xFFFFFFFF, width = 2.5)
-            }
+        }
+        point("usti-nad-labem", 14.0407, 50.6607) {
+            label = "Ústí nad Labem"
+            labelStyle = largeLabelStyle()
+            data = Data(
+                PlaceDetails(
+                    name = "Ústí nad Labem",
+                    description = "Large label testovaci bod v severnich Cechach.",
+                )
+            )
+        }
+        point("ceske-budejovice", 14.4743, 48.9757) {
+            label = "České Budějovice"
+            labelStyle = largeLabelStyle()
+            data = Data(
+                PlaceDetails(
+                    name = "České Budějovice",
+                    description = "Large label testovaci bod v jiznich Cechach.",
+                )
+            )
+        }
+        point("tabor", 14.6578, 49.4144) {
+            label = "Tábor"
+            labelStyle = smallLabelStyle()
+            data = Data(
+                PlaceDetails(
+                    name = "Tábor",
+                    description = "Small label testovaci bod mezi Prahou a Ceskymi Budejovicemi.",
+                )
+            )
+        }
+        point("benesov", 14.6869, 49.7816) {
+            label = "Benešov"
+            labelStyle = smallLabelStyle()
+            data = Data(
+                PlaceDetails(
+                    name = "Benešov",
+                    description = "Small label testovaci bod jihovychodne od Prahy.",
+                )
+            )
         }
         line(
-            key = "prague-selection-line",
+            key = "vltava",
             points = listOf(
-                Point(14.3880, 50.0920),
-                Point(14.4170, 50.1060),
-                Point(14.4610, 50.0960),
-                Point(14.4900, 50.0740),
+                Point(14.3150, 48.8120),
+                Point(14.4750, 48.9740),
+                Point(14.4200, 49.2240),
+                Point(14.1650, 49.5050),
+                Point(14.3950, 49.8150),
+                Point(14.4208, 50.0880),
+                Point(14.3120, 50.2400),
+                Point(14.4740, 50.3510),
             ),
         ) {
-            label = "Selection line"
+            label = "Vltava"
+            labelStyle = smallLabelStyle {
+                color(0xFF2563EB)
+                fontStyle = LabelFontStyle.Italic
+                offsetY(-2.dp)
+            }
             data = Data(
                 PlaceDetails(
-                    name = "Praha test line",
-                    description = "Kliknutelna linie v XYZ/Web Mercator ukazce pro overeni line hit-testu.",
+                    name = "Vltava",
+                    description = "Priblizna liniova feature sledujici tok Vltavy pres jizni a stredni Cechy.",
+                )
+            )
+        }
+        line(
+            key = "d1",
+            points = listOf(
+                Point(14.4300, 50.0520),
+                Point(14.7200, 49.8550),
+                Point(15.2350, 49.6840),
+                Point(15.5900, 49.6050),
+                Point(16.6070, 49.1950),
+                Point(17.1150, 49.2140),
+                Point(17.6700, 49.6600),
+                Point(18.2620, 49.8200),
+            ),
+        ) {
+            label = "D1"
+            style = lineStyle {
+                casing(0xFFFFFFFF, width = 7.dp) {
+                    lineCap = LineCap.Round
+                    lineJoin = LineJoin.Round
+                }
+                stroke(0xFFE53935, width = 4.dp) {
+                    lineCap = LineCap.Round
+                    lineJoin = LineJoin.Round
+                }
+            }
+            labelStyle = smallLabelStyle {
+                color(0xFFFFFFFF)
+                noHalo()
+                background(
+                    color = 0xFFE53935,
+                    cornerRadius = 4.dp,
+                    paddingHorizontal = 6.dp,
+                    paddingVertical = 2.dp,
+                )
+                offsetY(4.dp)
+            }
+            data = Data(
+                PlaceDetails(
+                    name = "D1",
+                    description = "Priblizna liniova feature dalnice D1 s testovacim stitkovym labelem.",
                 )
             )
         }
         polygon(
-            key = "prague-selection-polygon",
+            key = "cesky-les",
             rings = listOf(
                 listOf(
-                    Point(14.4050, 50.0600),
-                    Point(14.4550, 50.0580),
-                    Point(14.4720, 50.0370),
-                    Point(14.4250, 50.0280),
-                    Point(14.3920, 50.0420),
-                    Point(14.4050, 50.0600),
+                    Point(12.5100, 49.9200),
+                    Point(12.7800, 49.8600),
+                    Point(12.8700, 49.5600),
+                    Point(12.7600, 49.3000),
+                    Point(12.6100, 49.0600),
+                    Point(12.4100, 49.1800),
+                    Point(12.3600, 49.5200),
+                    Point(12.4100, 49.7600),
+                    Point(12.5100, 49.9200),
                 )
             ),
         ) {
-            label = "Selection polygon"
+            label = "Český les"
+            labelStyle = smallLabelStyle {
+                color(0xFF2E7D32)
+            }
+            style = polygonStyle {
+                fill(0x554CAF50)
+                casing(0xFFFFFFFF, width = 7.dp) {
+                    lineJoin = LineJoin.Round
+                }
+                stroke(0xFF2E7D32, width = 3.75.dp) {
+                    lineJoin = LineJoin.Round
+                }
+            }
             data = Data(
                 PlaceDetails(
-                    name = "Praha test polygon",
-                    description = "Kliknutelny polygon s vlastnim selected stylem pro overeni polygon selekce.",
+                    name = "Český les",
+                    description = "Priblizny zeleny polygon kolem pohori Cesky les pro ladeni polygon stylu.",
                 )
             )
         }

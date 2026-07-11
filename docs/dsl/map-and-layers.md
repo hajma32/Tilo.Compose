@@ -6,6 +6,11 @@
 TiloMap(
     cameraState = cameraState,
     modifier = Modifier.fillMaxSize(),
+    onFeatureSelect = { selections -> /* show app UI */ },
+    selectedFeatures = selectedRefs,
+    attributionContent = defaultAttributionContent(),
+    scaleBarContent = defaultScaleBarContent(),
+    cameraControlsContent = defaultZoomControlsContent(),
 ) {
     wmsTileLayer(ortofoto)
 
@@ -14,6 +19,10 @@ TiloMap(
     }
 }
 ```
+
+The `TiloMap` content block is only for layers. Default UI is injected through
+content slots so applications can use the provided overlays or replace them with
+their own composables.
 
 ## Camera State
 
@@ -28,6 +37,14 @@ val cameraState = rememberMapCameraState(
 ```
 
 Coordinates are expressed in the selected map projection.
+
+Camera state also exposes programmatic zoom helpers:
+
+```kotlin
+cameraState.zoomIn()
+cameraState.zoomOut()
+cameraState.zoomBy(delta = 0.5)
+```
 
 ## Raster Layers
 
@@ -47,9 +64,24 @@ TiloMap(cameraState) {
     xyzTileLayer(
         id = "osm",
         urlTemplate = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attribution = attribution(
+            label = "(c) OpenStreetMap contributors",
+            url = "https://www.openstreetmap.org/copyright",
+        ),
     )
 }
 ```
+
+Useful `xyzTileLayer` options:
+
+- `zIndex`
+- `projection`
+- `grid`
+- `tms`
+- `maxVisibleTiles`
+- `prefetchMargin`
+- `attribution`
+- `attributions`
 
 Use `tileStoreLayer(...)` for local or app-owned tile stores. The tile reader is
 provided by the application so platform-specific SQLite access and custom
@@ -68,6 +100,7 @@ TiloMap(cameraState) {
         projection = sjtsk(),
         grid = krovakGrid,
         readTile = offlineTiles::readTile,
+        scheme = TileRowScheme.TMS,
     )
 }
 ```
@@ -79,6 +112,8 @@ must match the map projection.
 helper will be added when Tilo.Compose ships a bundled MBTiles reader.
 
 Advanced code can add pre-built raster layers with `rasterLayer(layer)`.
+`tileLayer(layer)` and `tileLayer(wmsState)` are aliases for raster layer
+integration.
 
 ## Feature Layers
 
@@ -88,6 +123,13 @@ Use `featureLayer` for in-memory vector features:
 featureLayer("roads", roads) {
     projection = wgs84()
     renderMode = cachedBitmap()
+    style = featureLayerStyle {
+        line {
+            casing(0xFFFFFFFF, width = 7.dp)
+            stroke(0xFF2563EB, width = 4.dp)
+        }
+        label(mediumLabelStyle())
+    }
 }
 ```
 
@@ -98,6 +140,40 @@ projection, Tilo.Compose uses the map transformation registry.
 
 - `immediate()` draws features directly.
 - `cachedBitmap()` renders heavier layers into a reusable bitmap.
+
+Feature selection is first class. `onFeatureSelect` receives all features hit by
+a tap, in draw order. Pass `selectedFeatures` back to the map to render selected
+styles:
+
+```kotlin
+TiloMap(
+    cameraState = cameraState,
+    onFeatureSelect = { hits -> selectedRefs = hits.map { it.ref }.toSet() },
+    selectedFeatures = selectedRefs,
+) {
+    featureLayer("places", places)
+}
+```
+
+## Attribution And Default UI
+
+Layers can carry one or more attribution records. `attribution(...)` is a small
+helper for the common single-attribution case:
+
+```kotlin
+xyzTileLayer(
+    id = "osm",
+    urlTemplate = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution = attribution(
+        label = "(c) OpenStreetMap contributors",
+        url = "https://www.openstreetmap.org/copyright",
+    ),
+)
+```
+
+Use `defaultAttributionContent()`, `defaultScaleBarContent()`, and
+`defaultZoomControlsContent()` from `tilo.compose.ui` to opt into the default
+overlays.
 
 ## Custom Layers
 

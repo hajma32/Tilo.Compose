@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -14,6 +15,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import tilo.compose.render.backend.ComposeCanvasRenderBackend
 import tilo.compose.render.backend.RenderBackend
 import tilo.compose.render.backend.RenderScene
@@ -76,6 +79,19 @@ fun MapRenderer(
     val currentVectorCacheKeys = vectorLayers.associate { layer ->
         layer.id to layer.cacheKey(selectedFeatures.keysForLayer(layer.id))
     }
+    val renderLoopInput by rememberUpdatedState(
+        RenderLoopInput(
+            sortedLayers = sortedLayers,
+            tileLayers = tileLayers,
+            vectorLayers = vectorLayers,
+            currentVectorCacheKeys = currentVectorCacheKeys,
+            density = density,
+            layoutDirection = layoutDirection,
+            selectedFeatures = selectedFeatures,
+            tileDecoder = tileDecoder,
+            backend = backend,
+        )
+    )
 
     var redrawVersion by remember { mutableStateOf(0) }
     var scene by remember { mutableStateOf(RenderScene.Empty) }
@@ -133,14 +149,15 @@ fun MapRenderer(
 
     LaunchedEffect(sortedLayers) {
         renderRequests.collectLatest { renderMap ->
+            val input = renderLoopInput
             supervisorScope {
                 var tilesByLayer: Map<String, List<Tile>> = emptyMap()
                 var decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap()
                 var commandsByLayer: Map<String, List<RenderCommand>> =
-                    lastVectorCommandsByLayer.validCommandsFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+                    lastVectorCommandsByLayer.validCommandsFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
                 var vectorBitmapsByLayer: Map<String, VectorBitmapRenderSceneLayer> =
-                    lastVectorBitmapsByLayer.validFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
-                val placeholderFrame = rasterPipeline.buildPlaceholderFrame(tileLayers, renderMap)
+                    lastVectorBitmapsByLayer.validFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+                val placeholderFrame = rasterPipeline.buildPlaceholderFrame(input.tileLayers, renderMap)
 
                 fun publishScene() {
                     val displayRasterFrame = mergeRasterFrames(
@@ -152,14 +169,14 @@ fun MapRenderer(
                         ),
                     )
                     val nextScene = RenderSceneBuilder.build(
-                        layers = sortedLayers,
+                        layers = input.sortedLayers,
                         tilesByLayer = displayRasterFrame.tilesByLayer,
                         commandsByLayer = commandsByLayer,
                         vectorBitmapsByLayer = vectorBitmapsByLayer,
                         decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
                     )
                     scene = nextScene
-                    backend.onScene(nextScene)
+                    input.backend.onScene(nextScene)
                 }
 
                 publishScene()
@@ -167,11 +184,11 @@ fun MapRenderer(
                 launch {
                     runRenderBranch {
                         val vectorFrame = vectorPipeline.buildFrame(
-                            vectorLayers = vectorLayers,
+                            vectorLayers = input.vectorLayers,
                             map = renderMap,
-                            density = density,
-                            layoutDirection = layoutDirection,
-                            selectedFeatures = selectedFeatures,
+                            density = input.density,
+                            layoutDirection = input.layoutDirection,
+                            selectedFeatures = input.selectedFeatures,
                         )
                         commandsByLayer = vectorFrame.commandsByLayer
                         vectorBitmapsByLayer = vectorFrame.bitmapLayersByLayer
@@ -185,9 +202,9 @@ fun MapRenderer(
                 launch {
                     runRenderBranch {
                         val rasterFrame = rasterPipeline.buildVisibleFrame(
-                            tileLayers = tileLayers,
+                            tileLayers = input.tileLayers,
                             map = renderMap,
-                            tileDecoder = tileDecoder,
+                            tileDecoder = input.tileDecoder,
                         )
                         tilesByLayer = rasterFrame.tilesByLayer
                         decodedImagesByLayer = rasterFrame.decodedImagesByLayer
@@ -201,7 +218,7 @@ fun MapRenderer(
 
                 launch {
                     runRenderBranch {
-                        rasterPipeline.prefetch(tileLayers, renderMap)
+                        rasterPipeline.prefetch(input.tileLayers, renderMap)
                     }
                 }
             }
@@ -251,6 +268,18 @@ fun MapRenderer(
         labelBitmapCache = labelBitmapCache,
     )
 }
+
+private data class RenderLoopInput(
+    val sortedLayers: List<Layer>,
+    val tileLayers: List<TileLayer>,
+    val vectorLayers: List<VectorLayer>,
+    val currentVectorCacheKeys: Map<String, VectorLayerCacheKey>,
+    val density: Density,
+    val layoutDirection: LayoutDirection,
+    val selectedFeatures: Set<FeatureSelectionRef>,
+    val tileDecoder: (ByteArray) -> ImageBitmap?,
+    val backend: RenderBackend,
+)
 
 private fun sortedLayersKey(layers: List<Layer>): String =
     layers.sortedWith(compareBy(Layer::zIndex)).joinToString(separator = "|") { layer -> "${layer.id}:${layer.zIndex}" }

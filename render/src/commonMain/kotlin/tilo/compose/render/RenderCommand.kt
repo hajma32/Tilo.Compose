@@ -1,6 +1,7 @@
 package tilo.compose.render
 
 import tilo.compose.core.feature.ColorValue
+import tilo.compose.core.feature.LabelStyle
 import tilo.compose.core.feature.LineStyle
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.PolygonStyle
@@ -32,5 +33,9 @@ data class RenderLabel(
     override val id: String,
     val text: String,
     val anchor: Point,
-    val textColor: ColorValue = ColorValue.Black,
+    val style: LabelStyle = LabelStyle(color = ColorValue.Black),
+    val labelPriority: Int? = null,
+    val selected: Boolean = false,
+    val rotationDegrees: Double = 0.0,
+    val followsLine: Boolean = false,
 ) : RenderCommand

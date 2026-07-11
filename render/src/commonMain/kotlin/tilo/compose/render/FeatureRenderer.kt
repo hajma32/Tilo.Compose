@@ -2,7 +2,6 @@ package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -10,9 +9,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.text.TextMeasurer
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import tilo.compose.core.feature.DashPattern
 import tilo.compose.core.feature.FillPattern
 import tilo.compose.core.feature.FillStyle
@@ -28,28 +24,10 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-private const val LABEL_VERTICAL_PADDING_PX = 8f
-
 /**
- * Draws simple vector render commands onto the canvas.
+ * Draws vector geometry commands onto the canvas. Labels are handled by
+ * [LabelLayoutEngine] after all scene layers have contributed their labels.
  */
-internal fun DrawScope.drawFeatures(
-    commands: List<RenderCommand>,
-    map: Map,
-    offscreenLabelDrawScope: CanvasDrawScope,
-    textMeasurer: TextMeasurer,
-    labelBitmapCache: LabelBitmapCache,
-) {
-    commands.forEach { command ->
-        when (command) {
-            is RenderPoint -> drawPoint(command, map)
-            is RenderLineString -> drawLineString(command, map)
-            is RenderPolygon -> drawPolygon(command, map)
-            is RenderLabel -> drawLabel(command, map, offscreenLabelDrawScope, textMeasurer, labelBitmapCache)
-        }
-    }
-}
-
 internal fun DrawScope.drawFeatureGeometry(
     commands: List<RenderCommand>,
     map: Map,
@@ -67,7 +45,7 @@ internal fun DrawScope.drawFeatureGeometry(
 private fun DrawScope.drawPoint(command: RenderPoint, map: Map) {
     val screenPoint = map.worldToScreen(command.point)
     val center = Offset(screenPoint.x.toFloat(), screenPoint.y.toFloat())
-    val size = command.style.size.toFloat().coerceAtLeast(1f)
+    val size = styleUnitToPx(command.style.size).coerceAtLeast(1f)
 
     // TODO: render command.style.icon once icon sources and caching are part of the public API.
     command.style.fill?.let { fill ->
@@ -80,10 +58,18 @@ private fun DrawScope.drawPoint(command: RenderPoint, map: Map) {
 
 private fun DrawScope.drawLineString(command: RenderLineString, map: Map) {
     if (command.points.size < 2) return
+    val path = command.points.toOpenPath(map)
+    command.style.casing?.let { casing ->
+        drawPath(
+            path = path,
+            color = casing.color.toColor(casing.opacity),
+            style = toComposeStroke(casing)
+        )
+    }
     drawPath(
-        path = command.points.toOpenPath(map),
+        path = path,
         color = command.style.stroke.color.toColor(command.style.stroke.opacity),
-        style = command.style.stroke.toComposeStroke()
+        style = toComposeStroke(command.style.stroke)
     )
 }
 
@@ -98,11 +84,19 @@ private fun DrawScope.drawPolygon(command: RenderPolygon, map: Map) {
         }
     }
 
+    command.style.casing?.let { casing ->
+        drawPath(
+            path = path,
+            color = casing.color.toColor(casing.opacity),
+            style = toComposeStroke(casing)
+        )
+    }
+
     command.style.stroke?.let { stroke ->
         drawPath(
             path = path,
             color = stroke.color.toColor(stroke.opacity),
-            style = stroke.toComposeStroke()
+            style = toComposeStroke(stroke)
         )
     }
 }
@@ -118,7 +112,7 @@ private fun DrawScope.drawPointFill(shape: PointShape, center: Offset, size: Flo
 }
 
 private fun DrawScope.drawPointStroke(shape: PointShape, center: Offset, size: Float, stroke: StrokeStyle) {
-    val style = stroke.toComposeStroke()
+    val style = toComposeStroke(stroke)
     val color = stroke.color.toColor(stroke.opacity)
     val path = pointPath(shape, center, size)
     if (path != null) {
@@ -213,7 +207,7 @@ private fun DrawScope.drawFillPattern(
 }
 
 private fun DrawScope.drawHatchPattern(pattern: FillPattern.Hatch, bounds: ScreenBounds) {
-    val spacing = pattern.spacing.toFloat().coerceAtLeast(1f)
+    val spacing = styleUnitToPx(pattern.spacing).coerceAtLeast(1f)
     val angle = (pattern.angleDegrees / 180.0 * PI).toFloat()
     val dx = cos(angle)
     val dy = sin(angle)
@@ -228,23 +222,24 @@ private fun DrawScope.drawHatchPattern(pattern: FillPattern.Hatch, bounds: Scree
             color = pattern.stroke.color.toColor(pattern.stroke.opacity),
             start = Offset(cx - dx * diagonal, cy - dy * diagonal),
             end = Offset(cx + dx * diagonal, cy + dy * diagonal),
-            strokeWidth = pattern.stroke.width.toFloat(),
+            strokeWidth = styleUnitToPx(pattern.stroke.width),
             cap = pattern.stroke.lineCap.toComposeCap(),
-            pathEffect = pattern.stroke.dash.toPathEffect(),
+            pathEffect = toPathEffect(pattern.stroke.dash),
         )
         offset += spacing
     }
 }
 
 private fun DrawScope.drawDotsPattern(pattern: FillPattern.Dots, bounds: ScreenBounds) {
-    val spacing = pattern.spacing.toFloat().coerceAtLeast(1f)
+    val spacing = styleUnitToPx(pattern.spacing).coerceAtLeast(1f)
+    val radius = styleUnitToPx(pattern.radius).coerceAtLeast(0.5f)
     var y = bounds.top
     while (y <= bounds.bottom) {
         var x = bounds.left
         while (x <= bounds.right) {
             drawCircle(
                 color = pattern.color.toColor(),
-                radius = pattern.radius.toFloat(),
+                radius = radius,
                 center = Offset(x, y)
             )
             x += spacing
@@ -253,12 +248,12 @@ private fun DrawScope.drawDotsPattern(pattern: FillPattern.Dots, bounds: ScreenB
     }
 }
 
-private fun StrokeStyle.toComposeStroke(): Stroke =
+private fun DrawScope.toComposeStroke(stroke: StrokeStyle): Stroke =
     Stroke(
-        width = width.toFloat(),
-        cap = lineCap.toComposeCap(),
-        join = lineJoin.toComposeJoin(),
-        pathEffect = dash.toPathEffect(),
+        width = styleUnitToPx(stroke.width),
+        cap = stroke.lineCap.toComposeCap(),
+        join = stroke.lineJoin.toComposeJoin(),
+        pathEffect = toPathEffect(stroke.dash),
     )
 
 private fun LineCap.toComposeCap(): StrokeCap =
@@ -275,11 +270,11 @@ private fun LineJoin.toComposeJoin(): StrokeJoin =
         LineJoin.Bevel -> StrokeJoin.Bevel
     }
 
-private fun DashPattern?.toPathEffect(): PathEffect? {
-    this ?: return null
-    val validIntervals = intervals.map { it.toFloat().coerceAtLeast(0.1f) }
+private fun DrawScope.toPathEffect(dash: DashPattern?): PathEffect? {
+    dash ?: return null
+    val validIntervals = dash.intervals.map { styleUnitToPx(it).coerceAtLeast(0.1f) }
     if (validIntervals.size < 2) return null
-    return PathEffect.dashPathEffect(validIntervals.toFloatArray(), phase.toFloat())
+    return PathEffect.dashPathEffect(validIntervals.toFloatArray(), styleUnitToPx(dash.phase))
 }
 
 private fun List<List<tilo.compose.core.geometry.Point>>.screenBounds(map: Map): ScreenBounds {
@@ -297,40 +292,4 @@ private fun List<List<tilo.compose.core.geometry.Point>>.screenBounds(map: Map):
         }
     }
     return ScreenBounds(left = left, top = top, right = right, bottom = bottom)
-}
-
-private data class ScreenBounds(
-    val left: Float,
-    val top: Float,
-    val right: Float,
-    val bottom: Float,
-) {
-    val width: Float = right - left
-    val height: Float = bottom - top
-    val center: Offset = Offset((left + right) / 2f, (top + bottom) / 2f)
-}
-
-private fun DrawScope.drawLabel(
-    command: RenderLabel,
-    map: Map,
-    offscreenDrawScope: CanvasDrawScope,
-    textMeasurer: TextMeasurer,
-    labelBitmapCache: LabelBitmapCache,
-) {
-    val anchor = map.worldToScreen(command.anchor)
-    val bitmap = this.cachedLabelBitmap(
-        text = command.text,
-        textColor = command.textColor.toColor(),
-        textMeasurer = textMeasurer,
-        offscreenDrawScope = offscreenDrawScope,
-        cache = labelBitmapCache,
-    )
-    drawImage(
-        image = bitmap,
-        dstOffset = IntOffset(
-            x = (anchor.x.toFloat() - bitmap.width / 2f).toInt(),
-            y = (anchor.y.toFloat() + LABEL_VERTICAL_PADDING_PX).toInt()
-        ),
-        dstSize = IntSize(bitmap.width, bitmap.height)
-    )
 }

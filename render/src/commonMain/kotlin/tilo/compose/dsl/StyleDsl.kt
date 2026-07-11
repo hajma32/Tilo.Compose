@@ -1,10 +1,17 @@
 package tilo.compose.dsl
 
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.DashPattern
 import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.feature.FillPattern
 import tilo.compose.core.feature.FillStyle
+import tilo.compose.core.feature.LabelBackgroundStyle
+import tilo.compose.core.feature.LabelFontStyle
+import tilo.compose.core.feature.LabelFontWeight
 import tilo.compose.core.feature.LabelStyle
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
@@ -40,6 +47,36 @@ fun polygonStyle(block: PolygonStyleBuilder.() -> Unit = {}): PolygonStyle =
     PolygonStyleBuilder().apply(block).build()
 
 /**
+ * Builds style for feature labels.
+ */
+fun labelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
+    LabelStyleBuilder().apply(block).build()
+
+/**
+ * Small label preset for low-priority local names and dense overlays.
+ */
+fun smallLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
+    LabelStyleBuilder(fontSize = 10.sp, haloWidth = 2.5.dp, offsetY = 10.dp).apply(block).build()
+
+/**
+ * Default readable label preset for ordinary feature labels.
+ */
+fun mediumLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
+    LabelStyleBuilder(fontSize = 12.sp, haloWidth = 3.dp, offsetY = 12.dp).apply(block).build()
+
+/**
+ * Large label preset for prominent places or important user features.
+ */
+fun largeLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
+    LabelStyleBuilder(fontSize = 15.sp, haloWidth = 3.5.dp, offsetY = 14.dp).apply(block).build()
+
+/**
+ * Extra-large label preset for the most important labels in a viewport.
+ */
+fun extraLargeLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
+    LabelStyleBuilder(fontSize = 19.sp, haloWidth = 4.dp, offsetY = 16.dp).apply(block).build()
+
+/**
  * Builds a layer-level style object with defaults for every vector geometry
  * type and its selected state.
  */
@@ -68,8 +105,12 @@ class FeatureLayerStyleBuilder {
         polygon = polygonStyle(block)
     }
 
-    fun label(color: Long = 0xFF111827) {
-        label = LabelStyle(color = argb(color))
+    fun label(color: Long = 0xFF111827, block: LabelStyleBuilder.() -> Unit = {}) {
+        label = LabelStyleBuilder(color = argb(color)).apply(block).build()
+    }
+
+    fun label(style: LabelStyle) {
+        label = style
     }
 
     fun selectedPoint(block: PointStyleBuilder.() -> Unit) {
@@ -84,8 +125,12 @@ class FeatureLayerStyleBuilder {
         selectedPolygon = polygonStyle(block)
     }
 
-    fun selectedLabel(color: Long = 0xFF111827) {
-        selectedLabel = LabelStyle(color = argb(color))
+    fun selectedLabel(color: Long = 0xFF111827, block: LabelStyleBuilder.() -> Unit = {}) {
+        selectedLabel = LabelStyleBuilder(color = argb(color)).apply(block).build()
+    }
+
+    fun selectedLabel(style: LabelStyle) {
+        selectedLabel = style
     }
 
     internal fun build(): FeatureLayerStyle =
@@ -102,15 +147,106 @@ class FeatureLayerStyleBuilder {
 }
 
 /**
+ * Style builder used by [labelStyle] and label preset helpers.
+ */
+class LabelStyleBuilder internal constructor(
+    private var color: ColorValue = ColorValue.Black,
+    private var fontSize: TextUnit = 12.sp,
+    private var haloColor: ColorValue = ColorValue.White,
+    private var haloWidth: Dp = 3.dp,
+    private var background: LabelBackgroundStyle? = null,
+    private var bitmapPadding: Dp = 2.dp,
+    private var offsetY: Dp = 12.dp,
+) {
+    var fontWeight: LabelFontWeight = LabelFontWeight.Bold
+    var fontStyle: LabelFontStyle = LabelFontStyle.Normal
+
+    fun color(value: Long) {
+        color = argb(value)
+    }
+
+    fun fontSize(value: TextUnit) {
+        fontSize = value
+    }
+
+    fun fontSize(value: Double) {
+        fontSize = value.sp
+    }
+
+    fun fontWeight(value: LabelFontWeight) {
+        fontWeight = value
+    }
+
+    fun fontStyle(value: LabelFontStyle) {
+        fontStyle = value
+    }
+
+    fun halo(color: Long = 0xFFFFFFFF, width: Dp = 3.dp) {
+        haloColor = argb(color)
+        haloWidth = width
+    }
+
+    fun halo(color: Long = 0xFFFFFFFF, width: Double) {
+        haloColor = argb(color)
+        haloWidth = width.dp
+    }
+
+    fun noHalo() {
+        haloWidth = 0.dp
+    }
+
+    fun background(
+        color: Long,
+        opacity: Double = 1.0,
+        cornerRadius: Dp = 4.dp,
+        paddingHorizontal: Dp = 5.dp,
+        paddingVertical: Dp = 2.dp,
+    ) {
+        background = LabelBackgroundStyle(
+            color = argb(color),
+            opacity = opacity,
+            cornerRadius = cornerRadius.toStyleUnit(),
+            paddingHorizontal = paddingHorizontal.toStyleUnit(),
+            paddingVertical = paddingVertical.toStyleUnit(),
+        )
+    }
+
+    fun noBackground() {
+        background = null
+    }
+
+    fun bitmapPadding(value: Dp) {
+        bitmapPadding = value
+    }
+
+    fun offsetY(value: Dp) {
+        offsetY = value
+    }
+
+    internal fun build(): LabelStyle =
+        LabelStyle(
+            color = color,
+            fontSize = fontSize.value.toDouble(),
+            fontWeight = fontWeight,
+            fontStyle = fontStyle,
+            haloColor = haloColor,
+            haloWidth = haloWidth.toStyleUnit(),
+            background = background,
+            bitmapPadding = bitmapPadding.toStyleUnit(),
+            offsetY = offsetY.toStyleUnit(),
+        )
+}
+
+/**
  * Style builder used by [pointStyle].
  */
 class PointStyleBuilder {
     var shape: PointShape = PointShape.Circle
-    var size: Double = 10.0
+    var size: Dp = 14.dp
     var icon: PointIcon? = null
 
     private var fill: FillStyle? = FillStyle(color = ColorValue.Blue)
-    private var stroke: StrokeStyle? = StrokeStyle(color = ColorValue.White, width = 2.0)
+    private var stroke: StrokeStyle? = StrokeStyle(color = ColorValue.White, width = 2.5)
 
     fun fill(color: Long, opacity: Double = 1.0, block: FillStyleBuilder.() -> Unit = {}) {
         fill = FillStyleBuilder(argb(color), opacity).apply(block).build()
@@ -122,7 +258,16 @@ class PointStyleBuilder {
 
     fun stroke(
         color: Long,
-        width: Double = 1.0,
+        width: Dp = 1.dp,
+        opacity: Double = 1.0,
+        block: StrokeStyleBuilder.() -> Unit = {},
+    ) {
+        stroke = StrokeStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
+    }
+
+    fun stroke(
+        color: Long,
+        width: Double,
         opacity: Double = 1.0,
         block: StrokeStyleBuilder.() -> Unit = {},
     ) {
@@ -136,7 +281,7 @@ class PointStyleBuilder {
     internal fun build(): PointStyle =
         PointStyle(
             shape = shape,
-            size = size,
+            size = size.toStyleUnit(),
             fill = fill,
             stroke = stroke,
             icon = icon,
@@ -147,19 +292,61 @@ class PointStyleBuilder {
  * Style builder used by [lineStyle].
  */
 class LineStyleBuilder {
-    private var stroke: StrokeStyle = StrokeStyle(color = ColorValue.Blue, width = 2.0)
+    private var casing: StrokeStyle? = StrokeStyle(
+        color = ColorValue.White,
+        width = 6.0,
+        lineCap = LineCap.Round,
+        lineJoin = LineJoin.Round,
+    )
+    private var stroke: StrokeStyle = StrokeStyle(
+        color = ColorValue.Blue,
+        width = 3.0,
+        lineCap = LineCap.Round,
+        lineJoin = LineJoin.Round,
+    )
 
     fun stroke(
         color: Long,
-        width: Double = 1.0,
+        width: Dp = 1.dp,
+        opacity: Double = 1.0,
+        block: StrokeStyleBuilder.() -> Unit = {},
+    ) {
+        stroke = StrokeStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
+    }
+
+    fun stroke(
+        color: Long,
+        width: Double,
         opacity: Double = 1.0,
         block: StrokeStyleBuilder.() -> Unit = {},
     ) {
         stroke = StrokeStyleBuilder(argb(color), width, opacity).apply(block).build()
     }
 
+    fun casing(
+        color: Long,
+        width: Dp = 6.dp,
+        opacity: Double = 1.0,
+        block: StrokeStyleBuilder.() -> Unit = {},
+    ) {
+        casing = StrokeStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
+    }
+
+    fun casing(
+        color: Long,
+        width: Double,
+        opacity: Double = 1.0,
+        block: StrokeStyleBuilder.() -> Unit = {},
+    ) {
+        casing = StrokeStyleBuilder(argb(color), width, opacity).apply(block).build()
+    }
+
+    fun noCasing() {
+        casing = null
+    }
+
     internal fun build(): LineStyle =
-        LineStyle(stroke = stroke)
+        LineStyle(casing = casing, stroke = stroke)
 }
 
 /**
@@ -167,7 +354,16 @@ class LineStyleBuilder {
  */
 class PolygonStyleBuilder {
     private var fill: FillStyle? = FillStyle(color = argb(0x331E88E5))
-    private var stroke: StrokeStyle? = StrokeStyle(color = ColorValue.Blue, width = 1.5)
+    private var casing: StrokeStyle? = StrokeStyle(
+        color = ColorValue.White,
+        width = 5.0,
+        lineJoin = LineJoin.Round,
+    )
+    private var stroke: StrokeStyle? = StrokeStyle(
+        color = ColorValue.Blue,
+        width = 2.0,
+        lineJoin = LineJoin.Round,
+    )
 
     fun fill(color: Long, opacity: Double = 1.0, block: FillStyleBuilder.() -> Unit = {}) {
         fill = FillStyleBuilder(argb(color), opacity).apply(block).build()
@@ -177,9 +373,40 @@ class PolygonStyleBuilder {
         fill = null
     }
 
+    fun casing(
+        color: Long,
+        width: Dp = 5.dp,
+        opacity: Double = 1.0,
+        block: StrokeStyleBuilder.() -> Unit = {},
+    ) {
+        casing = StrokeStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
+    }
+
+    fun casing(
+        color: Long,
+        width: Double,
+        opacity: Double = 1.0,
+        block: StrokeStyleBuilder.() -> Unit = {},
+    ) {
+        casing = StrokeStyleBuilder(argb(color), width, opacity).apply(block).build()
+    }
+
+    fun noCasing() {
+        casing = null
+    }
+
     fun stroke(
         color: Long,
-        width: Double = 1.0,
+        width: Dp = 1.dp,
+        opacity: Double = 1.0,
+        block: StrokeStyleBuilder.() -> Unit = {},
+    ) {
+        stroke = StrokeStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
+    }
+
+    fun stroke(
+        color: Long,
+        width: Double,
         opacity: Double = 1.0,
         block: StrokeStyleBuilder.() -> Unit = {},
     ) {
@@ -191,7 +418,7 @@ class PolygonStyleBuilder {
     }
 
     internal fun build(): PolygonStyle =
-        PolygonStyle(fill = fill, stroke = stroke)
+        PolygonStyle(fill = fill, casing = casing, stroke = stroke)
 }
 
 /**
@@ -205,7 +432,20 @@ class FillStyleBuilder internal constructor(
 
     fun hatch(
         angleDegrees: Double = 45.0,
-        spacing: Double = 8.0,
+        spacing: Dp = 8.dp,
+        strokeColor: Long = 0xFF111827,
+        strokeWidth: Dp = 1.dp,
+    ) {
+        pattern = FillPattern.Hatch(
+            angleDegrees = angleDegrees,
+            spacing = spacing.toStyleUnit(),
+            stroke = StrokeStyle(color = argb(strokeColor), width = strokeWidth.toStyleUnit()),
+        )
+    }
+
+    fun hatch(
+        angleDegrees: Double = 45.0,
+        spacing: Double,
         strokeColor: Long = 0xFF111827,
         strokeWidth: Double = 1.0,
     ) {
@@ -217,7 +457,19 @@ class FillStyleBuilder internal constructor(
     }
 
     fun dots(
-        spacing: Double = 8.0,
+        spacing: Dp = 8.dp,
+        radius: Dp = 1.5.dp,
+        color: Long = 0xFF111827,
+    ) {
+        pattern = FillPattern.Dots(
+            spacing = spacing.toStyleUnit(),
+            radius = radius.toStyleUnit(),
+            color = argb(color),
+        )
+    }
+
+    fun dots(
+        spacing: Double,
         radius: Double = 1.5,
         color: Long = 0xFF111827,
     ) {
@@ -244,6 +496,25 @@ class StrokeStyleBuilder internal constructor(
     var lineJoin: LineJoin = LineJoin.Miter
     private var dash: DashPattern? = null
 
+    fun dash(first: Dp, second: Dp, phase: Dp = 0.dp) {
+        dash = DashPattern(
+            intervals = listOf(first.toStyleUnit(), second.toStyleUnit()),
+            phase = phase.toStyleUnit(),
+        )
+    }
+
+    fun dash(first: Dp, second: Dp, third: Dp, fourth: Dp, phase: Dp = 0.dp) {
+        dash = DashPattern(
+            intervals = listOf(
+                first.toStyleUnit(),
+                second.toStyleUnit(),
+                third.toStyleUnit(),
+                fourth.toStyleUnit(),
+            ),
+            phase = phase.toStyleUnit(),
+        )
+    }
+
     fun dash(vararg intervals: Double, phase: Double = 0.0) {
         dash = DashPattern(intervals.toList(), phase)
     }
@@ -258,3 +529,5 @@ class StrokeStyleBuilder internal constructor(
             dash = dash,
         )
 }
+
+private fun Dp.toStyleUnit(): Double = value.toDouble()

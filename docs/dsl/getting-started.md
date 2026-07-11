@@ -17,7 +17,12 @@ val ortofoto = rememberWMSLayer(
     format = "image/jpeg",
 )
 
-TiloMap(cameraState = cameraState) {
+TiloMap(
+    cameraState = cameraState,
+    attributionContent = defaultAttributionContent(),
+    scaleBarContent = defaultScaleBarContent(),
+    cameraControlsContent = defaultZoomControlsContent(),
+) {
     wmsTileLayer(ortofoto)
 }
 ```
@@ -27,9 +32,10 @@ The important pieces are:
 - `rememberMapCameraState(...)` owns the visible map position and projection.
 - `rememberWMSLayer(...)` loads WMS capabilities and creates a tile layer state.
 - `TiloMap { ... }` declares the visible layers.
+- Optional UI slots add attribution, scale bar, and zoom controls without making
+  them mandatory.
 - `sjtsk()`, `wgs84()`, and `webMercator()` keep CRS usage readable.
 
 Tilo.Compose is not limited to Web Mercator. The current showcase focuses on
 maps in Czech S-JTSK / Krovak (`EPSG:5514`), with vector features transformed
 from WGS84 where needed.
-

@@ -9,6 +9,7 @@ val ortofoto = rememberWMSLayer(
     layerName = "0",
     projection = sjtsk(),
     format = "image/jpeg",
+    attribution = attribution("(c) CUZK"),
 )
 ```
 
@@ -30,6 +31,22 @@ Useful state:
 ortofoto.isLoading
 ortofoto.error
 ```
+
+`rememberWMSLayer` accepts:
+
+- `id`
+- `capabilitiesUrl`
+- `layerName`
+- `projection`
+- `styles`
+- `format`
+- `getMapVersion`
+- `zIndex`
+- `tileSize`
+- `maxVisibleTiles`
+- `prefetchMargin`
+- `attribution`
+- `attributions`
 
 The internal tile layer is intentionally hidden. In normal application code,
 pass the state to `wmsTileLayer(...)` instead of manually assembling raster

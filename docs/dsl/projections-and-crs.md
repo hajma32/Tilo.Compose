@@ -8,6 +8,7 @@ The DSL provides human-readable projection helpers:
 wgs84()
 webMercator()
 sjtsk()
+epsg5514()
 identityProjection()
 ```
 
@@ -18,6 +19,7 @@ Current helpers map to:
 | `wgs84()` | EPSG:4326 |
 | `webMercator()` | EPSG:3857 |
 | `sjtsk()` | EPSG:5514, S-JTSK / Krovak East North |
+| `epsg5514()` | Explicit alias for `sjtsk()` |
 | `identityProjection()` | Cartesian identity coordinates |
 
 ## Map Projection
@@ -70,7 +72,7 @@ TiloMap(cameraState) {
 ```
 
 For custom raster matrices, describe the tile matrix explicitly with
-`tileGrid(...)` or provide a custom `TileLayer`.
+`webMercatorTileGrid()` or `tileGrid(...)`, or provide a custom `TileLayer`.
 
 ## Transformations
 

@@ -9,9 +9,7 @@ import tilo.compose.core.selection.FeatureHitTester as CoreFeatureHitTester
 import tilo.compose.core.selection.FeatureSelection
 import tilo.compose.core.geometry.Point
 
-internal class FeatureHitTester(
-    private val coreHitTester: CoreFeatureHitTester = CoreFeatureHitTester(),
-) {
+internal class FeatureHitTester {
     fun hitTest(
         map: Map,
         layers: List<VectorLayer>,
@@ -35,7 +33,7 @@ internal class FeatureHitTester(
                 )
             }
 
-        return coreHitTester.hitTest(
+        return CoreFeatureHitTester(styleScale = map.viewport.pixelRatio).hitTest(
             layers = hitTestLayers,
             screenPoint = screenPoint,
             worldPoint = worldPoint,

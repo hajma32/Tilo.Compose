@@ -10,13 +10,20 @@ import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.LayerSink
+import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileLayer
+import tilo.compose.core.layers.raster.TileRowScheme
+import tilo.compose.core.layers.raster.TileStoreTileSource
+import tilo.compose.core.layers.raster.XYZTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
+import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.projection.Projection
+import tilo.compose.core.tile.TileCoordinate
+import tilo.compose.core.tile.TileGrid
 
 typealias FeatureRenderMode = VectorRenderStrategy
 
@@ -83,6 +90,71 @@ class MapLayerBuilder : LayerSink {
      */
     fun wmsTileLayer(state: WMSLayerState) {
         rasterLayer(state.layer)
+    }
+
+    /**
+     * Adds a URL-template raster layer using `{z}`, `{x}`, `{y}` placeholders.
+     *
+     * Web Mercator is the default because that is what public XYZ slippy-map
+     * services normally use. Pass [projection] and [grid] for custom grids.
+     */
+    fun xyzTileLayer(
+        id: String,
+        urlTemplate: String,
+        zIndex: Int = 0,
+        projection: Projection = Epsg3857Projection,
+        grid: TileGrid = TileGrid.defaultFor(projection),
+        tms: Boolean = false,
+        maxVisibleTiles: Int = 9,
+        prefetchMargin: Int = 1,
+    ) {
+        layer(
+            XYZTileLayer(
+                id = id,
+                projection = projection,
+                grid = grid,
+                urlTemplate = urlTemplate,
+                tms = tms,
+                zIndex = zIndex,
+                maxVisibleTiles = maxVisibleTiles,
+                prefetchMargin = prefetchMargin,
+            )
+        )
+    }
+
+    /**
+     * Adds a raster layer backed by an app-owned z/x/y tile store.
+     *
+     * The caller provides the tile reader so platform-specific SQLite access and
+     * project-specific metadata stay outside the renderer. This supports
+     * WebMercator, S-JTSK/Krovak, or any custom [projection] + [grid] pair.
+     */
+    fun tileStoreLayer(
+        id: String,
+        projection: Projection,
+        grid: TileGrid,
+        readTile: suspend (TileCoordinate) -> ByteArray?,
+        zIndex: Int = 0,
+        scheme: TileRowScheme = TileRowScheme.TMS,
+        sourceId: String = id,
+        maxVisibleTiles: Int = 9,
+        prefetchMargin: Int = 1,
+    ) {
+        layer(
+            RasterTileLayer(
+                id = id,
+                source = TileStoreTileSource(
+                    projection = projection,
+                    grid = grid,
+                    scheme = scheme,
+                    sourceId = sourceId,
+                    readTile = readTile,
+                ),
+                zIndex = zIndex,
+                maxVisibleTiles = maxVisibleTiles,
+                prefetchMargin = prefetchMargin,
+            )
+        )
     }
 
     /**

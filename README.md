@@ -65,7 +65,7 @@ including map layers, WMS, features, styles, and projections.
 | --- | --- | --- |
 | Compose map renderer | ✅ Done | Canvas renderer with pan and zoom gestures. |
 | Public DSL | ✅ Done | `tilo.compose.dsl` exposes the Compose-first API. |
-| Raster tile rendering | ✅ Done | WMS and XYZ tile layers render as raster images. |
+| Raster tile rendering | ✅ Done | WMS, XYZ, and custom tile-provider layers render as raster images. |
 | WMS capabilities | ✅ Done | WMS layers can be created from GetCapabilities. |
 | Tile planning | ✅ Done | Density-aware planning with limited visible tile count. |
 | Tile fetching | ✅ Done | Shared HTTP client, byte cache, in-flight deduplication, and concurrency control. |
@@ -78,10 +78,10 @@ including map layers, WMS, features, styles, and projections.
 | GeoCore split | ✅ Done | Platform-agnostic contracts live in `Tilo.GeoCore`. |
 | Spatial indexing | ✅ Done | Feature sources use `Tilo.SpatialIndex` for viewport queries. |
 | CRS model | ✅ Done | Human-readable DSL helpers wrap WGS84, Web Mercator, S-JTSK/Krovak, and identity. |
-| Non-Web-Mercator maps | ✅ Done | Map state, WMS tiles, and feature layers can work in projections such as EPSG:5514. |
+| Non-Web-Mercator maps | ✅ Done | Map state, raster tile grids, WMS tiles, app-owned tile stores, and feature layers can work in projections such as EPSG:5514. |
 | CRS transformations | 🟡 Partial | GeoCore exposes contracts/registry; concrete transforms are injected by runtime/app code. |
 | Vector tiles | ⚪ Not planned | Current focus is raster tiles and simple vector layers. |
-| Raster MBTiles | ⬜ Not done | Can be added later if needed. |
+| Raster MBTiles | 🟡 Partial | Generic tile-store provider API is ready; bundled SQLite readers and metadata resolvers are still planned. |
 | iOS production support | ⬜ Not done | KMP targets exist; validation currently focuses on Android/JVM. |
 | Public Maven artifacts | ⬜ Not done | Planned after API stabilization. |
 

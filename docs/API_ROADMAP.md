@@ -42,9 +42,10 @@ The project already has the right core building blocks:
 - Render-specific code owns Compose canvas rendering, tile drawing, vector command building, label bitmap caching, and gesture input.
 
 The weak spot is API ergonomics: the public surface still exposes too much engine-level detail for common use cases.
-Raster layers are a special case of this problem: WMS is reasonably surfaced
-through `rememberWMSLayer(...)`, but XYZ and other raster source types still
-exist mostly as low-level engine building blocks.
+Raster layers are improving: WMS and XYZ now have Compose-first helpers, and
+custom z/x/y tile stores have a generic `tileStoreLayer(...)` provider hook.
+The remaining raster gap is a dedicated, file-backed MBTiles API with metadata
+resolution.
 
 ## API Principles
 
@@ -254,33 +255,35 @@ Target public shape:
 TiloMap(cameraState) {
     xyzTileLayer(
         id = "osm",
-        url = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        urlTemplate = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         projection = webMercator(),
     )
 
     wmsTileLayer(cuzkOrtofoto)
 
-    mbtilesLayer(
+    tileStoreLayer(
         id = "offline-krovak",
-        source = offlineKrovakFile,
         projection = sjtsk(),
         grid = krovakTileGrid(),
+        readTile = offlineKrovakTiles::readTile,
     )
 }
 ```
 
 Scope:
 
-- Add `xyzTileLayer(...)` DSL helper for `{z}/{x}/{y}` URL templates.
-- Make Web Mercator XYZ the default for slippy-map sources.
-- Keep `tms = true` support for flipped Y tile schemes.
-- Add first-class raster MBTiles support as an offline XYZ/TMS-style provider.
+- ✅ Add `xyzTileLayer(...)` DSL helper for `{z}/{x}/{y}` URL templates.
+- ✅ Make Web Mercator XYZ the default for slippy-map sources.
+- ✅ Keep `tms = true` support for flipped Y tile schemes.
+- 🟡 Add first-class raster MBTiles support as an offline XYZ/TMS-style provider.
+  The generic `tileStoreLayer(...)` provider contract exists; bundled
+  `mbTilesLayer(...)` SQLite readers and metadata resolvers are still pending.
 - Keep `rasterLayer(layer)` and `+layer` as advanced escape hatches.
-- Introduce clear source models such as `XyzRasterSource`, `WmsRasterSource`,
-  `MbtilesRasterSource`, and later `WmtsRasterSource`.
+- ✅ Introduce clear source models such as `XYZTileSource`, `WMSTileSource`,
+  `TileStoreTileSource`, and later `WMTSTileSource`.
 - Add `samplesApp` examples for XYZ, WMS, MBTiles, and custom raster layers.
 - Add showcase usage for at least one public XYZ basemap.
-- Document that tiles are not reprojected client-side; raster layer projection
+- ✅ Document that tiles are not reprojected client-side; raster layer projection
   must match the map projection.
 
 MBTiles notes:
@@ -290,8 +293,9 @@ MBTiles notes:
 - Support standard Web Mercator MBTiles with sensible defaults.
 - Support `scheme = TMS` / flipped Y, because many MBTiles files store
   `tile_row` that way.
-- Support S-JTSK/Krovak MBTiles as a normal first-class use case through
-  explicit `projection = sjtsk()` and `grid = krovakTileGrid()` configuration.
+- Support S-JTSK/Krovak MBTiles as a normal first-class use case through a
+  dedicated `mbTilesLayer(...)` helper with explicit `projection = sjtsk()` and
+  `grid = krovakTileGrid()` configuration.
 - Do not assume standard MBTiles metadata contains a complete `TileGrid`.
   Metadata such as `bounds`, `center`, `minzoom`, `maxzoom`, and `format` is
   useful, but not enough to describe arbitrary CRS tile matrices.
@@ -302,10 +306,10 @@ MBTiles notes:
 Extension points:
 
 - Keep `TileLayer` as the fully custom escape hatch for unusual providers.
-- Add or document a smaller `TileScheme`/`TileProvider` style abstraction so
+- ✅ Add or document a smaller `RasterTileSource` style abstraction so
   users can plug in exotic tiling without replacing fetching, caching, and
   rendering.
-- Support custom regular grids through `Projection + TileGrid`.
+- ✅ Support custom regular grids through `Projection + TileGrid`.
 - Support exotic or non-regular schemes through user-provided planning and tile
   bounds logic.
 - Do not implement built-in polar, irregular matrix, sheet-based, or other

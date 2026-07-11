@@ -42,7 +42,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.TiloMap
+import tilo.compose.dsl.WMSLayerState
 import tilo.compose.dsl.cachedBitmap
 import tilo.compose.dsl.FeatureOptions
 import tilo.compose.dsl.features
@@ -52,6 +54,7 @@ import tilo.compose.dsl.polygonStyle
 import tilo.compose.dsl.rememberMapCameraState
 import tilo.compose.dsl.rememberWMSLayer
 import tilo.compose.dsl.sjtsk
+import tilo.compose.dsl.webMercator
 import tilo.compose.dsl.wgs84
 import kotlinx.coroutines.launch
 import kotlin.math.PI
@@ -66,7 +69,9 @@ import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.transform.Epsg5514ToWgs84Transformation
+import tilo.compose.core.transform.WebMercatorToWgs84Transformation
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
+import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
 import tilo.compose.draw.DrawMode
 import tilo.compose.draw.DrawState
 import tilo.compose.draw.drawLayer
@@ -75,6 +80,12 @@ import tilo.compose.draw.rememberDrawState
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
 private const val CUZK_ORTOFOTO_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer"
 private const val CUZK_ZTM_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ZTM/MapServer/WMSServer"
+private const val OSM_XYZ_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+private enum class MapDemo(val title: String, val subtitle: String) {
+    Sjtks("S-JTSK / CUZK", "EPSG:5514 WMS + vectors"),
+    WebMercatorXyz("Web Mercator / XYZ", "EPSG:3857 XYZ tiles"),
+}
 
 private enum class BasemapOption(val title: String) {
     CuzkOrtofoto("CUZK ortofoto"),
@@ -106,6 +117,7 @@ fun App() {
     )
     val dashedPolygonFeatures = remember { buildDashedPolygonLayerFeatures() }
     val fullLineFeatures = remember { buildFullLineLayerFeatures() }
+    val mercatorPlaceFeatures = remember { buildMercatorPlaceFeatures() }
 
     var savedDrawingFeatures by remember { mutableStateOf<List<Feature>>(emptyList()) }
     val drawState = rememberDrawState(
@@ -114,6 +126,7 @@ fun App() {
         },
     )
 
+    var selectedDemo by remember { mutableStateOf(MapDemo.Sjtks) }
     var selectedBasemap by remember { mutableStateOf(BasemapOption.CuzkOrtofoto) }
     var selectedLayers by remember {
         mutableStateOf(
@@ -126,13 +139,21 @@ fun App() {
     val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
 
-    val cameraState = rememberMapCameraState(
+    val sjtskCameraState = rememberMapCameraState(
         center = Wgs84ToEpsg5514Transformation.sourceToTarget(Point(16.6068, 49.1951)),
         zoom = 11.5,
         config = MapConfig(minZoom = 0.0, maxZoom = 20.0)
             .withTransformation(Wgs84ToEpsg5514Transformation)
             .withTransformation(Epsg5514ToWgs84Transformation),
         projection = sjtsk(),
+    )
+    val mercatorCameraState = rememberMapCameraState(
+        center = Wgs84ToWebMercatorTransformation.sourceToTarget(Point(14.4378, 50.0755)),
+        zoom = 11.5,
+        config = MapConfig(minZoom = 0.0, maxZoom = 20.0)
+            .withTransformation(Wgs84ToWebMercatorTransformation)
+            .withTransformation(WebMercatorToWgs84Transformation),
+        projection = webMercator(),
     )
 
     MaterialTheme {
@@ -141,10 +162,10 @@ fun App() {
             drawerContent = {
                 ModalDrawerSheet {
                     Text(
-                        text = "Basemap",
+                        text = "Demo",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
                     )
-                    BasemapOption.entries.forEach { option ->
+                    MapDemo.entries.forEach { option ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -152,36 +173,64 @@ fun App() {
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
                             RadioButton(
-                                selected = selectedBasemap == option,
-                                onClick = { selectedBasemap = option },
+                                selected = selectedDemo == option,
+                                onClick = { selectedDemo = option },
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(option.title)
+                            Column {
+                                Text(option.title)
+                                Text(
+                                    text = option.subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
-                    Text(
-                        text = "Layers",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
-                    )
-                    DemoLayerOption.entries.forEach { option ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        ) {
-                            Checkbox(
-                                checked = option in selectedLayers,
-                                onCheckedChange = { checked ->
-                                    selectedLayers = if (checked) {
-                                        selectedLayers + option
-                                    } else {
-                                        selectedLayers - option
+                    if (selectedDemo == MapDemo.Sjtks) {
+                        Text(
+                            text = "Basemap",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
+                        )
+                        BasemapOption.entries.forEach { option ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = selectedBasemap == option,
+                                    onClick = { selectedBasemap = option },
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(option.title)
+                            }
+                        }
+                        Text(
+                            text = "Layers",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
+                        )
+                        DemoLayerOption.entries.forEach { option ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = option in selectedLayers,
+                                    onCheckedChange = { checked ->
+                                        selectedLayers = if (checked) {
+                                            selectedLayers + option
+                                        } else {
+                                            selectedLayers - option
+                                        }
                                     }
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(option.title)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(option.title)
+                            }
                         }
                     }
                     NavigationDrawerItem(
@@ -197,7 +246,7 @@ fun App() {
                 topBar = {
                     TopAppBar(
                         title = { Text("Tilo.Compose") },
-                        subtitle = { Text("Layer composition") },
+                        subtitle = { Text(selectedDemo.subtitle) },
                         navigationIcon = {
                             IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
                                 HamburgerIcon()
@@ -212,45 +261,126 @@ fun App() {
                         .fillMaxSize()
                         .background(Color(MAP_BACKGROUND_COLOR))
                 ) {
-                    TiloMap(
-                        cameraState = cameraState,
-                        modifier = Modifier.fillMaxSize(),
-                        onTapWorld = drawState::onMapTap,
-                        invalidationKey = drawState.revision,
-                        layers = {
-                            when (selectedBasemap) {
-                                BasemapOption.CuzkOrtofoto -> wmsTileLayer(ortofotoLayer)
-                                BasemapOption.CuzkZtm -> wmsTileLayer(ztmLayer)
-                            }
-                            if (DemoLayerOption.DashedPolygons in selectedLayers) {
-                                featureLayer("dashed-polygons", dashedPolygonFeatures) {
-                                    zIndex = 1
-                                    projection = wgs84()
-                                    renderMode = cachedBitmap(
-                                        scale = 1.5,
-                                        paddingPx = 192,
-                                        invalidateOnZoomDelta = 0.35,
-                                    )
-                                }
-                            }
-                            if (DemoLayerOption.FullLines in selectedLayers) {
-                                featureLayer("full-lines", fullLineFeatures) {
-                                    zIndex = 2
-                                    projection = wgs84()
-                                }
-                            }
-                            featureLayer("saved-drawings", savedDrawingFeatures) {
-                                zIndex = 10
-                                projection = sjtsk()
-                            }
-                            drawLayer(state = drawState, projection = sjtsk())
-                        },
-                    )
-                    DrawingControls(
-                        state = drawState,
+                    when (selectedDemo) {
+                        MapDemo.Sjtks -> {
+                            SjtksShowcaseMap(
+                                cameraState = sjtskCameraState,
+                                selectedBasemap = selectedBasemap,
+                                ortofotoLayer = ortofotoLayer,
+                                ztmLayer = ztmLayer,
+                                selectedLayers = selectedLayers,
+                                dashedPolygonFeatures = dashedPolygonFeatures,
+                                fullLineFeatures = fullLineFeatures,
+                                savedDrawingFeatures = savedDrawingFeatures,
+                                drawState = drawState,
+                            )
+                            DrawingControls(state = drawState)
+                        }
+                        MapDemo.WebMercatorXyz -> {
+                            WebMercatorXyzExampleMap(
+                                cameraState = mercatorCameraState,
+                                places = mercatorPlaceFeatures,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SjtksShowcaseMap(
+    cameraState: MapCameraState,
+    selectedBasemap: BasemapOption,
+    ortofotoLayer: WMSLayerState,
+    ztmLayer: WMSLayerState,
+    selectedLayers: Set<DemoLayerOption>,
+    dashedPolygonFeatures: List<Feature>,
+    fullLineFeatures: List<Feature>,
+    savedDrawingFeatures: List<Feature>,
+    drawState: DrawState,
+) {
+    TiloMap(
+        cameraState = cameraState,
+        modifier = Modifier.fillMaxSize(),
+        onTapWorld = drawState::onMapTap,
+        invalidationKey = drawState.revision,
+        layers = {
+            when (selectedBasemap) {
+                BasemapOption.CuzkOrtofoto -> wmsTileLayer(ortofotoLayer)
+                BasemapOption.CuzkZtm -> wmsTileLayer(ztmLayer)
+            }
+            if (DemoLayerOption.DashedPolygons in selectedLayers) {
+                featureLayer("dashed-polygons", dashedPolygonFeatures) {
+                    zIndex = 1
+                    projection = wgs84()
+                    renderMode = cachedBitmap(
+                        scale = 1.5,
+                        paddingPx = 192,
+                        invalidateOnZoomDelta = 0.35,
                     )
                 }
             }
+            if (DemoLayerOption.FullLines in selectedLayers) {
+                featureLayer("full-lines", fullLineFeatures) {
+                    zIndex = 2
+                    projection = wgs84()
+                }
+            }
+            featureLayer("saved-drawings", savedDrawingFeatures) {
+                zIndex = 10
+                projection = sjtsk()
+            }
+            drawLayer(state = drawState, projection = sjtsk())
+        },
+    )
+}
+
+@Composable
+private fun BoxScope.WebMercatorXyzExampleMap(
+    cameraState: MapCameraState,
+    places: List<Feature>,
+) {
+    TiloMap(
+        cameraState = cameraState,
+        modifier = Modifier.fillMaxSize(),
+        layers = {
+            xyzTileLayer(
+                id = "osm-standard",
+                urlTemplate = OSM_XYZ_URL,
+                projection = webMercator(),
+                maxVisibleTiles = 9,
+                prefetchMargin = 1,
+            )
+            featureLayer("mercator-places", places) {
+                zIndex = 1
+                projection = wgs84()
+            }
+        },
+    )
+    Surface(
+        modifier = Modifier
+            .align(Alignment.BottomStart)
+            .padding(16.dp),
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = 4.dp,
+        shadowElevation = 4.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text("XYZ / Web Mercator")
+            Text(
+                text = "EPSG:3857 camera, OSM XYZ tiles, WGS84 features",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                text = "© OpenStreetMap contributors",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -428,6 +558,37 @@ private fun buildFullLineLayerFeatures(): List<Feature> {
         }
     }
 }
+
+private fun buildMercatorPlaceFeatures(): List<Feature> =
+    features {
+        point("prague", 14.4378, 50.0755) {
+            label = "Prague"
+            style = pointStyle {
+                shape = PointShape.Circle
+                size = 16.0
+                fill(0xFFE53935)
+                stroke(0xFFFFFFFF, width = 3.0)
+            }
+        }
+        point("brno", 16.6068, 49.1951) {
+            label = "Brno"
+            style = pointStyle {
+                shape = PointShape.Square
+                size = 14.0
+                fill(0xFF1E88E5)
+                stroke(0xFFFFFFFF, width = 2.5)
+            }
+        }
+        point("ostrava", 18.2625, 49.8209) {
+            label = "Ostrava"
+            style = pointStyle {
+                shape = PointShape.Diamond
+                size = 14.0
+                fill(0xFF43A047)
+                stroke(0xFFFFFFFF, width = 2.5)
+            }
+        }
+    }
 
 @Composable
 private fun HamburgerIcon() {

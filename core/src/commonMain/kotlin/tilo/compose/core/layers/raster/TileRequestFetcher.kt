@@ -23,7 +23,7 @@ data class TileFetchConfig(
 internal class TileRequestFetcher(
     private val config: TileFetchConfig = TileFetchConfig(),
     private val cacheKey: (TileRequest) -> String,
-    private val fetchBytes: suspend (String) -> ByteArray?,
+    private val fetchBytes: suspend (TileRequest) -> ByteArray?,
 ) {
     private val fetchScope = CoroutineScope(config.dispatcher + SupervisorJob())
 
@@ -57,7 +57,7 @@ internal class TileRequestFetcher(
         val deferred =
             inFlightMutex.withLock {
                 inFlight[key]?.takeUnless { it.isCancelled } ?: fetchScope.async {
-                        fetchBytes(key)?.also { bytes ->
+                        fetchBytes(request)?.also { bytes ->
                             cachePut(key, bytes)
                         }
                     }

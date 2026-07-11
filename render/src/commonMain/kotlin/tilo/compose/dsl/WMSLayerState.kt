@@ -7,7 +7,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
-import tilo.compose.core.layers.raster.TileFetchConfig
 import tilo.compose.core.layers.raster.WMSTileLayer
 import tilo.compose.core.layers.raster.createWMSTileLayerFromCapabilities
 import tilo.compose.core.projection.Projection
@@ -40,10 +39,10 @@ fun rememberWMSLayer(
     styles: String = "",
     format: String? = null,
     getMapVersion: String = "1.1.1",
+    zIndex: Int = 0,
     tileSize: Int = 256,
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
-    fetchConfig: TileFetchConfig = TileFetchConfig(),
 ): WMSLayerState {
     val state = remember { WMSLayerState() }
 
@@ -55,10 +54,10 @@ fun rememberWMSLayer(
         styles,
         format,
         getMapVersion,
+        zIndex,
         tileSize,
         maxVisibleTiles,
         prefetchMargin,
-        fetchConfig,
     ) {
         state.isLoading = true
         state.error = null
@@ -71,10 +70,10 @@ fun rememberWMSLayer(
                 styles = styles,
                 format = format,
                 getMapVersion = getMapVersion,
+                zIndex = zIndex,
                 tileSize = tileSize,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
-                fetchConfig = fetchConfig,
             )
         } catch (error: CancellationException) {
             throw error

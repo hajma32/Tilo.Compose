@@ -1,6 +1,7 @@
 package eu.tilo.compose
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import tilo.compose.dsl.MapCameraState
@@ -85,9 +90,9 @@ import tilo.compose.draw.DrawMode
 import tilo.compose.draw.DrawState
 import tilo.compose.draw.drawLayer
 import tilo.compose.draw.rememberDrawState
+import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultScaleBarContent
-import tilo.compose.ui.defaultZoomControlsContent
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
 private const val CUZK_ORTOFOTO_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer"
@@ -112,7 +117,16 @@ private enum class DemoLayerOption(val title: String) {
 private data class PlaceDetails(
     val name: String,
     val description: String,
+    val sourceLabel: String? = null,
+    val sourceUrl: String? = null,
 )
+
+private fun animatedZoomControlsContent(): @Composable BoxScope.(MapCameraState) -> Unit =
+    { cameraState ->
+        DefaultZoomControls(
+            onZoomBy = { delta -> cameraState.animateZoomBy(delta) },
+        )
+    }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -143,7 +157,7 @@ fun App() {
         },
     )
 
-    var selectedDemo by remember { mutableStateOf(MapDemo.Sjtks) }
+    var selectedDemo by remember { mutableStateOf(MapDemo.WebMercatorXyz) }
     var selectedBasemap by remember { mutableStateOf(BasemapOption.CuzkOrtofoto) }
     var selectedLayers by remember {
         mutableStateOf(
@@ -326,7 +340,7 @@ private fun SjtksShowcaseMap(
         invalidationKey = drawState.revision,
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = defaultZoomControlsContent(),
+        cameraControlsContent = animatedZoomControlsContent(),
         layers = {
             when (selectedBasemap) {
                 BasemapOption.CuzkOrtofoto -> wmsTileLayer(ortofotoLayer)
@@ -365,6 +379,7 @@ private fun BoxScope.WebMercatorXyzExampleMap(
 ) {
     var selectedPlace by remember { mutableStateOf<PlaceDetails?>(null) }
     var selectedPlaceRefs by remember { mutableStateOf<Set<FeatureSelectionRef>>(emptySet()) }
+    val uriHandler = LocalUriHandler.current
 
     TiloMap(
         cameraState = cameraState,
@@ -378,7 +393,7 @@ private fun BoxScope.WebMercatorXyzExampleMap(
         selectedFeatures = selectedPlaceRefs,
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = defaultZoomControlsContent(),
+        cameraControlsContent = animatedZoomControlsContent(),
         layers = {
             xyzTileLayer(
                 id = "osm-standard",
@@ -456,23 +471,41 @@ private fun BoxScope.WebMercatorXyzExampleMap(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(start = 12.dp, end = 12.dp, bottom = 50.dp),
             shape = RoundedCornerShape(8.dp),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = place.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = place.description,
+                    text = "${place.description}...",
                     style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                if (place.sourceLabel != null && place.sourceUrl != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Zdroj:",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Text(
+                            text = place.sourceLabel,
+                            modifier = Modifier.clickable { uriHandler.openUri(place.sourceUrl) },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            textDecoration = TextDecoration.Underline,
+                        )
+                    }
+                }
             }
         }
     }
@@ -750,7 +783,9 @@ private fun buildMercatorPlaceFeatures(): List<Feature> =
             data = Data(
                 PlaceDetails(
                     name = "Vltava",
-                    description = "Priblizna liniova feature sledujici tok Vltavy pres jizni a stredni Cechy.",
+                    description = "Vltava je nejdelší řeka v Česku a levý přítok Labe. Protéká Šumavou, jižními Čechami a Prahou a u Mělníka se vlévá do Labe",
+                    sourceLabel = "Wikipedie",
+                    sourceUrl = "https://cs.wikipedia.org/wiki/Vltava",
                 )
             )
         }

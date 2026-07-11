@@ -46,6 +46,14 @@ cameraState.zoomOut()
 cameraState.zoomBy(delta = 0.5)
 ```
 
+Animated zoom helpers are suspend functions, intended for UI controls:
+
+```kotlin
+scope.launch {
+    cameraState.animateZoomIn()
+}
+```
+
 ## Raster Layers
 
 Use `wmsTileLayer(state)` for WMS layers created by `rememberWMSLayer`:

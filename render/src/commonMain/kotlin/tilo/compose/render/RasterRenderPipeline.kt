@@ -47,10 +47,31 @@ internal class RasterRenderPipeline(
         )
     }
 
+    suspend fun buildOverviewFrame(
+        tileLayers: List<TileLayer>,
+        map: MapState,
+        tileDecoder: ((ByteArray) -> ImageBitmap?)?,
+    ): RasterFrame {
+        val tilesByLayer = fetchOverviewTiles(tileLayers, map)
+        val decodedImagesByLayer = decodeImages(tilesByLayer, tileDecoder)
+        return RasterFrame(
+            tilesByLayer = tilesByLayer,
+            decodedImagesByLayer = decodedImagesByLayer,
+        )
+    }
+
     suspend fun prefetch(tileLayers: List<TileLayer>, map: MapState) {
         withContext(dispatcher) {
             tileLayers.forEach { layer ->
                 layer.prefetchTiles(map)
+            }
+        }
+    }
+
+    suspend fun prefetchOverview(tileLayers: List<TileLayer>, map: MapState) {
+        withContext(dispatcher) {
+            tileLayers.forEach { layer ->
+                layer.prefetchOverviewTiles(map)
             }
         }
     }
@@ -63,6 +84,18 @@ internal class RasterRenderPipeline(
             buildMap {
                 tileLayers.forEach { layer ->
                     put(layer.id, layer.loadTiles(map))
+                }
+            }
+        }
+
+    private suspend fun fetchOverviewTiles(
+        tileLayers: List<TileLayer>,
+        map: MapState,
+    ): Map<String, List<Tile>> =
+        withContext(dispatcher) {
+            buildMap {
+                tileLayers.forEach { layer ->
+                    put(layer.id, layer.loadOverviewTiles(map))
                 }
             }
         }

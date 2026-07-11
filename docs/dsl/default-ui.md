@@ -60,8 +60,11 @@ TiloMap(
   clickable bottom-right box.
 - `DefaultScaleBar(scaleBar)` renders a CRS-aware scale bar in the bottom-left
   corner.
-- `DefaultZoomControls(cameraState, zoomStep)` renders zoom in/out buttons that
-  call `MapCameraState.zoomIn` and `MapCameraState.zoomOut`.
+- `DefaultZoomControls(cameraState, zoomStep)` renders zoom in/out buttons for
+  any `MapCameraController`.
+- `DefaultZoomControls(zoomStep, onZoomBy)` renders the same buttons with a
+  custom suspend callback, which is useful for animated `MapCameraState`
+  controls.
 
 The current default UI is intentionally small. Style objects for these overlays
 are planned, so applications will be able to tune the defaults without copying

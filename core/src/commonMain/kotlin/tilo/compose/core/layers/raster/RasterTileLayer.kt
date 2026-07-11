@@ -21,6 +21,9 @@ open class RasterTileLayer(
     override val zIndex: Int = 0,
     private val maxVisibleTiles: Int = 9,
     private val prefetchMargin: Int = 1,
+    private val overviewZoomOffset: Int = 2,
+    private val maxOverviewTiles: Int = 4,
+    private val overviewPrefetchMargin: Int = 1,
     override val attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
 ) : TileLayer {
@@ -39,6 +42,18 @@ open class RasterTileLayer(
         return fetcher.fetchTiles(requestPlan(map).visible)
     }
 
+    override suspend fun loadOverviewTiles(map: Map): List<Tile> {
+        validateProjection(map)
+        if (overviewZoomOffset <= 0 || maxOverviewTiles <= 0) return emptyList()
+        return fetcher.fetchTiles(overviewRequestPlan(map).visible)
+    }
+
+    override suspend fun prefetchOverviewTiles(map: Map) {
+        validateProjection(map)
+        if (overviewZoomOffset <= 0 || maxOverviewTiles <= 0 || overviewPrefetchMargin <= 0) return
+        fetcher.fetchTiles(overviewRequestPlan(map, prefetchMargin = overviewPrefetchMargin).prefetch)
+    }
+
     override fun planTiles(map: Map): List<Tile> {
         validateProjection(map)
         return requestPlan(map).visible.map { request ->
@@ -52,6 +67,36 @@ open class RasterTileLayer(
     }
 
     private fun requestPlan(map: Map): TileRequestPlan {
+        val preferredZoom = grid.zoomForViewport(map.zoom, map.viewport, projection)
+        return requestPlan(
+            map = map,
+            preferredZoom = preferredZoom,
+            maxVisibleTiles = maxVisibleTiles,
+            prefetchMargin = prefetchMargin,
+        )
+    }
+
+    private fun overviewRequestPlan(
+        map: Map,
+        prefetchMargin: Int = 0,
+    ): TileRequestPlan {
+        val preferredZoom =
+            (grid.zoomForViewport(map.zoom, map.viewport, projection) - overviewZoomOffset)
+                .coerceAtLeast(0)
+        return requestPlan(
+            map = map,
+            preferredZoom = preferredZoom,
+            maxVisibleTiles = maxOverviewTiles,
+            prefetchMargin = prefetchMargin,
+        )
+    }
+
+    private fun requestPlan(
+        map: Map,
+        preferredZoom: Int,
+        maxVisibleTiles: Int,
+        prefetchMargin: Int,
+    ): TileRequestPlan {
         val topLeft = map.screenToWorld(Point(0.0, 0.0))
         val bottomRight =
             map.screenToWorld(
@@ -66,7 +111,7 @@ open class RasterTileLayer(
             maxX = maxOf(topLeft.x, bottomRight.x),
             minY = minOf(topLeft.y, bottomRight.y),
             maxY = maxOf(topLeft.y, bottomRight.y),
-            preferredZoom = grid.zoomForViewport(map.zoom, map.viewport, projection),
+            preferredZoom = preferredZoom,
             maxVisibleTiles = maxVisibleTiles,
             prefetchMargin = prefetchMargin,
         )

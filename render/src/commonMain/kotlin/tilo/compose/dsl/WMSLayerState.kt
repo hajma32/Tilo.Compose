@@ -44,6 +44,9 @@ fun rememberWMSLayer(
     tileSize: Int = 256,
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
+    overviewZoomOffset: Int = 2,
+    maxOverviewTiles: Int = 4,
+    overviewPrefetchMargin: Int = 1,
     attribution: Attribution? = null,
     attributions: List<Attribution> = emptyList(),
 ): WMSLayerState {
@@ -61,6 +64,9 @@ fun rememberWMSLayer(
         tileSize,
         maxVisibleTiles,
         prefetchMargin,
+        overviewZoomOffset,
+        maxOverviewTiles,
+        overviewPrefetchMargin,
         attribution,
         attributions,
     ) {
@@ -79,6 +85,9 @@ fun rememberWMSLayer(
                 tileSize = tileSize,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
+                overviewZoomOffset = overviewZoomOffset,
+                maxOverviewTiles = maxOverviewTiles,
+                overviewPrefetchMargin = overviewPrefetchMargin,
                 attributions = attributions.withSingle(attribution),
             )
         } catch (error: CancellationException) {

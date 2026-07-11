@@ -52,6 +52,9 @@ surface as of now.
 - `MapCameraState.zoomIn(step)`
 - `MapCameraState.zoomOut(step)`
 - `MapCameraState.zoomBy(delta, focus)`
+- `MapCameraState.animateZoomIn(step, focus, animationSpec)`
+- `MapCameraState.animateZoomOut(step, focus, animationSpec)`
+- `MapCameraState.animateZoomBy(delta, focus, animationSpec)`
 
 `TiloMap` accepts:
 

@@ -28,6 +28,9 @@ class WMSTileLayer(
     zIndex: Int = 0,
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
+    overviewZoomOffset: Int = 2,
+    maxOverviewTiles: Int = 4,
+    overviewPrefetchMargin: Int = 1,
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
 ) : RasterTileLayer(
@@ -46,6 +49,9 @@ class WMSTileLayer(
     zIndex = zIndex,
     maxVisibleTiles = maxVisibleTiles,
     prefetchMargin = prefetchMargin,
+    overviewZoomOffset = overviewZoomOffset,
+    maxOverviewTiles = maxOverviewTiles,
+    overviewPrefetchMargin = overviewPrefetchMargin,
     attributions = attributions,
     fetchConfig = fetchConfig,
 )

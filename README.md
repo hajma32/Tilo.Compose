@@ -14,6 +14,18 @@ first-class map projection.
 > Work in progress: the project is still unstable and APIs may change before a
 > public 1.0 release.
 
+## Showcase
+
+Current Android showcase app with XYZ raster tiles, vector styling, labels,
+selection callouts, attribution, scale bar, and zoom controls.
+
+<table>
+  <tr>
+    <td><img src="docs/images/showcase-vector-styles.png" alt="Tilo.Compose map with styled points, lines, polygons, labels, attribution and scale bar" width="360"></td>
+    <td><img src="docs/images/showcase-callout.png" alt="Tilo.Compose map feature selection callout with linked source" width="360"></td>
+  </tr>
+</table>
+
 ## Quick Example
 
 ```kotlin
@@ -82,7 +94,7 @@ predictable, documented, and safe for other apps to adopt.
 | Drawing plugin | ✅ Done | Drawing supports point/line/polygon drafts, undo/redo, custom controls, configurable style, and app-owned save callbacks. |
 | Selection | ✅ Done | `onFeatureSelect`, multi-hit selection results, selected feature refs, and selected styles are available. |
 | Editing plugin | ⬜ Planned | Build edit as a plugin on top of selection: vertex handles, move/insert/delete, save/cancel, and history. |
-| Camera control | 🟡 Partial | Programmatic zoom helpers and default zoom controls exist; v1 still needs animate, fit bounds, and rotation/bearing support. |
+| Camera control | 🟡 Partial | Programmatic zoom helpers, animated zoom controls, and default zoom UI exist; v1 still needs fit bounds and rotation/bearing support. |
 | Event routing | ⬜ Planned | Define gesture priority between overlays, draw, edit, selection, and default pan/zoom/rotate interactions. |
 | Layer lifecycle | 🟡 Partial | Layer ordering and attribution metadata exist; v1 still needs visibility, min/max zoom, opacity, grouping, and dispose hooks. |
 | Loading and errors | ⬜ Planned | Expose per-layer loading, tile failures, retry state, empty/offline state, and structured diagnostics. |

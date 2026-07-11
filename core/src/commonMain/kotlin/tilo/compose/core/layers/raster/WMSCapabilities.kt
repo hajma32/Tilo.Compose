@@ -59,6 +59,9 @@ data class WMSCapabilities(
         tileSize: Int = 256,
         maxVisibleTiles: Int = 9,
         prefetchMargin: Int = 1,
+        overviewZoomOffset: Int = 2,
+        maxOverviewTiles: Int = 4,
+        overviewPrefetchMargin: Int = 1,
         attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
     ): WMSTileLayer {
@@ -80,6 +83,9 @@ data class WMSCapabilities(
             zIndex = zIndex,
             maxVisibleTiles = maxVisibleTiles,
             prefetchMargin = prefetchMargin,
+            overviewZoomOffset = overviewZoomOffset,
+            maxOverviewTiles = maxOverviewTiles,
+            overviewPrefetchMargin = overviewPrefetchMargin,
             attributions = attributions,
             fetchConfig = fetchConfig,
         )
@@ -127,6 +133,9 @@ suspend fun createWMSTileLayerFromCapabilities(
     tileSize: Int = 256,
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
+    overviewZoomOffset: Int = 2,
+    maxOverviewTiles: Int = 4,
+    overviewPrefetchMargin: Int = 1,
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
 ): WMSTileLayer {
@@ -142,6 +151,9 @@ suspend fun createWMSTileLayerFromCapabilities(
         tileSize = tileSize,
         maxVisibleTiles = maxVisibleTiles,
         prefetchMargin = prefetchMargin,
+        overviewZoomOffset = overviewZoomOffset,
+        maxOverviewTiles = maxOverviewTiles,
+        overviewPrefetchMargin = overviewPrefetchMargin,
         attributions = attributions,
         fetchConfig = fetchConfig,
     )

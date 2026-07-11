@@ -23,8 +23,10 @@ import tilo.compose.render.backend.RenderScene
 import tilo.compose.render.backend.RenderSceneBuilder
 import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
@@ -63,9 +65,18 @@ fun MapRenderer(
     val rasterPipeline = remember { RasterRenderPipeline() }
     val vectorPipeline = remember { VectorRenderPipeline() }
     val featureHitTester = remember { FeatureHitTester() }
+    val layerFlowKey = sortedLayersKey(layers)
+    val overviewRequestTracker = remember(layerFlowKey) { OverviewRequestTracker() }
 
-    val renderRequests = remember(sortedLayersKey(layers)) {
+    val renderRequests = remember(layerFlowKey) {
         MutableSharedFlow<MapState>(
+            replay = 1,
+            extraBufferCapacity = 1,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
+    }
+    val overviewRequests = remember(layerFlowKey) {
+        MutableSharedFlow<OverviewRenderRequest>(
             replay = 1,
             extraBufferCapacity = 1,
             onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -96,6 +107,7 @@ fun MapRenderer(
     var redrawVersion by remember { mutableStateOf(0) }
     var scene by remember { mutableStateOf(RenderScene.Empty) }
     var lastRasterFrame by remember { mutableStateOf(RasterFrame.Empty) }
+    var lastOverviewFrame by remember { mutableStateOf(RasterFrame.Empty) }
     var lastVectorCommandsByLayer by remember { mutableStateOf<Map<String, List<RenderCommand>>>(emptyMap()) }
     var lastVectorBitmapsByLayer by remember { mutableStateOf<Map<String, VectorBitmapRenderSceneLayer>>(emptyMap()) }
     var lastVectorCacheKeysByLayer by remember { mutableStateOf<Map<String, VectorLayerCacheKey>>(emptyMap()) }
@@ -111,12 +123,18 @@ fun MapRenderer(
             lastVectorBitmapsByLayer = validVectorBitmaps
         }
 
+        val displayRasterFrame = mergeRasterFrames(
+            placeholderFrame = RasterFrame.Empty,
+            fallbackFrame = lastRasterFrame,
+            overviewFrame = lastOverviewFrame,
+            currentFrame = RasterFrame.Empty,
+        )
         val nextScene = RenderSceneBuilder.build(
             layers = sortedLayers,
-            tilesByLayer = lastRasterFrame.tilesByLayer,
+            tilesByLayer = displayRasterFrame.tilesByLayer,
             commandsByLayer = validVectorCommands,
             vectorBitmapsByLayer = validVectorBitmaps,
-            decodedImagesByLayer = lastRasterFrame.decodedImagesByLayer,
+            decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
         )
         scene = nextScene
         backend.onScene(nextScene)
@@ -145,6 +163,7 @@ fun MapRenderer(
             viewport = map.viewport
         )
         renderRequests.emit(renderMap)
+        overviewRequests.emit(overviewRequestTracker.next(renderMap))
     }
 
     LaunchedEffect(sortedLayers) {
@@ -163,6 +182,7 @@ fun MapRenderer(
                     val displayRasterFrame = mergeRasterFrames(
                         placeholderFrame = placeholderFrame,
                         fallbackFrame = lastRasterFrame,
+                        overviewFrame = lastOverviewFrame,
                         currentFrame = RasterFrame(
                             tilesByLayer = tilesByLayer,
                             decodedImagesByLayer = decodedImagesByLayer,
@@ -225,6 +245,52 @@ fun MapRenderer(
         }
     }
 
+    LaunchedEffect(sortedLayers) {
+        var overviewPrefetchJob: Job? = null
+        overviewRequests.collect { request ->
+            runRenderBranch {
+                val overviewMap = request.map
+                val input = renderLoopInput
+                val overviewFrame = rasterPipeline.buildOverviewFrame(
+                    tileLayers = input.tileLayers,
+                    map = overviewMap,
+                    tileDecoder = input.tileDecoder,
+                ).withRenderableTilesOnly()
+                if (!overviewFrame.hasTiles()) return@runRenderBranch
+                if (!overviewRequestTracker.isLatest(request)) return@runRenderBranch
+
+                lastOverviewFrame = overviewFrame
+                val placeholderFrame = rasterPipeline.buildPlaceholderFrame(input.tileLayers, overviewMap)
+                val validVectorCommands =
+                    lastVectorCommandsByLayer.validCommandsFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+                val validVectorBitmaps =
+                    lastVectorBitmapsByLayer.validFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+                val displayRasterFrame = mergeRasterFrames(
+                    placeholderFrame = placeholderFrame,
+                    fallbackFrame = lastRasterFrame,
+                    overviewFrame = overviewFrame,
+                    currentFrame = RasterFrame.Empty,
+                )
+                val nextScene = RenderSceneBuilder.build(
+                    layers = input.sortedLayers,
+                    tilesByLayer = displayRasterFrame.tilesByLayer,
+                    commandsByLayer = validVectorCommands,
+                    vectorBitmapsByLayer = validVectorBitmaps,
+                    decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
+                )
+                scene = nextScene
+                input.backend.onScene(nextScene)
+
+                overviewPrefetchJob?.cancel()
+                overviewPrefetchJob = launch {
+                    runRenderBranch {
+                        rasterPipeline.prefetchOverview(input.tileLayers, overviewMap)
+                    }
+                }
+            }
+        }
+    }
+
     val interactionModifier = modifier
         .onSizeChanged { size ->
             map.viewport = Viewport(
@@ -281,6 +347,23 @@ private data class RenderLoopInput(
     val backend: RenderBackend,
 )
 
+private data class OverviewRenderRequest(
+    val id: Long,
+    val map: MapState,
+)
+
+private class OverviewRequestTracker {
+    private var latestId = 0L
+
+    fun next(map: MapState): OverviewRenderRequest {
+        latestId += 1
+        return OverviewRenderRequest(id = latestId, map = map)
+    }
+
+    fun isLatest(request: OverviewRenderRequest): Boolean =
+        request.id == latestId
+}
+
 private fun sortedLayersKey(layers: List<Layer>): String =
     layers.sortedWith(compareBy(Layer::zIndex)).joinToString(separator = "|") { layer -> "${layer.id}:${layer.zIndex}" }
 
@@ -311,14 +394,20 @@ private fun Map<String, List<RenderCommand>>.validCommandsFor(
 private fun mergeRasterFrames(
     placeholderFrame: RasterFrame,
     fallbackFrame: RasterFrame,
+    overviewFrame: RasterFrame,
     currentFrame: RasterFrame,
 ): RasterFrame {
-    val layerIds = placeholderFrame.tilesByLayer.keys + fallbackFrame.tilesByLayer.keys + currentFrame.tilesByLayer.keys
+    val layerIds =
+        placeholderFrame.tilesByLayer.keys +
+            overviewFrame.tilesByLayer.keys +
+            fallbackFrame.tilesByLayer.keys +
+            currentFrame.tilesByLayer.keys
     val tilesByLayer = buildMap {
         layerIds.forEach { layerId ->
             put(
                 layerId,
                 placeholderFrame.tilesByLayer[layerId].orEmpty() +
+                    overviewFrame.tilesByLayer[layerId].orEmpty() +
                     fallbackFrame.tilesByLayer[layerId].orEmpty() +
                     currentFrame.tilesByLayer[layerId].orEmpty(),
             )
@@ -329,6 +418,7 @@ private fun mergeRasterFrames(
             put(
                 layerId,
                 placeholderFrame.imagesForLayer(layerId) +
+                    overviewFrame.imagesForLayer(layerId) +
                     fallbackFrame.imagesForLayer(layerId) +
                     currentFrame.imagesForLayer(layerId),
             )

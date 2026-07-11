@@ -59,31 +59,42 @@ TiloMap(
 See [DSL documentation](docs/dsl/README.md) for the current public API shape,
 including map layers, WMS, features, styles, and projections.
 
-## Current Status
+## Roadmap to v1
 
-| Area | Status | Notes |
+The current codebase is a working MVP, but v1 is about making the API stable,
+predictable, documented, and safe for other apps to adopt.
+
+| Area | Status | v1 Target |
 | --- | --- | --- |
-| Compose map renderer | ✅ Done | Canvas renderer with pan and zoom gestures. |
-| Public DSL | ✅ Done | `tilo.compose.dsl` exposes the Compose-first API. |
-| Raster tile rendering | ✅ Done | WMS, XYZ, and custom tile-provider layers render as raster images. |
-| WMS capabilities | ✅ Done | WMS layers can be created from GetCapabilities. |
-| Tile planning | ✅ Done | Density-aware planning with limited visible tile count. |
-| Tile fetching | ✅ Done | Shared HTTP client, byte cache, in-flight deduplication, and concurrency control. |
-| Tile prefetching | ✅ Done | Nearby tiles are fetched outside the visible viewport. |
-| Raster fallback | ✅ Done | Existing tiles can remain visible while sharper tiles load. |
-| Simple vector features | ✅ Done | Points, lines, polygons, multi-geometries, and polygon holes. |
-| Labels | ✅ Done | Labels render through a bitmap cache. |
-| Feature styling | ✅ Done | Fill, stroke, dash, hatch, dot patterns, and point shapes. |
-| Drawing plugin | ✅ Done | Point, line, and polygon drafts with save callback and history state. |
-| GeoCore split | ✅ Done | Platform-agnostic contracts live in `Tilo.GeoCore`. |
-| Spatial indexing | ✅ Done | Feature sources use `Tilo.SpatialIndex` for viewport queries. |
-| CRS model | ✅ Done | Human-readable DSL helpers wrap WGS84, Web Mercator, S-JTSK/Krovak, and identity. |
-| Non-Web-Mercator maps | ✅ Done | Map state, raster tile grids, WMS tiles, app-owned tile stores, and feature layers can work in projections such as EPSG:5514. |
-| CRS transformations | 🟡 Partial | GeoCore exposes contracts/registry; concrete transforms are injected by runtime/app code. |
-| Vector tiles | ⚪ Not planned | Current focus is raster tiles and simple vector layers. |
-| Raster MBTiles | 🟡 Partial | Generic tile-store provider API is ready; bundled SQLite readers and metadata resolvers are still planned. |
-| iOS production support | ⬜ Not done | KMP targets exist; validation currently focuses on Android/JVM. |
-| Public Maven artifacts | ⬜ Not done | Planned after API stabilization. |
+| Compose-first map API | ✅ Done | `TiloMap`, `rememberMapCameraState`, layer DSL, projection helpers, and docs use the intended public API. |
+| Raster WMS | ✅ Done | WMS layers load from GetCapabilities and render in the map CRS without client-side raster reprojection. |
+| Raster XYZ | ✅ Done | Web Mercator XYZ layers are available through `xyzTileLayer(...)`; the showcase includes a Mercator/XYZ example. |
+| Custom tile stores | ✅ Done | `tileStoreLayer(...)` supports app-owned z/x/y tile bytes with explicit projection and tile grid. |
+| Raster MBTiles | 🟡 Planned | Add dedicated `mbTilesLayer(...)` with SQLite access, metadata resolution, TMS/XYZ row schemes, Web Mercator defaults, and S-JTSK/Krovak grids. |
+| CRS model | ✅ Done | WGS84, Web Mercator, S-JTSK/Krovak, and identity projections have readable DSL helpers. |
+| CRS transformations | 🟡 Partial | Keep transform contracts injectable and document how apps provide licensed or project-specific transform implementations. |
+| Vector features | ✅ Done | Points, lines, polygons, multi-geometries, holes, labels, and common styles render from in-memory features. |
+| Vector performance | 🟡 Planned | Move toward layer-level styles, feature-level overrides, viewport culling contracts, and batched rendering by layer/style/geometry. |
+| Spatial indexing | ✅ Done | In-memory feature sources can use `Tilo.SpatialIndex` for viewport queries. |
+| Labels | 🟡 Partial | Bitmap cache exists; v1 still needs placement priority, collision handling, zoom visibility, and stronger label diagnostics. |
+| Drawing plugin | ✅ Done | Drawing supports point/line/polygon drafts, undo/redo, custom controls, configurable style, and app-owned save callbacks. |
+| Selection | ⬜ Planned | Add first-class hit testing, selected feature state, selected styling, and feature click callbacks. |
+| Editing plugin | ⬜ Planned | Build edit as a plugin on top of selection: vertex handles, move/insert/delete, save/cancel, and history. |
+| Camera control | ⬜ Planned | Add programmatic camera APIs: animate, fit bounds, zoom helpers, and rotation/bearing support. |
+| Event routing | ⬜ Planned | Define gesture priority between overlays, draw, edit, selection, and default pan/zoom/rotate interactions. |
+| Layer lifecycle | ⬜ Planned | Add visibility, min/max zoom, opacity, grouping, priority, attribution metadata, and dispose hooks. |
+| Loading and errors | ⬜ Planned | Expose per-layer loading, tile failures, retry state, empty/offline state, and structured diagnostics. |
+| Attribution | ⬜ Planned | Make attribution metadata and a default attribution overlay available for OSM, CUZK, offline, and custom layers. |
+| Performance tooling | ⬜ Planned | Add an opt-in debug overlay for FPS, tile counts, cache stats, visible features, labels, projection, and bounds. |
+| Testing strategy | 🟡 Partial | Unit tests and CI exist; v1 still needs fake tile providers, hit-test tests, tile-grid coverage, batching tests, and screenshots/goldens. |
+| Accessibility | ⬜ Planned | Plan semantic descriptions, accessible default controls, keyboard interactions, and large edit/draw handles. |
+| Documentation | 🟡 Partial | DSL docs exist; v1 needs polished guides for raster, vector, styling, labels, drawing, custom providers, transforms, and debugging. |
+| Release readiness | ⬜ Planned | Define stable public packages, experimental/internal annotations, Maven coordinates, source/docs artifacts, changelog, and release workflow. |
+| iOS validation | ⬜ Later | KMP targets exist, but production validation is intentionally focused on Android/JVM first. |
+| Vector tiles | ⚪ Out of scope | v1 focuses on raster tiles and simple vector feature layers, not vector MBTiles or MVT rendering. |
+
+See [API Roadmap](docs/API_ROADMAP.md) for the detailed v1 plan and open
+design notes.
 
 ## License
 

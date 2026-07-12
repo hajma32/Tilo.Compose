@@ -8,8 +8,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import tilo.compose.core.layers.Attribution
+import tilo.compose.core.layers.raster.WMSCapabilities
+import tilo.compose.core.layers.raster.WMSCapabilitiesLoader
 import tilo.compose.core.layers.raster.WMSTileLayer
-import tilo.compose.core.layers.raster.createWMSTileLayerFromCapabilities
 import tilo.compose.core.projection.Projection
 
 /**
@@ -41,6 +42,9 @@ fun rememberWMSLayer(
     format: String? = null,
     getMapVersion: String = "1.1.1",
     zIndex: Int = 0,
+    visible: Boolean = true,
+    minZoom: Double? = null,
+    maxZoom: Double? = null,
     tileSize: Int = 256,
     maxVisibleTiles: Int = 9,
     prefetchMargin: Int = 1,
@@ -51,16 +55,36 @@ fun rememberWMSLayer(
     attributions: List<Attribution> = emptyList(),
 ): WMSLayerState {
     val state = remember { WMSLayerState() }
+    var capabilities by remember(capabilitiesUrl) { mutableStateOf<WMSCapabilities?>(null) }
+
+    LaunchedEffect(capabilitiesUrl) {
+        state.isLoading = true
+        state.error = null
+        state.layer = null
+        try {
+            capabilities = WMSCapabilitiesLoader().load(capabilitiesUrl)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            state.error = error
+            capabilities = null
+        } finally {
+            state.isLoading = false
+        }
+    }
 
     LaunchedEffect(
+        capabilities,
         id,
-        capabilitiesUrl,
         layerName,
         projection,
         styles,
         format,
         getMapVersion,
         zIndex,
+        visible,
+        minZoom,
+        maxZoom,
         tileSize,
         maxVisibleTiles,
         prefetchMargin,
@@ -70,18 +94,25 @@ fun rememberWMSLayer(
         attribution,
         attributions,
     ) {
-        state.isLoading = true
+        val loadedCapabilities = capabilities
+        if (loadedCapabilities == null) {
+            state.layer = null
+            return@LaunchedEffect
+        }
+
         state.error = null
         try {
-            state.layer = createWMSTileLayerFromCapabilities(
+            state.layer = loadedCapabilities.createTileLayer(
                 id = id,
-                capabilitiesUrl = capabilitiesUrl,
                 layerName = layerName,
                 projection = projection,
                 styles = styles,
-                format = format,
+                format = format ?: loadedCapabilities.formats.firstOrNull() ?: "image/png",
                 getMapVersion = getMapVersion,
                 zIndex = zIndex,
+                visible = visible,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
                 tileSize = tileSize,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
@@ -95,8 +126,6 @@ fun rememberWMSLayer(
         } catch (error: Throwable) {
             state.error = error
             state.layer = null
-        } finally {
-            state.isLoading = false
         }
     }
 

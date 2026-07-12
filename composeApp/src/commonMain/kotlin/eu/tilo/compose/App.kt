@@ -160,6 +160,7 @@ fun App() {
     )
     val sjtskReferenceFeatures = remember { buildSjtksReferenceFeatures() }
     val mercatorPlaceFeatures = remember { buildMercatorPlaceFeatures() }
+    val pragueDetailFeatures = remember { buildPragueDetailFeatures() }
 
     var savedDrawingFeatures by remember { mutableStateOf<List<Feature>>(emptyList()) }
     val drawState = rememberDrawState(
@@ -321,6 +322,7 @@ fun App() {
                             WebMercatorXyzExampleMap(
                                 cameraState = mercatorCameraState,
                                 places = mercatorPlaceFeatures,
+                                pragueDetails = pragueDetailFeatures,
                             )
                         }
                     }
@@ -384,6 +386,7 @@ private fun SjtksShowcaseMap(
 private fun BoxScope.WebMercatorXyzExampleMap(
     cameraState: MapCameraState,
     places: List<Feature>,
+    pragueDetails: List<Feature>,
 ) {
     var selectedPlace by remember { mutableStateOf<PlaceDetails?>(null) }
     var selectedPlaceRefs by remember { mutableStateOf<Set<FeatureSelectionRef>>(emptySet()) }
@@ -471,6 +474,27 @@ private fun BoxScope.WebMercatorXyzExampleMap(
                         stroke(0xFFFFD54F, width = 7.dp) {
                             lineJoin = LineJoin.Round
                         }
+                    }
+                    selectedLabel(0xFF111827)
+                }
+            }
+            featureLayer("prague-detail", pragueDetails) {
+                zIndex = 2
+                minZoom = 13.0
+                projection = wgs84()
+                style = featureLayerStyle {
+                    point {
+                        shape = PointShape.Circle
+                        size = 12.dp
+                        fill(0xFF7C3AED)
+                        stroke(0xFFFFFFFF, width = 3.dp)
+                    }
+                    label(smallLabelStyle())
+                    selectedPoint {
+                        shape = PointShape.Circle
+                        size = 18.dp
+                        fill(0xFFFFD54F)
+                        stroke(0xFF111827, width = 3.dp)
                     }
                     selectedLabel(0xFF111827)
                 }
@@ -1023,6 +1047,29 @@ private fun buildMercatorPlaceFeatures(): List<Feature> =
                     description = "Priblizny zeleny polygon kolem pohori Cesky les pro ladeni polygon stylu.",
                 )
             )
+        }
+    }
+
+private fun buildPragueDetailFeatures(): List<Feature> =
+    features {
+        listOf(
+            Triple("mala-strana", "Malá Strana", Point(14.4043, 50.0872)),
+            Triple("stare-mesto", "Staré Město", Point(14.4208, 50.0870)),
+            Triple("karlin", "Karlín", Point(14.4510, 50.0922)),
+            Triple("vinohrady", "Vinohrady", Point(14.4418, 50.0765)),
+            Triple("smichov", "Smíchov", Point(14.4030, 50.0715)),
+            Triple("dejvice", "Dejvice", Point(14.3952, 50.1022)),
+        ).forEach { (key, name, point) ->
+            point(key, point.x, point.y) {
+                label = name
+                labelPriority = 80
+                data = Data(
+                    PlaceDetails(
+                        name = name,
+                        description = "Detailní ukázková feature v Praze viditelná od zoomu 13.0.",
+                    )
+                )
+            }
         }
     }
 

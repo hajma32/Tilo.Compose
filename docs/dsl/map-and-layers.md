@@ -44,7 +44,12 @@ Camera state also exposes programmatic zoom helpers:
 cameraState.zoomIn()
 cameraState.zoomOut()
 cameraState.zoomBy(delta = 0.5)
+cameraState.fitBounds(feature.geometry.bounds(), padding = 32.dp)
 ```
+
+Bounds must use the map projection and contain finite, ordered extents. Padding
+is applied on every side. The Compose API caps it for small viewports so that
+at least one physical pixel remains available for fitting the bounds.
 
 Animated zoom helpers are suspend functions, intended for UI controls:
 
@@ -53,6 +58,26 @@ scope.launch {
     cameraState.animateZoomIn()
 }
 ```
+
+## Layer Visibility
+
+Every raster and feature layer can be switched off or constrained to an
+inclusive zoom range. Inactive layers are not fetched, rendered, hit-tested,
+or included in the default attribution overlay.
+
+```kotlin
+featureLayer("building-labels", buildings) {
+    minZoom = 15.0
+    maxZoom = 20.0
+    visible = showBuildings
+}
+```
+
+Use the same `visible`, `minZoom`, and `maxZoom` arguments with
+`xyzTileLayer(...)`, `tileStoreLayer(...)`, and `rememberWMSLayer(...)`.
+
+Changing WMS visibility or its zoom limits reuses the already loaded
+GetCapabilities response.
 
 ## Raster Layers
 

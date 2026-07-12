@@ -84,15 +84,16 @@ fun MapRenderer(
     }
 
     val sortedLayers = remember(layers) { layers.sortedWith(compareBy(Layer::zIndex)) }
-    val tileLayers = sortedLayers.filterIsInstance<TileLayer>()
-    val vectorLayers = sortedLayers.filterIsInstance<VectorLayer>()
+    val activeLayers = sortedLayers.activeAt(map.zoom)
+    val tileLayers = activeLayers.filterIsInstance<TileLayer>()
+    val vectorLayers = activeLayers.filterIsInstance<VectorLayer>()
     val vectorLayerCacheSignature = vectorLayers.cacheSignature()
     val currentVectorCacheKeys = vectorLayers.associate { layer ->
         layer.id to layer.cacheKey(selectedFeatures.keysForLayer(layer.id))
     }
     val renderLoopInput by rememberUpdatedState(
         RenderLoopInput(
-            sortedLayers = sortedLayers,
+            sortedLayers = activeLayers,
             tileLayers = tileLayers,
             vectorLayers = vectorLayers,
             currentVectorCacheKeys = currentVectorCacheKeys,
@@ -112,7 +113,7 @@ fun MapRenderer(
     var lastVectorBitmapsByLayer by remember { mutableStateOf<Map<String, VectorBitmapRenderSceneLayer>>(emptyMap()) }
     var lastVectorCacheKeysByLayer by remember { mutableStateOf<Map<String, VectorLayerCacheKey>>(emptyMap()) }
 
-    LaunchedEffect(sortedLayers, vectorLayerCacheSignature, invalidationKey) {
+    LaunchedEffect(activeLayers, vectorLayerCacheSignature, invalidationKey) {
         val validVectorCommands =
             lastVectorCommandsByLayer.validCommandsFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
         val validVectorBitmaps = lastVectorBitmapsByLayer.validFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
@@ -130,7 +131,7 @@ fun MapRenderer(
             currentFrame = RasterFrame.Empty,
         )
         val nextScene = RenderSceneBuilder.build(
-            layers = sortedLayers,
+            layers = activeLayers,
             tilesByLayer = displayRasterFrame.tilesByLayer,
             commandsByLayer = validVectorCommands,
             vectorBitmapsByLayer = validVectorBitmaps,
@@ -141,7 +142,7 @@ fun MapRenderer(
     }
 
     LaunchedEffect(
-        sortedLayers,
+        activeLayers,
         redrawVersion,
         map.center,
         map.zoom,
@@ -166,7 +167,7 @@ fun MapRenderer(
         overviewRequests.emit(overviewRequestTracker.next(renderMap))
     }
 
-    LaunchedEffect(sortedLayers) {
+    LaunchedEffect(activeLayers) {
         renderRequests.collectLatest { renderMap ->
             val input = renderLoopInput
             supervisorScope {
@@ -245,7 +246,7 @@ fun MapRenderer(
         }
     }
 
-    LaunchedEffect(sortedLayers) {
+    LaunchedEffect(activeLayers) {
         var overviewPrefetchJob: Job? = null
         overviewRequests.collect { request ->
             runRenderBranch {
@@ -366,6 +367,9 @@ private class OverviewRequestTracker {
 
 private fun sortedLayersKey(layers: List<Layer>): String =
     layers.sortedWith(compareBy(Layer::zIndex)).joinToString(separator = "|") { layer -> "${layer.id}:${layer.zIndex}" }
+
+internal fun List<Layer>.activeAt(zoom: Double): List<Layer> =
+    filter { layer -> layer.isVisibleAt(zoom) }
 
 private fun List<VectorLayer>.cacheSignature(): String =
     joinToString(separator = "|") { layer -> layer.cacheKey().toString() }

@@ -14,8 +14,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
+import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.Layer
@@ -175,6 +178,19 @@ class MapCameraState internal constructor(
         animateZoomBy(delta = -step, focus = focus, animationSpec = animationSpec)
     }
 
+    /** Centers the map on [bounds], leaving a density-independent [padding]. */
+    fun fitBounds(bounds: BoundingBox, padding: Dp = 48.dp) {
+        val previousCenter = mapState.center
+        val previousZoom = mapState.zoom
+        val requestedPaddingPx = padding.value * mapState.viewport.pixelRatio
+        val smallestViewportDimension = minOf(mapState.viewport.width, mapState.viewport.height).toDouble()
+        val maxPaddingPx = ((smallestViewportDimension - 1.0) / 2.0).coerceAtLeast(0.0)
+        mapState.fitBounds(bounds, requestedPaddingPx.coerceAtMost(maxPaddingPx))
+        if (mapState.center != previousCenter || mapState.zoom != previousZoom) {
+            markCameraChanged()
+        }
+    }
+
     internal fun markChanged() {
         revision += 1
     }
@@ -245,6 +261,9 @@ class MapLayerBuilder : LayerSink {
         id: String,
         urlTemplate: String,
         zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
         projection: Projection = Epsg3857Projection,
         grid: TileGrid = TileGrid.defaultFor(projection),
         tms: Boolean = false,
@@ -264,6 +283,9 @@ class MapLayerBuilder : LayerSink {
                 urlTemplate = urlTemplate,
                 tms = tms,
                 zIndex = zIndex,
+                visible = visible,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
                 overviewZoomOffset = overviewZoomOffset,
@@ -287,6 +309,9 @@ class MapLayerBuilder : LayerSink {
         grid: TileGrid,
         readTile: suspend (TileCoordinate) -> ByteArray?,
         zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
         scheme: TileRowScheme = TileRowScheme.TMS,
         sourceId: String = id,
         maxVisibleTiles: Int = 9,
@@ -308,6 +333,9 @@ class MapLayerBuilder : LayerSink {
                     readTile = readTile,
                 ),
                 zIndex = zIndex,
+                visible = visible,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
                 overviewZoomOffset = overviewZoomOffset,
@@ -343,6 +371,9 @@ class MapLayerBuilder : LayerSink {
         id: String,
         features: List<Feature>,
         zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
         projection: Projection? = null,
         renderMode: FeatureRenderMode = VectorRenderStrategy.Immediate,
         style: FeatureLayerStyle = FeatureLayerStyle(),
@@ -351,6 +382,9 @@ class MapLayerBuilder : LayerSink {
             FeatureLayer(
                 id = id,
                 zIndex = zIndex,
+                visible = visible,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
                 projection = projection,
                 features = features,
                 renderStrategy = renderMode,
@@ -369,6 +403,9 @@ class MapLayerBuilder : LayerSink {
             id = id,
             features = features,
             zIndex = options.zIndex,
+            visible = options.visible,
+            minZoom = options.minZoom,
+            maxZoom = options.maxZoom,
             projection = options.projection,
             renderMode = options.renderMode,
             style = options.style,
@@ -383,6 +420,9 @@ class MapLayerBuilder : LayerSink {
  */
 class FeatureLayerOptions {
     var zIndex: Int = 0
+    var visible: Boolean = true
+    var minZoom: Double? = null
+    var maxZoom: Double? = null
     var projection: Projection? = null
     var renderMode: FeatureRenderMode = VectorRenderStrategy.Immediate
     var style: FeatureLayerStyle = FeatureLayerStyle()
@@ -469,14 +509,28 @@ fun TiloMap(
             )
         }
         if (attributionContent != null) {
-            val attributions = builtLayers.attributions()
-            if (attributions.isNotEmpty()) {
-                attributionContent(attributions)
-            }
+            AttributionOverlay(
+                cameraState = cameraState,
+                layers = builtLayers,
+                content = attributionContent,
+            )
         }
         if (cameraControlsContent != null) {
             cameraControlsContent(cameraState)
         }
+    }
+}
+
+@Composable
+private fun BoxScope.AttributionOverlay(
+    cameraState: MapCameraState,
+    layers: List<Layer>,
+    content: @Composable BoxScope.(List<Attribution>) -> Unit,
+) {
+    cameraState.revision
+    val attributions = layers.filter { it.isVisibleAt(cameraState.zoom) }.attributions()
+    if (attributions.isNotEmpty()) {
+        content(attributions)
     }
 }
 

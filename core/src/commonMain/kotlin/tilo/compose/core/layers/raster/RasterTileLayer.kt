@@ -19,6 +19,9 @@ open class RasterTileLayer(
     override val id: String,
     private val source: RasterTileSource,
     override val zIndex: Int = 0,
+    override val visible: Boolean = true,
+    override val minZoom: Double? = null,
+    override val maxZoom: Double? = null,
     private val maxVisibleTiles: Int = 9,
     private val prefetchMargin: Int = 1,
     private val overviewZoomOffset: Int = 2,
@@ -27,6 +30,14 @@ open class RasterTileLayer(
     override val attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
 ) : TileLayer {
+    init {
+        val minimum = minZoom
+        val maximum = maxZoom
+        require(minimum == null || maximum == null || minimum <= maximum) {
+            "minZoom must not be greater than maxZoom"
+        }
+    }
+
     override val projection: Projection = source.projection
     override val grid: TileGrid = source.grid
 

@@ -19,23 +19,34 @@ interface DrawStyle {
 data class DefaultDrawStyle(
     override val point: PointStyle = PointStyle(
         shape = PointShape.Circle,
-        size = 12.0,
-        fill = FillStyle(color = color(0xFFFFC107)),
-        stroke = StrokeStyle(color = color(0xFF263238), width = 2.0),
+        size = 14.0,
+        fill = FillStyle(color = color(0xFFF97316)),
+        stroke = StrokeStyle(color = color(0xFFFFFFFF), width = 3.75),
     ),
     override val line: LineStyle = LineStyle(
+        casing = StrokeStyle(
+            color = color(0xFFFFFFFF),
+            width = 7.0,
+            lineCap = LineCap.Round,
+            lineJoin = LineJoin.Round,
+        ),
         stroke = StrokeStyle(
-            color = color(0xFFFFC107),
-            width = 3.0,
+            color = color(0xFFF97316),
+            width = 3.75,
             lineCap = LineCap.Round,
             lineJoin = LineJoin.Round,
         )
     ),
     override val polygon: PolygonStyle = PolygonStyle(
-        fill = FillStyle(color = color(0x55FFC107)),
+        fill = FillStyle(color = color(0x33F97316)),
+        casing = StrokeStyle(
+            color = color(0xFFFFFFFF),
+            width = 7.0,
+            lineJoin = LineJoin.Round,
+        ),
         stroke = StrokeStyle(
-            color = color(0xFFFF8F00),
-            width = 2.5,
+            color = color(0xFFF97316),
+            width = 3.75,
             lineJoin = LineJoin.Round,
         )
     ),

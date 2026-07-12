@@ -1,6 +1,7 @@
 package eu.tilo.compose
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,13 +15,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +35,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -51,8 +59,6 @@ import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.WMSLayerState
 import tilo.compose.dsl.attribution
-import tilo.compose.dsl.cachedBitmap
-import tilo.compose.dsl.FeatureOptions
 import tilo.compose.dsl.extraLargeLabelStyle
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
@@ -68,9 +74,6 @@ import tilo.compose.dsl.smallLabelStyle
 import tilo.compose.dsl.webMercator
 import tilo.compose.dsl.wgs84
 import kotlinx.coroutines.launch
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 import tilo.compose.core.feature.Data
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.LabelFontStyle
@@ -110,9 +113,16 @@ private enum class BasemapOption(val title: String) {
 }
 
 private enum class DemoLayerOption(val title: String) {
-    DashedPolygons("Dashed polygons"),
-    FullLines("Full lines"),
+    CityLabels("City labels"),
 }
+
+private data class DemoCity(
+    val key: String,
+    val name: String,
+    val lon: Double,
+    val lat: Double,
+    val population: Int,
+)
 
 private data class PlaceDetails(
     val name: String,
@@ -138,6 +148,7 @@ fun App() {
         layerName = "0",
         projection = sjtsk(),
         format = "image/jpeg",
+        attribution = attribution("ČÚZK Ortofoto, EPSG:5514"),
     )
     val ztmLayer = rememberWMSLayer(
         id = "cuzk-ztm",
@@ -145,9 +156,9 @@ fun App() {
         layerName = "0",
         projection = sjtsk(),
         format = "image/png",
+        attribution = attribution("ČÚZK Základní mapa, EPSG:5514"),
     )
-    val dashedPolygonFeatures = remember { buildDashedPolygonLayerFeatures() }
-    val fullLineFeatures = remember { buildFullLineLayerFeatures() }
+    val sjtskReferenceFeatures = remember { buildSjtksReferenceFeatures() }
     val mercatorPlaceFeatures = remember { buildMercatorPlaceFeatures() }
 
     var savedDrawingFeatures by remember { mutableStateOf<List<Feature>>(emptyList()) }
@@ -162,8 +173,7 @@ fun App() {
     var selectedLayers by remember {
         mutableStateOf(
             setOf(
-                DemoLayerOption.DashedPolygons,
-                DemoLayerOption.FullLines,
+                DemoLayerOption.CityLabels,
             )
         )
     }
@@ -301,8 +311,7 @@ fun App() {
                                 ortofotoLayer = ortofotoLayer,
                                 ztmLayer = ztmLayer,
                                 selectedLayers = selectedLayers,
-                                dashedPolygonFeatures = dashedPolygonFeatures,
-                                fullLineFeatures = fullLineFeatures,
+                                referenceFeatures = sjtskReferenceFeatures,
                                 savedDrawingFeatures = savedDrawingFeatures,
                                 drawState = drawState,
                             )
@@ -328,8 +337,7 @@ private fun SjtksShowcaseMap(
     ortofotoLayer: WMSLayerState,
     ztmLayer: WMSLayerState,
     selectedLayers: Set<DemoLayerOption>,
-    dashedPolygonFeatures: List<Feature>,
-    fullLineFeatures: List<Feature>,
+    referenceFeatures: List<Feature>,
     savedDrawingFeatures: List<Feature>,
     drawState: DrawState,
 ) {
@@ -346,21 +354,21 @@ private fun SjtksShowcaseMap(
                 BasemapOption.CuzkOrtofoto -> wmsTileLayer(ortofotoLayer)
                 BasemapOption.CuzkZtm -> wmsTileLayer(ztmLayer)
             }
-            if (DemoLayerOption.DashedPolygons in selectedLayers) {
-                featureLayer("dashed-polygons", dashedPolygonFeatures) {
+            if (DemoLayerOption.CityLabels in selectedLayers) {
+                featureLayer("city-labels", referenceFeatures) {
                     zIndex = 1
                     projection = wgs84()
-                    renderMode = cachedBitmap(
-                        scale = 1.5,
-                        paddingPx = 192,
-                        invalidateOnZoomDelta = 0.35,
-                    )
-                }
-            }
-            if (DemoLayerOption.FullLines in selectedLayers) {
-                featureLayer("full-lines", fullLineFeatures) {
-                    zIndex = 2
-                    projection = wgs84()
+                    style = featureLayerStyle {
+                        point {
+                            shape = PointShape.Circle
+                            size = 0.dp
+                            fill(0x00000000)
+                            stroke(0x00000000, width = 0.dp)
+                        }
+                        label(mediumLabelStyle {
+                            offsetY(0.dp)
+                        })
+                    }
                 }
             }
             featureLayer("saved-drawings", savedDrawingFeatures) {
@@ -400,7 +408,10 @@ private fun BoxScope.WebMercatorXyzExampleMap(
                 urlTemplate = OSM_XYZ_URL,
                 projection = webMercator(),
                 maxVisibleTiles = 9,
-                prefetchMargin = 1,
+                prefetchMargin = 0,
+                overviewZoomOffset = 0,
+                maxOverviewTiles = 0,
+                overviewPrefetchMargin = 0,
                 attribution = attribution(
                     label = "© OpenStreetMap contributors",
                     url = "https://www.openstreetmap.org/copyright",
@@ -515,69 +526,159 @@ private fun BoxScope.WebMercatorXyzExampleMap(
 private fun BoxScope.DrawingControls(
     state: DrawState,
 ) {
-    Column(
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        if (state.isDrawing) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                tonalElevation = 4.dp,
-                shadowElevation = 4.dp,
+    if (state.isDrawing) {
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, end = 96.dp, bottom = 76.dp)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DrawMode.entries.forEach { mode ->
-                            if (mode == state.mode) {
-                                Button(onClick = { state.selectMode(mode) }) {
-                                    Text(mode.title())
-                                }
-                            } else {
-                                OutlinedButton(onClick = { state.selectMode(mode) }) {
-                                    Text(mode.title())
-                                }
-                            }
-                        }
+                    DrawMode.entries.forEach { mode ->
+                        DrawingModeChip(
+                            mode = mode,
+                            selected = mode == state.mode,
+                            onClick = { state.selectMode(mode) },
+                            modifier = Modifier.weight(1f),
+                        )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { state.undo() },
-                            enabled = state.canUndo,
-                        ) {
-                            Text("Undo")
-                        }
-                        OutlinedButton(
-                            onClick = { state.redo() },
-                            enabled = state.canRedo,
-                        ) {
-                            Text("Redo")
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { state.save() },
-                            enabled = state.canSave,
-                        ) {
-                            Text("Save")
-                        }
-                        OutlinedButton(onClick = { state.clear() }) {
-                            Text("Clear")
-                        }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DrawingActionButton("Undo", enabled = state.canUndo, onClick = state::undo)
+                    DrawingActionButton("Redo", enabled = state.canRedo, onClick = state::redo)
+                    Spacer(Modifier.weight(1f))
+                    DrawingActionButton("Clear", onClick = state::clear)
+                    Button(
+                        onClick = { state.save() },
+                        enabled = state.canSave,
+                        contentPadding = ButtonDefaults.ContentPadding,
+                    ) {
+                        Text("Save")
                     }
                 }
             }
         }
-        FloatingActionButton(onClick = { state.toggleDrawing() }) {
-            Text(if (state.isDrawing) "Done" else "Draw")
+    }
+    FloatingActionButton(
+        onClick = { state.toggleDrawing() },
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 16.dp, bottom = 76.dp),
+        shape = CircleShape,
+    ) {
+        DrawFabIcon(active = state.isDrawing)
+    }
+}
+
+@Composable
+private fun DrawingModeChip(
+    mode: DrawMode,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val contentColor = if (selected) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Surface(
+        modifier = modifier
+            .height(36.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = containerColor,
+        contentColor = contentColor,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = mode.title(),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
+
+@Composable
+private fun DrawingActionButton(
+    text: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        contentPadding = ButtonDefaults.TextButtonContentPadding,
+    ) {
+        Text(text)
+    }
+}
+
+@Composable
+private fun DrawFabIcon(active: Boolean) {
+    val color = if (active) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Icon(
+        imageVector = DrawEditIcon,
+        contentDescription = if (active) "Finish drawing" else "Start drawing",
+        modifier = Modifier.size(26.dp),
+        tint = color,
+    )
+}
+
+private val DrawEditIcon: ImageVector =
+    ImageVector.Builder(
+        name = "Edit",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(3f, 17.25f)
+            verticalLineTo(21f)
+            horizontalLineTo(6.75f)
+            lineTo(17.81f, 9.94f)
+            lineTo(14.06f, 6.19f)
+            lineTo(3f, 17.25f)
+            close()
+            moveTo(20.71f, 7.04f)
+            curveTo(21.1f, 6.65f, 21.1f, 6.02f, 20.71f, 5.63f)
+            lineTo(18.37f, 3.29f)
+            curveTo(17.98f, 2.9f, 17.35f, 2.9f, 16.96f, 3.29f)
+            lineTo(15.13f, 5.12f)
+            lineTo(18.88f, 8.87f)
+            lineTo(20.71f, 7.04f)
+            close()
+        }
+    }.build()
 
 private fun DrawMode.title(): String =
     name.lowercase().replaceFirstChar { char -> char.uppercase() }
@@ -588,20 +689,25 @@ private fun Feature.withSavedDrawingStyle(): Feature =
             is Point -> pointStyle {
                 shape = PointShape.Circle
                 size = 14.dp
-                fill(0xFF43A047)
-                stroke(0xFF263238, width = 2.dp)
+                fill(0xFFF97316)
+                stroke(0xFFFFFFFF, width = 3.75.dp)
             }
             is LineString -> lineStyle {
-                noCasing()
-                stroke(0xFF43A047, width = 4.dp) {
+                casing(0xFFFFFFFF, width = 7.dp) {
+                    lineCap = LineCap.Round
+                    lineJoin = LineJoin.Round
+                }
+                stroke(0xFFF97316, width = 3.75.dp) {
                     lineCap = LineCap.Round
                     lineJoin = LineJoin.Round
                 }
             }
             is Polygon -> polygonStyle {
-                fill(0x5543A047)
-                noCasing()
-                stroke(0xFF2E7D32, width = 3.dp) {
+                fill(0x33F97316)
+                casing(0xFFFFFFFF, width = 7.dp) {
+                    lineJoin = LineJoin.Round
+                }
+                stroke(0xFFF97316, width = 3.75.dp) {
                     lineJoin = LineJoin.Round
                 }
             }
@@ -609,86 +715,137 @@ private fun Feature.withSavedDrawingStyle(): Feature =
         }
     )
 
-private fun buildDashedPolygonLayerFeatures(): List<Feature> {
-    fun ring(cx: Double, cy: Double, rx: Double, ry: Double, n: Int = 72): List<Point> {
-        val points = (0 until n).map { i ->
-            val angle = 2.0 * PI * i / n
-            Point(cx + cos(angle) * rx, cy + sin(angle) * ry)
-        }
-        return points + points.first()
-    }
-
-    return features {
-        polygon(
-            key = "dashed-polygon-west",
-            rings = listOf(ring(14.4, 49.75, 0.85, 0.45)),
-        ) {
-            label = "Dashed polygon"
-            style = polygonStyle {
-                fill(0x3326A69A) {
-                    hatch(
-                        angleDegrees = 35.0,
-                        spacing = 10.dp,
-                        strokeColor = 0xFF00796B,
-                        strokeWidth = 1.2.dp,
+private fun buildSjtksReferenceFeatures(): List<Feature> =
+    features {
+        demoCitiesOver50k().forEach { city ->
+            point(city.key, city.lon, city.lat) {
+                label = city.name
+                labelPriority = when {
+                    city.population >= 500_000 -> 300
+                    city.population >= 100_000 -> 200
+                    else -> 100
+                }
+                labelStyle = when {
+                    city.population >= 500_000 -> extraLargeLabelStyle {
+                        offsetY(0.dp)
+                    }
+                    city.population >= 100_000 -> largeLabelStyle {
+                        offsetY(0.dp)
+                    }
+                    else -> mediumLabelStyle {
+                        offsetY(0.dp)
+                    }
+                }
+                data = Data(
+                    PlaceDetails(
+                        name = city.name,
+                        description = "Orientacni bod pro mesto nad 50 tisic obyvatel.",
                     )
-                }
-                noCasing()
-                stroke(0xFF004D40, width = 3.dp) {
-                    lineJoin = LineJoin.Round
-                    dash(18.dp, 8.dp)
-                }
+                )
             }
         }
-        polygon(
-            key = "dashed-polygon-east",
-            rings = listOf(ring(16.1, 49.95, 0.75, 0.4)),
-        ) {
-            label = "Pattern fill"
-            style = polygonStyle {
-                fill(0x33AB47BC) {
-                    dots(
-                        spacing = 12.dp,
-                        radius = 2.dp,
-                        color = 0xFF8E24AA,
+        brnoAreaMunicipalitiesOver1k().forEach { city ->
+            point(city.key, city.lon, city.lat) {
+                label = city.name
+                labelPriority = 20
+                labelStyle = smallLabelStyle {
+                    offsetY(0.dp)
+                }
+                data = Data(
+                    PlaceDetails(
+                        name = city.name,
+                        description = "Orientacni bod pro obec nad 1000 obyvatel v okoli Brna.",
                     )
-                }
-                noCasing()
-                stroke(0xFF6A1B9A, width = 2.5.dp) {
-                    dash(12.dp, 7.dp)
-                }
-            }
-        }
-    }
-}
-
-private fun buildFullLineLayerFeatures(): List<Feature> {
-    fun wavePoints(baseLat: Double, phase: Double): List<Point> =
-        (0 until 120).map { i ->
-            val t = i.toDouble() / 119.0
-            Point(12.4 + 5.8 * t, baseLat + sin(t * PI * 2.5 + phase) * 0.28)
-        }
-
-    fun FeatureOptions.wave(key: String, strokeArgb: Long) {
-        label = key
-        style = lineStyle {
-            noCasing()
-            stroke(strokeArgb, width = 4.dp) {
-                lineCap = LineCap.Round
-                lineJoin = LineJoin.Round
+                )
             }
         }
     }
 
-    return features {
-        line("Full line A", wavePoints(50.35, 0.0)) {
-            wave(key = "Full line A", strokeArgb = 0xFFE53935)
-        }
-        line("Full line B", wavePoints(49.25, PI / 2.0)) {
-            wave(key = "Full line B", strokeArgb = 0xFF1E88E5)
-        }
-    }
-}
+private fun demoCitiesOver50k(): List<DemoCity> =
+    listOf(
+        DemoCity("praha", "Praha", 14.4378, 50.0755, 1_390_000),
+        DemoCity("brno", "Brno", 16.6068, 49.1951, 400_000),
+        DemoCity("ostrava", "Ostrava", 18.2625, 49.8209, 280_000),
+        DemoCity("plzen", "Plzeň", 13.3776, 49.7384, 185_000),
+        DemoCity("liberec", "Liberec", 15.0562, 50.7663, 107_000),
+        DemoCity("olomouc", "Olomouc", 17.2518, 49.5938, 102_000),
+        DemoCity("ceske-budejovice", "České Budějovice", 14.4743, 48.9757, 97_000),
+        DemoCity("hradec-kralove", "Hradec Králové", 15.8328, 50.2092, 93_000),
+        DemoCity("pardubice", "Pardubice", 15.7791, 50.0343, 92_000),
+        DemoCity("usti-nad-labem", "Ústí nad Labem", 14.0407, 50.6607, 91_000),
+        DemoCity("zlin", "Zlín", 17.6660, 49.2244, 74_000),
+        DemoCity("havirov", "Havířov", 18.4369, 49.7798, 70_000),
+        DemoCity("kladno", "Kladno", 14.1038, 50.1473, 69_000),
+        DemoCity("most", "Most", 13.6362, 50.5030, 63_000),
+        DemoCity("opava", "Opava", 17.9026, 49.9387, 55_000),
+        DemoCity("frydek-mistek", "Frýdek-Místek", 18.3500, 49.6819, 55_000),
+        DemoCity("jihlava", "Jihlava", 15.5906, 49.3961, 53_000),
+        DemoCity("karvina", "Karviná", 18.5417, 49.8540, 51_000),
+        DemoCity("teplice", "Teplice", 13.8245, 50.6404, 50_000),
+    )
+
+private fun brnoAreaMunicipalitiesOver1k(): List<DemoCity> =
+    listOf(
+        DemoCity("brno-area-blansko", "Blansko", 16.6444, 49.3630, 20_000),
+        DemoCity("brno-area-boskovice", "Boskovice", 16.6599, 49.4875, 12_000),
+        DemoCity("brno-area-letovice", "Letovice", 16.5736, 49.5471, 6_700),
+        DemoCity("brno-area-adamov", "Adamov", 16.6525, 49.3016, 4_400),
+        DemoCity("brno-area-rajec-jestrebi", "Rájec-Jestřebí", 16.6381, 49.4109, 3_600),
+        DemoCity("brno-area-lipuvka", "Lipůvka", 16.5536, 49.3395, 1_400),
+        DemoCity("brno-area-cerna-hora", "Černá Hora", 16.5814, 49.4136, 2_100),
+        DemoCity("brno-area-jedovnice", "Jedovnice", 16.7551, 49.3446, 2_900),
+        DemoCity("brno-area-ostrov-u-macochy", "Ostrov u Macochy", 16.7624, 49.3838, 1_100),
+        DemoCity("brno-area-risty", "Ráječko", 16.6440, 49.3935, 1_400),
+        DemoCity("brno-area-kurim", "Kuřim", 16.5314, 49.2985, 11_000),
+        DemoCity("brno-area-tisnov", "Tišnov", 16.4244, 49.3489, 9_300),
+        DemoCity("brno-area-veverska-bityska", "Veverská Bítýška", 16.4369, 49.2759, 3_300),
+        DemoCity("brno-area-drásov", "Drásov", 16.4778, 49.3318, 2_200),
+        DemoCity("brno-area-celistice", "Čebín", 16.4770, 49.3132, 1_800),
+        DemoCity("brno-area-sentice", "Sentice", 16.4579, 49.3162, 1_100),
+        DemoCity("brno-area-hradcany", "Hradčany", 16.4552, 49.3614, 1_100),
+        DemoCity("brno-area-zastavka", "Zastávka", 16.3631, 49.1880, 2_500),
+        DemoCity("brno-area-rosice", "Rosice", 16.3879, 49.1823, 6_700),
+        DemoCity("brno-area-ivancice", "Ivančice", 16.3775, 49.1014, 9_900),
+        DemoCity("brno-area-oslavany", "Oslavany", 16.3365, 49.1236, 4_700),
+        DemoCity("brno-area-dolni-kounice", "Dolní Kounice", 16.4649, 49.0701, 2_400),
+        DemoCity("brno-area-tetcice", "Tetčice", 16.4057, 49.1701, 1_300),
+        DemoCity("brno-area-strelice", "Střelice", 16.5039, 49.1533, 3_200),
+        DemoCity("brno-area-troubsko", "Troubsko", 16.5107, 49.1699, 2_300),
+        DemoCity("brno-area-popuvky", "Popůvky", 16.4866, 49.1779, 1_800),
+        DemoCity("brno-area-omice", "Omice", 16.4513, 49.1702, 1_000),
+        DemoCity("brno-area-ostopovice", "Ostopovice", 16.5430, 49.1612, 1_800),
+        DemoCity("brno-area-moravany", "Moravany", 16.5795, 49.1479, 3_400),
+        DemoCity("brno-area-modrice", "Modřice", 16.6046, 49.1283, 5_600),
+        DemoCity("brno-area-rajhrad", "Rajhrad", 16.6039, 49.0902, 3_900),
+        DemoCity("brno-area-rajhradice", "Rajhradice", 16.6295, 49.0914, 1_600),
+        DemoCity("brno-area-zidlochovice", "Židlochovice", 16.6188, 49.0395, 3_800),
+        DemoCity("brno-area-hustopece", "Hustopeče", 16.7376, 48.9409, 6_000),
+        DemoCity("brno-area-pohorelice", "Pohořelice", 16.5245, 48.9812, 5_500),
+        DemoCity("brno-area-orechov", "Ořechov", 16.5237, 49.1112, 2_800),
+        DemoCity("brno-area-slapnice", "Šlapanice", 16.7273, 49.1686, 7_900),
+        DemoCity("brno-area-jirikovice", "Jiříkovice", 16.7567, 49.1669, 1_100),
+        DemoCity("brno-area-blazovice", "Blažovice", 16.7861, 49.1655, 1_200),
+        DemoCity("brno-area-prace", "Prace", 16.7655, 49.1408, 1_000),
+        DemoCity("brno-area-ponetovice", "Ponětovice", 16.7502, 49.1528, 1_000),
+        DemoCity("brno-area-sokolnice", "Sokolnice", 16.7216, 49.1138, 2_400),
+        DemoCity("brno-area-telnice", "Telnice", 16.7177, 49.1019, 1_600),
+        DemoCity("brno-area-ujezd-u-brna", "Újezd u Brna", 16.7570, 49.1053, 3_400),
+        DemoCity("brno-area-slavkov-u-brna", "Slavkov u Brna", 16.8765, 49.1533, 7_000),
+        DemoCity("brno-area-rousinov", "Rousínov", 16.8822, 49.2013, 5_700),
+        DemoCity("brno-area-vyskov", "Vyškov", 16.9989, 49.2775, 20_000),
+        DemoCity("brno-area-bucovice", "Bučovice", 17.0019, 49.1489, 6_400),
+        DemoCity("brno-area-bilovice", "Bílovice nad Svitavou", 16.6729, 49.2470, 3_700),
+        DemoCity("brno-area-ricany", "Řícmanice", 16.6827, 49.2577, 1_000),
+        DemoCity("brno-area-babice", "Babice nad Svitavou", 16.6968, 49.2817, 1_300),
+        DemoCity("brno-area-kanice", "Kanice", 16.7142, 49.2634, 1_100),
+        DemoCity("brno-area-ochoz", "Ochoz u Brna", 16.7447, 49.2550, 1_400),
+        DemoCity("brno-area-mokra-horakov", "Mokrá-Horákov", 16.7510, 49.2228, 2_800),
+        DemoCity("brno-area-pozorice", "Pozořice", 16.7907, 49.2098, 2_300),
+        DemoCity("brno-area-vinicne-sumice", "Viničné Šumice", 16.8258, 49.2137, 1_300),
+        DemoCity("brno-area-tvarozna", "Tvarožná", 16.7702, 49.1918, 1_300),
+        DemoCity("brno-area-sivice", "Sivice", 16.7822, 49.2040, 1_100),
+        DemoCity("brno-area-holubice", "Holubice", 16.8122, 49.1775, 1_500),
+    )
 
 private fun buildMercatorPlaceFeatures(): List<Feature> =
     features {

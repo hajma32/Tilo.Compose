@@ -8,6 +8,8 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -29,14 +31,19 @@ import kotlin.math.ln
  * Handles pan and pinch-to-zoom gestures on the map.
  * Calls [onChanged] after each gesture so the caller can trigger recomposition.
  */
+@Composable
 internal fun Modifier.mapGestureInput(
     map: Map,
     onChanged: () -> Unit
-): Modifier = pointerInput(map) {
+): Modifier {
+    val currentMap = rememberUpdatedState(map)
+    val currentOnChanged = rememberUpdatedState(onChanged)
+    return pointerInput(Unit) {
     coroutineScope {
         var panFlingJob: Job? = null
         var zoomFlingJob: Job? = null
         awaitEachGesture {
+            val map = currentMap.value
             var accumulatedZoom = 1f
             var accumulatedRotation = 0f
             var accumulatedPan = Offset.Zero
@@ -111,7 +118,7 @@ internal fun Modifier.mapGestureInput(
                             )
                         }
                         if (panChange != Offset.Zero || zoomChange != 1f) {
-                            onChanged()
+                            currentOnChanged.value()
                         }
                         event.changes.forEach { change ->
                             if (change.positionChanged()) {
@@ -128,7 +135,7 @@ internal fun Modifier.mapGestureInput(
                     animateInertialPan(
                         initialVelocity = panVelocity.clampDistance(MaxPanVelocity),
                         map = map,
-                        onChanged = onChanged,
+                        onChanged = { currentOnChanged.value() },
                     )
                 }
             }
@@ -138,25 +145,48 @@ internal fun Modifier.mapGestureInput(
                         initialVelocity = zoomVelocity.coerceIn(-MaxZoomVelocity, MaxZoomVelocity),
                         focus = zoomFocus,
                         map = map,
-                        onChanged = onChanged,
+                        onChanged = { currentOnChanged.value() },
                     )
                 }
             }
         }
     }
 }
+}
 
+@Composable
 internal fun Modifier.mapTapInput(
     map: Map,
     onTap: ((screenPoint: Point, worldPoint: Point) -> Unit)?,
     onChanged: () -> Unit,
 ): Modifier {
-    if (onTap == null) return this
-    return pointerInput(map, onTap) {
-        detectTapGestures { offset ->
-            val screenPoint = Point(offset.x.toDouble(), offset.y.toDouble())
-            onTap(screenPoint, map.screenToWorld(screenPoint))
-            onChanged()
+    val currentMap = rememberUpdatedState(map)
+    val currentOnTap = rememberUpdatedState(onTap)
+    val currentOnChanged = rememberUpdatedState(onChanged)
+    return pointerInput(Unit) {
+        coroutineScope {
+            var doubleTapZoomJob: Job? = null
+            detectTapGestures(
+                onDoubleTap = { offset ->
+                    doubleTapZoomJob?.cancel()
+                    doubleTapZoomJob = launch {
+                        animateDoubleTapZoom(
+                            focus = Point(offset.x.toDouble(), offset.y.toDouble()),
+                            map = currentMap.value,
+                            onChanged = { currentOnChanged.value() },
+                        )
+                    }
+                },
+                onTap = { offset ->
+                    val screenPoint = Point(offset.x.toDouble(), offset.y.toDouble())
+                    val onTap = currentOnTap.value
+                    if (onTap != null) {
+                        val map = currentMap.value
+                        onTap(screenPoint, map.screenToWorld(screenPoint))
+                        currentOnChanged.value()
+                    }
+                }
+            )
         }
     }
 }
@@ -177,6 +207,8 @@ private const val ZoomVelocityBoostEnd = 3.5
 private const val MaximumZoomVelocityBoost = 1.3
 private const val ZoomFlingFriction = 5.4
 private const val MaximumZoomFlingDurationNanos = 700_000_000L
+private const val DoubleTapZoomDelta = 2.0
+private const val DoubleTapZoomDurationNanos = 420_000_000L
 
 private suspend fun animateInertialPan(
     initialVelocity: Offset,
@@ -200,6 +232,30 @@ private suspend fun animateInertialPan(
         map.panBy(pan.x.toDouble(), pan.y.toDouble())
         onChanged()
         velocity *= exp(-PanFlingFriction * deltaSeconds)
+    }
+}
+
+private suspend fun animateDoubleTapZoom(
+    focus: Point,
+    map: Map,
+    onChanged: () -> Unit,
+) {
+    val targetZoom = (map.zoom + DoubleTapZoomDelta).coerceIn(map.config.minZoom, map.config.maxZoom)
+    if (targetZoom == map.zoom) return
+
+    val startZoom = map.zoom
+    var previousProgress = 0.0
+    val startedAt = withFrameNanos { it }
+
+    while (true) {
+        val frame = withFrameNanos { it }
+        val rawProgress = ((frame - startedAt).toDouble() / DoubleTapZoomDurationNanos)
+            .coerceIn(0.0, 1.0)
+        val progress = rawProgress.easeInOutCubic()
+        map.zoomBy(delta = (targetZoom - startZoom) * (progress - previousProgress), focus = focus)
+        onChanged()
+        previousProgress = progress
+        if (rawProgress >= 1.0) break
     }
 }
 
@@ -230,6 +286,14 @@ private suspend fun animateInertialZoom(
         velocity *= exp(-ZoomFlingFriction * deltaSeconds)
     }
 }
+
+private fun Double.easeInOutCubic(): Double =
+    if (this < 0.5) {
+        4.0 * this * this * this
+    } else {
+        val shifted = -2.0 * this + 2.0
+        1.0 - shifted * shifted * shifted / 2.0
+    }
 
 private fun Double.zoomBoostMultiplier(): Double {
     val speed = abs(this)

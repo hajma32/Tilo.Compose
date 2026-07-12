@@ -152,7 +152,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n./gradlew :composeApp:embedAndSignAppleFrameworkForXcode\n";
+			shellScript = "set -e\n\nif [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\n\ncd \"$SRCROOT/..\"\n\nexport JAVA_HOME=\"${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}\"\n\nif [[ \"$CONFIGURATION\" == \"Release\" ]]; then\n  KOTLIN_BUILD_TYPE=\"Release\"\nelse\n  KOTLIN_BUILD_TYPE=\"Debug\"\nfi\n\nif [[ \"$SDK_NAME\" == iphonesimulator* ]]; then\n  KOTLIN_TARGET=\"IosSimulatorArm64\"\nelse\n  KOTLIN_TARGET=\"IosArm64\"\nfi\n\n./gradlew \":composeApp:link${KOTLIN_BUILD_TYPE}Framework${KOTLIN_TARGET}\" :composeApp:syncComposeResourcesForIos\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -312,6 +312,22 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../composeApp/build/bin/iosArm64/debugFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../composeApp/build/bin/iosSimulatorArm64/debugFramework",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					ComposeApp,
+				);
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -339,6 +355,22 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+				);
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../composeApp/build/bin/iosArm64/releaseFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../composeApp/build/bin/iosSimulatorArm64/releaseFramework",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					ComposeApp,
 				);
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

@@ -59,7 +59,7 @@ fun MapRenderer(
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
-    val textMeasurer = rememberTextMeasurer()
+    val textMeasurer = rememberTextMeasurer(cacheSize = LabelTextLayoutCacheSize)
     val offscreenLabelDrawScope = remember { CanvasDrawScope() }
     val labelBitmapCache = remember { LabelBitmapCache() }
     val rasterPipeline = remember { RasterRenderPipeline() }
@@ -84,9 +84,9 @@ fun MapRenderer(
     }
 
     val sortedLayers = remember(layers) { layers.sortedWith(compareBy(Layer::zIndex)) }
-    val activeLayers = sortedLayers.activeAt(map.zoom)
-    val tileLayers = activeLayers.filterIsInstance<TileLayer>()
-    val vectorLayers = activeLayers.filterIsInstance<VectorLayer>()
+    val activeLayers = remember(sortedLayers, map.zoom) { sortedLayers.activeAt(map.zoom) }
+    val tileLayers = remember(activeLayers) { activeLayers.filterIsInstance<TileLayer>() }
+    val vectorLayers = remember(activeLayers) { activeLayers.filterIsInstance<VectorLayer>() }
     val vectorLayerCacheSignature = vectorLayers.cacheSignature()
     val currentVectorCacheKeys = vectorLayers.associate { layer ->
         layer.id to layer.cacheKey(selectedFeatures.keysForLayer(layer.id))
@@ -248,7 +248,7 @@ fun MapRenderer(
 
     LaunchedEffect(activeLayers) {
         var overviewPrefetchJob: Job? = null
-        overviewRequests.collect { request ->
+        overviewRequests.collectLatest { request ->
             runRenderBranch {
                 val overviewMap = request.map
                 val input = renderLoopInput
@@ -373,6 +373,8 @@ internal fun List<Layer>.activeAt(zoom: Double): List<Layer> =
 
 private fun List<VectorLayer>.cacheSignature(): String =
     joinToString(separator = "|") { layer -> layer.cacheKey().toString() }
+
+private const val LabelTextLayoutCacheSize = 128
 
 private fun Set<FeatureSelectionRef>.keysForLayer(layerId: String): Set<String> =
     asSequence()

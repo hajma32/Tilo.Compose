@@ -95,6 +95,7 @@ internal fun DrawScope.drawRenderScene(
             map = map,
             drawScope = this,
             textMeasurer = textMeasurer,
+            labelBitmapCache = labelBitmapCache,
         ),
         offscreenDrawScope = offscreenLabelDrawScope,
         textMeasurer = textMeasurer,

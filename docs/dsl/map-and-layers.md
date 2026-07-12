@@ -59,6 +59,29 @@ scope.launch {
 }
 ```
 
+## Debug Overlay
+
+The optional `ui` module provides a reusable diagnostics overlay with the
+current zoom, current and rolling 30-second FPS, average and maximum frame
+time, and an estimate of skipped frames. Add it to the camera controls slot
+alongside any other controls:
+
+```kotlin
+cameraControlsContent = { cameraState ->
+    DefaultZoomControls(cameraState)
+    DefaultMapDebugOverlay(
+        cameraState = cameraState,
+        enabled = showMapDiagnostics,
+        targetFrameRate = 60,
+    )
+}
+```
+
+The target frame rate defines the frame budget used for skipped-frame
+estimates. While enabled, the overlay continuously observes the Compose frame
+clock, so keep it disabled outside diagnostic builds or user-invoked debug
+modes.
+
 ## Layer Visibility
 
 Every raster and feature layer can be switched off or constrained to an

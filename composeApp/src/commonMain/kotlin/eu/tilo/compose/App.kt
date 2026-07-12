@@ -94,6 +94,7 @@ import tilo.compose.draw.DrawState
 import tilo.compose.draw.drawLayer
 import tilo.compose.draw.rememberDrawState
 import tilo.compose.ui.DefaultZoomControls
+import tilo.compose.ui.DefaultMapDebugOverlay
 import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultScaleBarContent
 
@@ -136,6 +137,7 @@ private fun animatedZoomControlsContent(): @Composable BoxScope.(MapCameraState)
         DefaultZoomControls(
             onZoomBy = { delta -> cameraState.animateZoomBy(delta) },
         )
+        DefaultMapDebugOverlay(cameraState)
     }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)

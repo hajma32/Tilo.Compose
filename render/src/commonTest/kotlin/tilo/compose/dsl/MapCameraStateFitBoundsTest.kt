@@ -12,6 +12,21 @@ import tilo.compose.core.map.Viewport
 class MapCameraStateFitBoundsTest {
 
     @Test
+    fun zoomRevisionChangesOnlyWhenZoomChanges() {
+        val map = MapState()
+        val cameraState = MapCameraState(map)
+
+        map.center = Point(10.0, 20.0)
+        cameraState.markChanged()
+        assertEquals(0, cameraState.zoomRevision)
+
+        map.zoom = 2.0
+        cameraState.markChanged()
+        assertEquals(1, cameraState.zoomRevision)
+        assertEquals(2.0, cameraState.zoom)
+    }
+
+    @Test
     fun fitBoundsCapsDefaultPaddingForSmallViewport() {
         val map = MapState(
             viewport = Viewport(width = 80, height = 60),

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,11 +64,16 @@ class MapCameraState internal constructor(
     internal var cameraControlRevision by mutableIntStateOf(0)
         private set
 
+    internal var zoomRevision by mutableIntStateOf(0)
+        private set
+
+    private var observableZoom by mutableDoubleStateOf(mapState.zoom)
+
     val center: Point
         get() = mapState.center
 
     val zoom: Double
-        get() = mapState.zoom
+        get() = observableZoom
 
     val projection: Projection
         get() = mapState.projection
@@ -193,6 +199,10 @@ class MapCameraState internal constructor(
 
     internal fun markChanged() {
         revision += 1
+        if (mapState.zoom != observableZoom) {
+            observableZoom = mapState.zoom
+            zoomRevision += 1
+        }
     }
 
     private fun markCameraChanged() {
@@ -527,7 +537,7 @@ private fun BoxScope.AttributionOverlay(
     layers: List<Layer>,
     content: @Composable BoxScope.(List<Attribution>) -> Unit,
 ) {
-    cameraState.revision
+    cameraState.zoomRevision
     val attributions = layers.filter { it.isVisibleAt(cameraState.zoom) }.attributions()
     if (attributions.isNotEmpty()) {
         content(attributions)

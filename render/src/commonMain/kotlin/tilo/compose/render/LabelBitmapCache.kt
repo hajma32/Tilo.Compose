@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -27,27 +28,55 @@ private const val DEFAULT_LABEL_CACHE_SIZE = 2_048
 class LabelBitmapCache(
     private val maxEntries: Int = DEFAULT_LABEL_CACHE_SIZE,
 ) {
-    private val bitmaps = LinkedHashMap<LabelBitmapKey, ImageBitmap>()
+    private val entries = LinkedHashMap<LabelBitmapKey, LabelCacheEntry>()
 
-    internal fun getOrPut(key: LabelBitmapKey, create: () -> ImageBitmap): ImageBitmap {
-        bitmaps.remove(key)?.let { cached ->
-            bitmaps[key] = cached
-            return cached
+    internal fun layoutOrPut(key: LabelBitmapKey, create: () -> LabelBitmapLayout): LabelBitmapLayout {
+        entries.remove(key)?.let { cached ->
+            entries[key] = cached
+            return cached.layout
         }
 
-        val bitmap = create()
-        bitmaps[key] = bitmap
+        val layout = create()
+        entries[key] = LabelCacheEntry(layout = layout)
+        trimToSize()
+        return layout
+    }
+
+    internal fun bitmapOrPut(
+        key: LabelBitmapKey,
+        createLayout: () -> LabelBitmapLayout,
+        createBitmap: (LabelBitmapLayout) -> ImageBitmap,
+    ): ImageBitmap {
+        val cached = entries.remove(key)
+        if (cached != null) {
+            cached.bitmap?.let { bitmap ->
+                entries[key] = cached
+                return bitmap
+            }
+            val bitmap = createBitmap(cached.layout)
+            entries[key] = cached.copy(bitmap = bitmap)
+            return bitmap
+        }
+
+        val layout = createLayout()
+        val bitmap = createBitmap(layout)
+        entries[key] = LabelCacheEntry(layout = layout, bitmap = bitmap)
         trimToSize()
         return bitmap
     }
 
     private fun trimToSize() {
-        while (bitmaps.size > maxEntries) {
-            val eldestKey = bitmaps.keys.firstOrNull() ?: return
-            bitmaps.remove(eldestKey)
+        while (entries.size > maxEntries) {
+            val eldestKey = entries.keys.firstOrNull() ?: return
+            entries.remove(eldestKey)
         }
     }
 }
+
+private data class LabelCacheEntry(
+    val layout: LabelBitmapLayout,
+    val bitmap: ImageBitmap? = null,
+)
 
 internal data class LabelBitmapKey(
     val text: String,
@@ -62,6 +91,17 @@ internal data class LabelBitmapMetrics(
     val height: Int,
 )
 
+internal data class LabelBitmapLayout(
+    val textLayout: TextLayoutResult,
+    val paddingX: Int,
+    val paddingY: Int,
+) {
+    val metrics = LabelBitmapMetrics(
+        width = (textLayout.size.width + paddingX * 2).coerceAtLeast(1),
+        height = (textLayout.size.height + paddingY * 2).coerceAtLeast(1),
+    )
+}
+
 internal fun DrawScope.cachedLabelBitmap(
     text: String,
     style: LabelStyle,
@@ -69,57 +109,68 @@ internal fun DrawScope.cachedLabelBitmap(
     offscreenDrawScope: CanvasDrawScope,
     cache: LabelBitmapCache,
 ): ImageBitmap =
-    cache.getOrPut(
-        LabelBitmapKey(
-            text = text,
-            style = style,
-            density = density,
-            fontScale = fontScale,
-            layoutDirection = layoutDirection,
-        )
-    ) {
-        createLabelBitmap(
-            text = text,
-            style = style,
-            textMeasurer = textMeasurer,
-            offscreenDrawScope = offscreenDrawScope,
+    labelBitmapKey(text, style).let { key ->
+        cache.bitmapOrPut(
+            key = key,
+            createLayout = { measureLabelBitmapLayout(text, style, textMeasurer) },
+            createBitmap = { layout -> createLabelBitmap(style, layout, offscreenDrawScope) },
         )
     }
 
-internal fun DrawScope.measureLabelBitmap(
+internal fun DrawScope.cachedLabelBitmapMetrics(
     text: String,
     style: LabelStyle,
     textMeasurer: TextMeasurer,
+    cache: LabelBitmapCache,
 ): LabelBitmapMetrics {
+    val key = labelBitmapKey(text, style)
+    return cache.layoutOrPut(key) {
+        measureLabelBitmapLayout(text, style, textMeasurer)
+    }.metrics
+}
+
+private fun DrawScope.labelBitmapKey(text: String, style: LabelStyle): LabelBitmapKey =
+    LabelBitmapKey(
+        text = text,
+        style = style,
+        density = density,
+        fontScale = fontScale,
+        layoutDirection = layoutDirection,
+    )
+
+private fun DrawScope.measureLabelBitmapLayout(
+    text: String,
+    style: LabelStyle,
+    textMeasurer: TextMeasurer,
+): LabelBitmapLayout {
     val textLayout = textMeasurer.measure(text = text, style = style.toTextStyle())
     val padding = labelBitmapPadding(style)
-    return LabelBitmapMetrics(
-        width = (textLayout.size.width + padding.x * 2).coerceAtLeast(1),
-        height = (textLayout.size.height + padding.y * 2).coerceAtLeast(1),
+    return LabelBitmapLayout(
+        textLayout = textLayout,
+        paddingX = padding.x,
+        paddingY = padding.y,
     )
 }
 
 internal fun DrawScope.createLabelBitmap(
-    text: String,
     style: LabelStyle,
-    textMeasurer: TextMeasurer,
+    layout: LabelBitmapLayout,
     offscreenDrawScope: CanvasDrawScope
 ): ImageBitmap {
     val textColor = style.color.toColor()
     val haloColor = style.haloColor.toColor()
-    val textLayout = textMeasurer.measure(text = text, style = style.toTextStyle())
-    val padding = labelBitmapPadding(style)
+    val textLayout = layout.textLayout
 
     val haloWidthPx = (style.haloWidth * density).toFloat()
     val background = style.background
     val backgroundPaddingX = ((background?.paddingHorizontal ?: 0.0) * density).toFloat()
     val backgroundPaddingY = ((background?.paddingVertical ?: 0.0) * density).toFloat()
-    val width = (textLayout.size.width + padding.x * 2).coerceAtLeast(1)
-    val height = (textLayout.size.height + padding.y * 2).coerceAtLeast(1)
+    val width = layout.metrics.width
+    val height = layout.metrics.height
 
     val bitmap = ImageBitmap(width, height)
     val canvas = GraphicsCanvas(bitmap)
-    val baseTopLeft = Offset(padding.x.toFloat(), padding.y.toFloat())
+    val baseTopLeft = Offset(layout.paddingX.toFloat(), layout.paddingY.toFloat())
 
     offscreenDrawScope.draw(
         density = this,

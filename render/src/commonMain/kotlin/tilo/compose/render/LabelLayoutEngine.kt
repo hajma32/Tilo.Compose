@@ -31,6 +31,7 @@ internal class LabelLayoutEngine(
         map: Map,
         drawScope: DrawScope,
         textMeasurer: TextMeasurer,
+        labelBitmapCache: LabelBitmapCache,
     ): List<PlacedLabel> {
         if (labels.isEmpty()) return emptyList()
 
@@ -40,6 +41,7 @@ internal class LabelLayoutEngine(
                 map = map,
                 drawScope = drawScope,
                 textMeasurer = textMeasurer,
+                labelBitmapCache = labelBitmapCache,
             )
         }
         val acceptedBounds = mutableListOf<ScreenBounds>()
@@ -73,12 +75,14 @@ internal class LabelLayoutEngine(
         map: Map,
         drawScope: DrawScope,
         textMeasurer: TextMeasurer,
+        labelBitmapCache: LabelBitmapCache,
     ): LabelCandidate {
         val anchor = map.worldToScreen(anchor)
-        val metrics = drawScope.measureLabelBitmap(
+        val metrics = drawScope.cachedLabelBitmapMetrics(
             text = text,
             style = style,
             textMeasurer = textMeasurer,
+            cache = labelBitmapCache,
         )
         val center = if (followsLine) {
             val offset = metrics.height / 2f + drawScope.styleUnitToPx(style.offsetY)

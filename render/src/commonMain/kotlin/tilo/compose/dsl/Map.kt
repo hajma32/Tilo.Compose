@@ -50,6 +50,23 @@ import tilo.compose.render.backend.RenderBackend
 typealias FeatureRenderMode = VectorRenderStrategy
 
 /**
+ * Immutable camera snapshot suitable for viewport-dependent data loading.
+ *
+ * [bounds] and [resolution] use the map projection's coordinate units. A snapshot is not ready
+ * until the map has received a non-empty viewport from layout.
+ */
+data class MapViewportSnapshot(
+    val bounds: BoundingBox,
+    val zoom: Double,
+    val viewportWidth: Int,
+    val viewportHeight: Int,
+    val resolution: Double,
+) {
+    val isReady: Boolean
+        get() = viewportWidth > 0 && viewportHeight > 0
+}
+
+/**
  * Mutable camera holder used by [TiloMap].
  *
  * Create it with [rememberMapCameraState] and pass the same instance to the map
@@ -80,6 +97,50 @@ class MapCameraState internal constructor(
 
     val config: MapConfig
         get() = mapState.config
+
+    /**
+     * Captures the current visible map rectangle for a viewport-dependent data source.
+     *
+     * Reading this from `snapshotFlow` observes camera and layout changes. [paddingFraction]
+     * expands every side by the requested fraction of the visible width/height so callers can
+     * prefetch around the screen and avoid reloading after every small pan.
+     */
+    fun viewportSnapshot(paddingFraction: Double = 0.0): MapViewportSnapshot {
+        require(paddingFraction.isFinite() && paddingFraction >= 0.0) {
+            "paddingFraction must be finite and non-negative"
+        }
+        revision // Establish a Compose snapshot read for camera and viewport changes.
+
+        val viewport = mapState.viewport
+        val topLeft = mapState.screenToWorld(Point(0.0, 0.0))
+        val bottomRight = mapState.screenToWorld(
+            Point(viewport.width.toDouble(), viewport.height.toDouble())
+        )
+        val minX = minOf(topLeft.x, bottomRight.x)
+        val maxX = maxOf(topLeft.x, bottomRight.x)
+        val minY = minOf(topLeft.y, bottomRight.y)
+        val maxY = maxOf(topLeft.y, bottomRight.y)
+        val padX = (maxX - minX) * paddingFraction
+        val padY = (maxY - minY) * paddingFraction
+        val bounds = BoundingBox.fromExtents(
+            minX = minX - padX,
+            maxX = maxX + padX,
+            minY = minY - padY,
+            maxY = maxY + padY,
+        )
+
+        return MapViewportSnapshot(
+            bounds = bounds,
+            zoom = mapState.zoom,
+            viewportWidth = viewport.width,
+            viewportHeight = viewport.height,
+            resolution = if (viewport.width > 0) {
+                (maxX - minX) / viewport.width
+            } else {
+                Double.POSITIVE_INFINITY
+            },
+        )
+    }
 
     /**
      * Pans the camera by screen pixels.

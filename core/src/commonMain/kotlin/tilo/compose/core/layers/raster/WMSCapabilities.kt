@@ -29,12 +29,28 @@ data class WMSCapabilities(
         layerName: String,
         projection: Projection,
         tileSize: Int = 256,
+    ): TileGrid = tileGridFor(layerName.toWMSLayerNames(), projection, tileSize)
+
+    fun tileGridFor(
+        layerNames: List<String>,
+        projection: Projection,
+        tileSize: Int = 256,
     ): TileGrid {
-        val layer = requireNotNull(layer(layerName)) {
-            "WMS layer '$layerName' was not found in GetCapabilities."
-        }
-        val bounds = requireNotNull(layer.boundingBoxes[projection.id]) {
-            "WMS layer '$layerName' does not expose a ${projection.id} BoundingBox."
+        require(layerNames.isNotEmpty()) { "At least one WMS layer name is required." }
+        val bounds = layerNames.map { layerName ->
+            val layer = requireNotNull(layer(layerName)) {
+                "WMS layer '$layerName' was not found in GetCapabilities."
+            }
+            requireNotNull(layer.boundingBoxes[projection.id]) {
+                "WMS layer '$layerName' does not expose a ${projection.id} BoundingBox."
+            }
+        }.reduce { combined, next ->
+            BoundingBox.fromExtents(
+                minX = minOf(combined.minX, next.minX),
+                maxX = maxOf(combined.maxX, next.maxX),
+                minY = minOf(combined.minY, next.minY),
+                maxY = maxOf(combined.maxY, next.maxY),
+            )
         }
 
         return TileGrid(
@@ -67,6 +83,48 @@ data class WMSCapabilities(
         overviewPrefetchMargin: Int = 1,
         attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
+    ): WMSTileLayer = createTileLayer(
+        id = id,
+        layerNames = layerName.toWMSLayerNames(),
+        projection = projection,
+        baseUrl = baseUrl,
+        styles = styles,
+        format = format,
+        getMapVersion = getMapVersion,
+        zIndex = zIndex,
+        visible = visible,
+        minZoom = minZoom,
+        maxZoom = maxZoom,
+        tileSize = tileSize,
+        maxVisibleTiles = maxVisibleTiles,
+        prefetchMargin = prefetchMargin,
+        overviewZoomOffset = overviewZoomOffset,
+        maxOverviewTiles = maxOverviewTiles,
+        overviewPrefetchMargin = overviewPrefetchMargin,
+        attributions = attributions,
+        fetchConfig = fetchConfig,
+    )
+
+    fun createTileLayer(
+        id: String,
+        layerNames: List<String>,
+        projection: Projection,
+        baseUrl: String? = getMapUrl,
+        styles: String = "",
+        format: String = formats.firstOrNull() ?: "image/png",
+        getMapVersion: String = "1.1.1",
+        zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
+        tileSize: Int = 256,
+        maxVisibleTiles: Int = 9,
+        prefetchMargin: Int = 1,
+        overviewZoomOffset: Int = 2,
+        maxOverviewTiles: Int = 4,
+        overviewPrefetchMargin: Int = 1,
+        attributions: List<Attribution> = emptyList(),
+        fetchConfig: TileFetchConfig = TileFetchConfig(),
     ): WMSTileLayer {
         val resolvedBaseUrl = requireNotNull(baseUrl) {
             "WMS GetMap URL was not found in GetCapabilities. Pass baseUrl explicitly."
@@ -75,9 +133,9 @@ data class WMSCapabilities(
         return WMSTileLayer(
             id = id,
             projection = projection,
-            grid = tileGridFor(layerName, projection, tileSize),
+            grid = tileGridFor(layerNames, projection, tileSize),
             baseUrl = resolvedBaseUrl,
-            layers = layerName,
+            layers = layerNames.joinToString(","),
             crs = projection.id,
             styles = styles,
             format = format,
@@ -97,6 +155,9 @@ data class WMSCapabilities(
         )
     }
 }
+
+private fun String.toWMSLayerNames(): List<String> =
+    split(',').map(String::trim).filter(String::isNotEmpty)
 
 class WMSCapabilitiesLoader(
     private val fetchCapabilities: suspend (String) -> String = ::fetchWMSCapabilitiesXml,
@@ -152,6 +213,50 @@ suspend fun createWMSTileLayerFromCapabilities(
     return capabilities.createTileLayer(
         id = id,
         layerName = layerName,
+        projection = projection,
+        styles = styles,
+        format = format ?: capabilities.formats.firstOrNull() ?: "image/png",
+        getMapVersion = getMapVersion,
+        zIndex = zIndex,
+        visible = visible,
+        minZoom = minZoom,
+        maxZoom = maxZoom,
+        tileSize = tileSize,
+        maxVisibleTiles = maxVisibleTiles,
+        prefetchMargin = prefetchMargin,
+        overviewZoomOffset = overviewZoomOffset,
+        maxOverviewTiles = maxOverviewTiles,
+        overviewPrefetchMargin = overviewPrefetchMargin,
+        attributions = attributions,
+        fetchConfig = fetchConfig,
+    )
+}
+
+suspend fun createWMSTileLayerFromCapabilities(
+    id: String,
+    capabilitiesUrl: String,
+    layerNames: List<String>,
+    projection: Projection,
+    styles: String = "",
+    format: String? = null,
+    getMapVersion: String = "1.1.1",
+    zIndex: Int = 0,
+    visible: Boolean = true,
+    minZoom: Double? = null,
+    maxZoom: Double? = null,
+    tileSize: Int = 256,
+    maxVisibleTiles: Int = 9,
+    prefetchMargin: Int = 1,
+    overviewZoomOffset: Int = 2,
+    maxOverviewTiles: Int = 4,
+    overviewPrefetchMargin: Int = 1,
+    attributions: List<Attribution> = emptyList(),
+    fetchConfig: TileFetchConfig = TileFetchConfig(),
+): WMSTileLayer {
+    val capabilities = WMSCapabilitiesLoader().load(capabilitiesUrl)
+    return capabilities.createTileLayer(
+        id = id,
+        layerNames = layerNames,
         projection = projection,
         styles = styles,
         format = format ?: capabilities.formats.firstOrNull() ?: "image/png",

@@ -131,3 +131,53 @@ fun rememberWMSLayer(
 
     return state
 }
+
+/**
+ * Loads several WMS sublayers as one composited GetMap tile layer.
+ * Layer order is preserved in the comma-separated WMS `LAYERS` parameter.
+ */
+@Composable
+fun rememberWMSLayer(
+    id: String,
+    capabilitiesUrl: String,
+    layerNames: List<String>,
+    projection: Projection,
+    styles: String = "",
+    format: String? = null,
+    getMapVersion: String = "1.1.1",
+    zIndex: Int = 0,
+    visible: Boolean = true,
+    minZoom: Double? = null,
+    maxZoom: Double? = null,
+    tileSize: Int = 256,
+    maxVisibleTiles: Int = 9,
+    prefetchMargin: Int = 1,
+    overviewZoomOffset: Int = 2,
+    maxOverviewTiles: Int = 4,
+    overviewPrefetchMargin: Int = 1,
+    attribution: Attribution? = null,
+    attributions: List<Attribution> = emptyList(),
+): WMSLayerState {
+    require(layerNames.isNotEmpty()) { "At least one WMS layer name is required." }
+    return rememberWMSLayer(
+        id = id,
+        capabilitiesUrl = capabilitiesUrl,
+        layerName = layerNames.joinToString(","),
+        projection = projection,
+        styles = styles,
+        format = format,
+        getMapVersion = getMapVersion,
+        zIndex = zIndex,
+        visible = visible,
+        minZoom = minZoom,
+        maxZoom = maxZoom,
+        tileSize = tileSize,
+        maxVisibleTiles = maxVisibleTiles,
+        prefetchMargin = prefetchMargin,
+        overviewZoomOffset = overviewZoomOffset,
+        maxOverviewTiles = maxOverviewTiles,
+        overviewPrefetchMargin = overviewPrefetchMargin,
+        attribution = attribution,
+        attributions = attributions,
+    )
+}

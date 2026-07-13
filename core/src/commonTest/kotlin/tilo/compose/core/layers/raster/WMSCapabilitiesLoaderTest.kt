@@ -39,6 +39,15 @@ class WMSCapabilitiesLoaderTest {
                       maxx="-416691.670279"
                       maxy="-932111.729700"/>
                   </Layer>
+                  <Layer queryable="1">
+                    <Name>buildings</Name>
+                    <Title>Buildings</Title>
+                    <BoundingBox SRS="EPSG:5514"
+                      minx="-910000.0"
+                      miny="-1235000.0"
+                      maxx="-420000.0"
+                      maxy="-930000.0"/>
+                  </Layer>
                 </Layer>
               </Capability>
             </WMT_MS_Capabilities>
@@ -47,6 +56,10 @@ class WMSCapabilitiesLoaderTest {
 
         val layer = assertNotNull(capabilities.layer("ortofoto"))
         val grid = capabilities.tileGridFor("ortofoto", Epsg5514Projection)
+        val compositeGrid = capabilities.tileGridFor(
+            listOf("ortofoto", "buildings"),
+            Epsg5514Projection,
+        )
 
         assertEquals("1.1.1", capabilities.version)
         assertEquals("https://example.test/wms?", capabilities.getMapUrl)
@@ -56,5 +69,8 @@ class WMSCapabilitiesLoaderTest {
         assertEquals(-907841.056021, grid.originX)
         assertEquals(-932111.729700, grid.originY)
         assertTrue(kotlin.math.abs(491149.385742 - grid.worldWidth) < 0.000001)
+        assertEquals(-910000.0, compositeGrid.originX)
+        assertEquals(-930000.0, compositeGrid.originY)
+        assertTrue(kotlin.math.abs(493308.329721 - compositeGrid.worldWidth) < 0.000001)
     }
 }

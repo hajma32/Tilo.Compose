@@ -45,4 +45,21 @@ class MapCameraStateFitBoundsTest {
         assertTrue(bottomRight.x <= map.viewport.width)
         assertTrue(bottomRight.y <= map.viewport.height)
     }
+
+    @Test
+    fun viewportSnapshotReportsVisibleAndPaddedBounds() {
+        val map = MapState(
+            center = Point(100.0, 200.0),
+            zoom = 0.0,
+            viewport = Viewport(width = 200, height = 100),
+        )
+        val cameraState = MapCameraState(map)
+
+        val visible = cameraState.viewportSnapshot()
+        val padded = cameraState.viewportSnapshot(paddingFraction = 0.25)
+
+        assertEquals(BoundingBox.fromExtents(0.0, 200.0, 150.0, 250.0), visible.bounds)
+        assertEquals(1.0, visible.resolution)
+        assertEquals(BoundingBox.fromExtents(-50.0, 250.0, 125.0, 275.0), padded.bounds)
+    }
 }

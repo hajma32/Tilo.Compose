@@ -38,6 +38,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,10 +57,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.WMSLayerState
 import tilo.compose.dsl.attribution
+import tilo.compose.dsl.cachedBitmap
 import tilo.compose.dsl.extraLargeLabelStyle
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
@@ -74,9 +78,18 @@ import tilo.compose.dsl.smallLabelStyle
 import tilo.compose.dsl.webMercator
 import tilo.compose.dsl.wgs84
 import kotlinx.coroutines.launch
+import eu.tilo.compose.cuzk.ZabagedLayerState
+import eu.tilo.compose.cuzk.rememberZabagedLayerState
+import eu.tilo.compose.transit.BrnoTransitFeed
+import eu.tilo.compose.transit.TransitConnectionStatus
+import eu.tilo.compose.transit.TransitFeedState
+import eu.tilo.compose.transit.TransitType
+import eu.tilo.compose.transit.TransitVehicle
+import eu.tilo.compose.transit.toTransitFeatures
 import tilo.compose.core.feature.Data
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.LabelFontStyle
+import tilo.compose.core.feature.LabelFontWeight as MapLabelFontWeight
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.PointShape
@@ -94,14 +107,17 @@ import tilo.compose.draw.DrawState
 import tilo.compose.draw.drawLayer
 import tilo.compose.draw.rememberDrawState
 import tilo.compose.ui.DefaultZoomControls
+import tilo.compose.ui.DefaultAttributionOverlay
 import tilo.compose.ui.DefaultMapDebugOverlay
 import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultScaleBarContent
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
+private const val ZABAGED_OVERVIEW_BACKGROUND_COLOR = 0xFFEEF3E2
 private const val CUZK_ORTOFOTO_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer"
 private const val CUZK_ZTM_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ZTM/MapServer/WMSServer"
 private const val OSM_XYZ_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+private const val LiveTransitLayerId = "live-transit"
 
 private enum class MapDemo(val title: String, val subtitle: String) {
     Sjtks("S-JTSK / CUZK", "EPSG:5514 WMS + vectors"),
@@ -110,20 +126,14 @@ private enum class MapDemo(val title: String, val subtitle: String) {
 
 private enum class BasemapOption(val title: String) {
     CuzkOrtofoto("CUZK ortofoto"),
+    CuzkZabaged("ZABAGED pastel map"),
     CuzkZtm("CUZK basic map"),
 }
 
 private enum class DemoLayerOption(val title: String) {
-    CityLabels("City labels"),
+    Zabaged("ZABAGED transport + labels"),
+    LiveTransit("Live public transit"),
 }
-
-private data class DemoCity(
-    val key: String,
-    val name: String,
-    val lon: Double,
-    val lat: Double,
-    val population: Int,
-)
 
 private data class PlaceDetails(
     val name: String,
@@ -160,9 +170,20 @@ fun App() {
         format = "image/png",
         attribution = attribution("ČÚZK Základní mapa, EPSG:5514"),
     )
-    val sjtskReferenceFeatures = remember { buildSjtksReferenceFeatures() }
+    val ztmOverviewLayer = rememberWMSLayer(
+        id = "cuzk-ztm-zabaged-overview",
+        capabilitiesUrl = CUZK_ZTM_WMS_URL,
+        layerName = "0",
+        projection = sjtsk(),
+        format = "image/png",
+        maxZoom = 9.999,
+        attribution = attribution("ČÚZK Základní mapa, EPSG:5514"),
+    )
     val mercatorPlaceFeatures = remember { buildMercatorPlaceFeatures() }
     val pragueDetailFeatures = remember { buildPragueDetailFeatures() }
+    val transitFeed = remember { BrnoTransitFeed() }
+    var transitState by remember { mutableStateOf(TransitFeedState.Idle) }
+    var selectedTransitVehicleId by remember { mutableStateOf<String?>(null) }
 
     var savedDrawingFeatures by remember { mutableStateOf<List<Feature>>(emptyList()) }
     val drawState = rememberDrawState(
@@ -171,17 +192,41 @@ fun App() {
         },
     )
 
-    var selectedDemo by remember { mutableStateOf(MapDemo.WebMercatorXyz) }
+    var selectedDemo by remember { mutableStateOf(MapDemo.Sjtks) }
     var selectedBasemap by remember { mutableStateOf(BasemapOption.CuzkOrtofoto) }
     var selectedLayers by remember {
         mutableStateOf(
             setOf(
-                DemoLayerOption.CityLabels,
+                DemoLayerOption.Zabaged,
+                DemoLayerOption.LiveTransit,
             )
         )
     }
     val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
+
+    DisposableEffect(transitFeed) {
+        onDispose(transitFeed::close)
+    }
+
+    LaunchedEffect(selectedDemo, selectedLayers) {
+        if (selectedDemo == MapDemo.Sjtks && DemoLayerOption.LiveTransit in selectedLayers) {
+            transitFeed.states().collect { state -> transitState = state }
+        } else {
+            transitState = TransitFeedState.Idle
+            selectedTransitVehicleId = null
+        }
+    }
+
+    val transitFeatures = remember(transitState.vehicles) {
+        transitState.vehicles.toTransitFeatures()
+    }
+    val selectedTransitVehicle = transitState.vehicles.firstOrNull { vehicle ->
+        vehicle.id == selectedTransitVehicleId
+    }
+    val selectedTransitFeatures = selectedTransitVehicleId?.let { vehicleId ->
+        setOf(FeatureSelectionRef(layerId = LiveTransitLayerId, featureKey = "transit-$vehicleId"))
+    } ?: emptySet()
 
     val sjtskCameraState = rememberMapCameraState(
         center = Wgs84ToEpsg5514Transformation.sourceToTarget(Point(16.6068, 49.1951)),
@@ -198,6 +243,16 @@ fun App() {
             .withTransformation(Wgs84ToWebMercatorTransformation)
             .withTransformation(WebMercatorToWgs84Transformation),
         projection = webMercator(),
+    )
+    val zabagedEnabled = selectedDemo == MapDemo.Sjtks && (
+        selectedBasemap == BasemapOption.CuzkZabaged || DemoLayerOption.Zabaged in selectedLayers
+    )
+    val zabagedState = rememberZabagedLayerState(
+        cameraState = sjtskCameraState,
+        basemapEnabled = selectedDemo == MapDemo.Sjtks &&
+            selectedBasemap == BasemapOption.CuzkZabaged,
+        overlayEnabled = selectedDemo == MapDemo.Sjtks &&
+            DemoLayerOption.Zabaged in selectedLayers,
     )
 
     MaterialTheme {
@@ -313,12 +368,33 @@ fun App() {
                                 selectedBasemap = selectedBasemap,
                                 ortofotoLayer = ortofotoLayer,
                                 ztmLayer = ztmLayer,
+                                ztmOverviewLayer = ztmOverviewLayer,
                                 selectedLayers = selectedLayers,
-                                referenceFeatures = sjtskReferenceFeatures,
+                                zabagedState = zabagedState,
+                                transitFeatures = transitFeatures,
+                                selectedTransitFeatures = selectedTransitFeatures,
+                                onTransitSelect = { vehicle ->
+                                    selectedTransitVehicleId = vehicle?.id
+                                },
                                 savedDrawingFeatures = savedDrawingFeatures,
                                 drawState = drawState,
                             )
                             DrawingControls(state = drawState)
+                            if (DemoLayerOption.LiveTransit in selectedLayers) {
+                                TransitStatusBadge(transitState)
+                            }
+                            if (zabagedEnabled && sjtskCameraState.zoom >= 10.0) {
+                                ZabagedStatusBadge(
+                                    state = zabagedState,
+                                    belowTransitBadge = DemoLayerOption.LiveTransit in selectedLayers,
+                                )
+                            }
+                            selectedTransitVehicle?.takeUnless { drawState.isDrawing }?.let { vehicle ->
+                                TransitVehicleCard(
+                                    vehicle = vehicle,
+                                    onClose = { selectedTransitVehicleId = null },
+                                )
+                            }
                         }
                         MapDemo.WebMercatorXyz -> {
                             WebMercatorXyzExampleMap(
@@ -340,28 +416,154 @@ private fun SjtksShowcaseMap(
     selectedBasemap: BasemapOption,
     ortofotoLayer: WMSLayerState,
     ztmLayer: WMSLayerState,
+    ztmOverviewLayer: WMSLayerState,
     selectedLayers: Set<DemoLayerOption>,
-    referenceFeatures: List<Feature>,
+    zabagedState: ZabagedLayerState,
+    transitFeatures: List<Feature>,
+    selectedTransitFeatures: Set<FeatureSelectionRef>,
+    onTransitSelect: (TransitVehicle?) -> Unit,
     savedDrawingFeatures: List<Feature>,
     drawState: DrawState,
 ) {
+    val backgroundColor = if (
+        selectedBasemap == BasemapOption.CuzkZabaged && cameraState.zoom in 10.0..<12.0
+    ) {
+        ZABAGED_OVERVIEW_BACKGROUND_COLOR
+    } else {
+        MAP_BACKGROUND_COLOR
+    }
     TiloMap(
         cameraState = cameraState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(backgroundColor)),
         onTapWorld = drawState::onMapTap,
-        invalidationKey = drawState.revision,
-        attributionContent = defaultAttributionContent(),
+        onFeatureSelect = { selections ->
+            onTransitSelect(
+                selections.firstNotNullOfOrNull { selection ->
+                    selection.feature.data?.payload as? TransitVehicle
+                }
+            )
+        },
+        selectedFeatures = selectedTransitFeatures,
+        attributionContent = { attributions ->
+            val transitAttributions = if (DemoLayerOption.LiveTransit in selectedLayers) {
+                listOf(
+                    attribution(
+                        label = "KORDIS / data.brno.cz",
+                        url = "https://data.brno.cz/items/e8aa121910df41bb9a28e4ca34a263c7",
+                    )
+                )
+            } else {
+                emptyList()
+            }
+            val zabagedAttributions = if (
+                cameraState.zoom >= 10.0 &&
+                selectedBasemap == BasemapOption.CuzkZabaged ||
+                cameraState.zoom >= 10.0 && DemoLayerOption.Zabaged in selectedLayers
+            ) {
+                listOf(
+                    attribution(
+                        label = "ČÚZK ZABAGED®, CC BY 4.0",
+                        url = "https://ags.cuzk.gov.cz/opendata/",
+                    )
+                )
+            } else {
+                emptyList()
+            }
+            DefaultAttributionOverlay(attributions + zabagedAttributions + transitAttributions)
+        },
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = animatedZoomControlsContent(),
         layers = {
             when (selectedBasemap) {
                 BasemapOption.CuzkOrtofoto -> wmsTileLayer(ortofotoLayer)
+                BasemapOption.CuzkZabaged -> {
+                    wmsTileLayer(ztmOverviewLayer)
+                    featureLayer(
+                        id = "zabaged-pastel-land",
+                        features = zabagedState.landFeatures,
+                    ) {
+                        zIndex = 0
+                        projection = sjtsk()
+                        minZoom = 10.0
+                        renderMode = cachedBitmap(
+                            scale = 1.0,
+                            paddingPx = 192,
+                            invalidateOnZoomDelta = 0.3,
+                        )
+                    }
+                    featureLayer(
+                        id = "zabaged-pastel-buildings",
+                        features = zabagedState.buildingFeatures,
+                    ) {
+                        zIndex = 0
+                        projection = sjtsk()
+                        minZoom = 14.0
+                        renderMode = cachedBitmap(
+                            scale = 1.0,
+                            paddingPx = 128,
+                            invalidateOnZoomDelta = 0.3,
+                        )
+                    }
+                }
                 BasemapOption.CuzkZtm -> wmsTileLayer(ztmLayer)
             }
-            if (DemoLayerOption.CityLabels in selectedLayers) {
-                featureLayer("city-labels", referenceFeatures) {
+            if (DemoLayerOption.Zabaged in selectedLayers) {
+                featureLayer("zabaged-boundaries", zabagedState.boundaries) {
                     zIndex = 1
-                    projection = wgs84()
+                    projection = sjtsk()
+                    minZoom = 10.0
+                    style = featureLayerStyle {
+                        line {
+                            stroke(0xFFFFD600, width = 2.dp, opacity = 0.48)
+                        }
+                    }
+                }
+                featureLayer("zabaged-roads", zabagedState.roads) {
+                    zIndex = 2
+                    projection = sjtsk()
+                    minZoom = 10.0
+                    style = featureLayerStyle {
+                        line {
+                            casing(0xFF475569, width = 4.dp)
+                            stroke(0xFFFFFFFF, width = 2.5.dp)
+                        }
+                        label(0xFFFFFFFF) {
+                            fontSize(11.sp)
+                            fontWeight(MapLabelFontWeight.Bold)
+                            noHalo()
+                            background(
+                                color = 0xFFBE123C,
+                                cornerRadius = 0.dp,
+                                paddingHorizontal = 5.dp,
+                                paddingVertical = 2.dp,
+                            )
+                            offsetY(0.dp)
+                        }
+                    }
+                }
+                featureLayer("zabaged-streets", zabagedState.streets) {
+                    zIndex = 3
+                    projection = sjtsk()
+                    minZoom = 10.0
+                    style = featureLayerStyle {
+                        line {
+                            casing(0xFF64748B, width = 2.8.dp)
+                            stroke(0xFFFFFFFF, width = 1.6.dp)
+                        }
+                        label(0xFF111827) {
+                            fontSize(9.sp)
+                            fontWeight(MapLabelFontWeight.Medium)
+                            halo(0xFFFFFFFF, width = 2.5.dp)
+                            offsetY(1.dp)
+                        }
+                    }
+                }
+                featureLayer("zabaged-municipalities", zabagedState.municipalities) {
+                    zIndex = 4
+                    projection = sjtsk()
+                    minZoom = 10.0
                     style = featureLayerStyle {
                         point {
                             shape = PointShape.Circle
@@ -369,10 +571,19 @@ private fun SjtksShowcaseMap(
                             fill(0x00000000)
                             stroke(0x00000000, width = 0.dp)
                         }
-                        label(mediumLabelStyle {
+                        label(0xFF111827) {
+                            fontSize(11.sp)
+                            fontWeight(MapLabelFontWeight.SemiBold)
+                            halo(0xFFFFFFFF, width = 3.dp)
                             offsetY(0.dp)
-                        })
+                        }
                     }
+                }
+            }
+            if (DemoLayerOption.LiveTransit in selectedLayers) {
+                featureLayer(LiveTransitLayerId, transitFeatures) {
+                    zIndex = 5
+                    projection = wgs84()
                 }
             }
             featureLayer("saved-drawings", savedDrawingFeatures) {
@@ -547,6 +758,138 @@ private fun BoxScope.WebMercatorXyzExampleMap(
         }
     }
 }
+
+@Composable
+private fun BoxScope.TransitStatusBadge(state: TransitFeedState) {
+    val text = when (state.status) {
+        TransitConnectionStatus.Idle -> "Transit off"
+        TransitConnectionStatus.Connecting -> "Connecting to KORDIS…"
+        TransitConnectionStatus.Live -> "KORDIS live · ${state.vehicles.size} vehicles"
+        TransitConnectionStatus.Reconnecting -> "Reconnecting · ${state.vehicles.size} vehicles"
+    }
+    val color = when (state.status) {
+        TransitConnectionStatus.Live -> Color(0xFF166534)
+        TransitConnectionStatus.Reconnecting -> Color(0xFF9A3412)
+        TransitConnectionStatus.Idle, TransitConnectionStatus.Connecting -> Color(0xFF334155)
+    }
+    Surface(
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = 12.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = color.copy(alpha = 0.92f),
+        contentColor = Color.White,
+        shadowElevation = 4.dp,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.ZabagedStatusBadge(
+    state: ZabagedLayerState,
+    belowTransitBadge: Boolean,
+) {
+    val error = state.errorMessage
+    if (!state.isLoading && error == null) return
+
+    val text = when {
+        error != null -> "ZABAGED: $error"
+        state.featureCount > 0 -> "Updating ZABAGED… · ${state.featureCount} features"
+        else -> "Loading ZABAGED…"
+    }
+    Surface(
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = if (belowTransitBadge) 56.dp else 12.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(if (error == null) 0xFF334155 else 0xFF991B1B).copy(alpha = 0.92f),
+        contentColor = Color.White,
+        shadowElevation = 4.dp,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.TransitVehicleCard(
+    vehicle: TransitVehicle,
+    onClose: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(start = 16.dp, end = 96.dp, bottom = 76.dp)
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 4.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(start = 14.dp, top = 10.dp, end = 8.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = vehicle.lineName?.let { "Line $it" } ?: "Transit vehicle",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "${vehicle.actualType.title()} · vehicle ${vehicle.id}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onClose) {
+                    Text("Close")
+                }
+            }
+            val details = buildList {
+                vehicle.delayMinutes?.let { delay -> add("delay ${delay.formatDelay()} min") }
+                vehicle.course?.let { course -> add("course $course") }
+                vehicle.bearingDegrees?.let { bearing -> add("bearing ${bearing.toInt()}°") }
+                vehicle.lowFloor?.let { lowFloor -> add(if (lowFloor) "low-floor" else "high-floor") }
+            }
+            if (details.isNotEmpty()) {
+                Text(
+                    text = details.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+private fun TransitType.title(): String =
+    when (this) {
+        TransitType.Service -> "Service"
+        TransitType.Tram -> "Tram"
+        TransitType.Trolleybus -> "Trolleybus"
+        TransitType.Bus -> "Bus"
+        TransitType.Boat -> "Boat"
+        TransitType.Train -> "Train"
+        TransitType.Unknown -> "Unknown type"
+    }
+
+private fun Double.formatDelay(): String =
+    if (this > 0.0) "+$this" else toString()
 
 @Composable
 private fun BoxScope.DrawingControls(
@@ -739,138 +1082,6 @@ private fun Feature.withSavedDrawingStyle(): Feature =
             }
             else -> style
         }
-    )
-
-private fun buildSjtksReferenceFeatures(): List<Feature> =
-    features {
-        demoCitiesOver50k().forEach { city ->
-            point(city.key, city.lon, city.lat) {
-                label = city.name
-                labelPriority = when {
-                    city.population >= 500_000 -> 300
-                    city.population >= 100_000 -> 200
-                    else -> 100
-                }
-                labelStyle = when {
-                    city.population >= 500_000 -> extraLargeLabelStyle {
-                        offsetY(0.dp)
-                    }
-                    city.population >= 100_000 -> largeLabelStyle {
-                        offsetY(0.dp)
-                    }
-                    else -> mediumLabelStyle {
-                        offsetY(0.dp)
-                    }
-                }
-                data = Data(
-                    PlaceDetails(
-                        name = city.name,
-                        description = "Orientacni bod pro mesto nad 50 tisic obyvatel.",
-                    )
-                )
-            }
-        }
-        brnoAreaMunicipalitiesOver1k().forEach { city ->
-            point(city.key, city.lon, city.lat) {
-                label = city.name
-                labelPriority = 20
-                labelStyle = smallLabelStyle {
-                    offsetY(0.dp)
-                }
-                data = Data(
-                    PlaceDetails(
-                        name = city.name,
-                        description = "Orientacni bod pro obec nad 1000 obyvatel v okoli Brna.",
-                    )
-                )
-            }
-        }
-    }
-
-private fun demoCitiesOver50k(): List<DemoCity> =
-    listOf(
-        DemoCity("praha", "Praha", 14.4378, 50.0755, 1_390_000),
-        DemoCity("brno", "Brno", 16.6068, 49.1951, 400_000),
-        DemoCity("ostrava", "Ostrava", 18.2625, 49.8209, 280_000),
-        DemoCity("plzen", "Plzeň", 13.3776, 49.7384, 185_000),
-        DemoCity("liberec", "Liberec", 15.0562, 50.7663, 107_000),
-        DemoCity("olomouc", "Olomouc", 17.2518, 49.5938, 102_000),
-        DemoCity("ceske-budejovice", "České Budějovice", 14.4743, 48.9757, 97_000),
-        DemoCity("hradec-kralove", "Hradec Králové", 15.8328, 50.2092, 93_000),
-        DemoCity("pardubice", "Pardubice", 15.7791, 50.0343, 92_000),
-        DemoCity("usti-nad-labem", "Ústí nad Labem", 14.0407, 50.6607, 91_000),
-        DemoCity("zlin", "Zlín", 17.6660, 49.2244, 74_000),
-        DemoCity("havirov", "Havířov", 18.4369, 49.7798, 70_000),
-        DemoCity("kladno", "Kladno", 14.1038, 50.1473, 69_000),
-        DemoCity("most", "Most", 13.6362, 50.5030, 63_000),
-        DemoCity("opava", "Opava", 17.9026, 49.9387, 55_000),
-        DemoCity("frydek-mistek", "Frýdek-Místek", 18.3500, 49.6819, 55_000),
-        DemoCity("jihlava", "Jihlava", 15.5906, 49.3961, 53_000),
-        DemoCity("karvina", "Karviná", 18.5417, 49.8540, 51_000),
-        DemoCity("teplice", "Teplice", 13.8245, 50.6404, 50_000),
-    )
-
-private fun brnoAreaMunicipalitiesOver1k(): List<DemoCity> =
-    listOf(
-        DemoCity("brno-area-blansko", "Blansko", 16.6444, 49.3630, 20_000),
-        DemoCity("brno-area-boskovice", "Boskovice", 16.6599, 49.4875, 12_000),
-        DemoCity("brno-area-letovice", "Letovice", 16.5736, 49.5471, 6_700),
-        DemoCity("brno-area-adamov", "Adamov", 16.6525, 49.3016, 4_400),
-        DemoCity("brno-area-rajec-jestrebi", "Rájec-Jestřebí", 16.6381, 49.4109, 3_600),
-        DemoCity("brno-area-lipuvka", "Lipůvka", 16.5536, 49.3395, 1_400),
-        DemoCity("brno-area-cerna-hora", "Černá Hora", 16.5814, 49.4136, 2_100),
-        DemoCity("brno-area-jedovnice", "Jedovnice", 16.7551, 49.3446, 2_900),
-        DemoCity("brno-area-ostrov-u-macochy", "Ostrov u Macochy", 16.7624, 49.3838, 1_100),
-        DemoCity("brno-area-risty", "Ráječko", 16.6440, 49.3935, 1_400),
-        DemoCity("brno-area-kurim", "Kuřim", 16.5314, 49.2985, 11_000),
-        DemoCity("brno-area-tisnov", "Tišnov", 16.4244, 49.3489, 9_300),
-        DemoCity("brno-area-veverska-bityska", "Veverská Bítýška", 16.4369, 49.2759, 3_300),
-        DemoCity("brno-area-drásov", "Drásov", 16.4778, 49.3318, 2_200),
-        DemoCity("brno-area-celistice", "Čebín", 16.4770, 49.3132, 1_800),
-        DemoCity("brno-area-sentice", "Sentice", 16.4579, 49.3162, 1_100),
-        DemoCity("brno-area-hradcany", "Hradčany", 16.4552, 49.3614, 1_100),
-        DemoCity("brno-area-zastavka", "Zastávka", 16.3631, 49.1880, 2_500),
-        DemoCity("brno-area-rosice", "Rosice", 16.3879, 49.1823, 6_700),
-        DemoCity("brno-area-ivancice", "Ivančice", 16.3775, 49.1014, 9_900),
-        DemoCity("brno-area-oslavany", "Oslavany", 16.3365, 49.1236, 4_700),
-        DemoCity("brno-area-dolni-kounice", "Dolní Kounice", 16.4649, 49.0701, 2_400),
-        DemoCity("brno-area-tetcice", "Tetčice", 16.4057, 49.1701, 1_300),
-        DemoCity("brno-area-strelice", "Střelice", 16.5039, 49.1533, 3_200),
-        DemoCity("brno-area-troubsko", "Troubsko", 16.5107, 49.1699, 2_300),
-        DemoCity("brno-area-popuvky", "Popůvky", 16.4866, 49.1779, 1_800),
-        DemoCity("brno-area-omice", "Omice", 16.4513, 49.1702, 1_000),
-        DemoCity("brno-area-ostopovice", "Ostopovice", 16.5430, 49.1612, 1_800),
-        DemoCity("brno-area-moravany", "Moravany", 16.5795, 49.1479, 3_400),
-        DemoCity("brno-area-modrice", "Modřice", 16.6046, 49.1283, 5_600),
-        DemoCity("brno-area-rajhrad", "Rajhrad", 16.6039, 49.0902, 3_900),
-        DemoCity("brno-area-rajhradice", "Rajhradice", 16.6295, 49.0914, 1_600),
-        DemoCity("brno-area-zidlochovice", "Židlochovice", 16.6188, 49.0395, 3_800),
-        DemoCity("brno-area-hustopece", "Hustopeče", 16.7376, 48.9409, 6_000),
-        DemoCity("brno-area-pohorelice", "Pohořelice", 16.5245, 48.9812, 5_500),
-        DemoCity("brno-area-orechov", "Ořechov", 16.5237, 49.1112, 2_800),
-        DemoCity("brno-area-slapnice", "Šlapanice", 16.7273, 49.1686, 7_900),
-        DemoCity("brno-area-jirikovice", "Jiříkovice", 16.7567, 49.1669, 1_100),
-        DemoCity("brno-area-blazovice", "Blažovice", 16.7861, 49.1655, 1_200),
-        DemoCity("brno-area-prace", "Prace", 16.7655, 49.1408, 1_000),
-        DemoCity("brno-area-ponetovice", "Ponětovice", 16.7502, 49.1528, 1_000),
-        DemoCity("brno-area-sokolnice", "Sokolnice", 16.7216, 49.1138, 2_400),
-        DemoCity("brno-area-telnice", "Telnice", 16.7177, 49.1019, 1_600),
-        DemoCity("brno-area-ujezd-u-brna", "Újezd u Brna", 16.7570, 49.1053, 3_400),
-        DemoCity("brno-area-slavkov-u-brna", "Slavkov u Brna", 16.8765, 49.1533, 7_000),
-        DemoCity("brno-area-rousinov", "Rousínov", 16.8822, 49.2013, 5_700),
-        DemoCity("brno-area-vyskov", "Vyškov", 16.9989, 49.2775, 20_000),
-        DemoCity("brno-area-bucovice", "Bučovice", 17.0019, 49.1489, 6_400),
-        DemoCity("brno-area-bilovice", "Bílovice nad Svitavou", 16.6729, 49.2470, 3_700),
-        DemoCity("brno-area-ricany", "Řícmanice", 16.6827, 49.2577, 1_000),
-        DemoCity("brno-area-babice", "Babice nad Svitavou", 16.6968, 49.2817, 1_300),
-        DemoCity("brno-area-kanice", "Kanice", 16.7142, 49.2634, 1_100),
-        DemoCity("brno-area-ochoz", "Ochoz u Brna", 16.7447, 49.2550, 1_400),
-        DemoCity("brno-area-mokra-horakov", "Mokrá-Horákov", 16.7510, 49.2228, 2_800),
-        DemoCity("brno-area-pozorice", "Pozořice", 16.7907, 49.2098, 2_300),
-        DemoCity("brno-area-vinicne-sumice", "Viničné Šumice", 16.8258, 49.2137, 1_300),
-        DemoCity("brno-area-tvarozna", "Tvarožná", 16.7702, 49.1918, 1_300),
-        DemoCity("brno-area-sivice", "Sivice", 16.7822, 49.2040, 1_100),
-        DemoCity("brno-area-holubice", "Holubice", 16.8122, 49.1775, 1_500),
     )
 
 private fun buildMercatorPlaceFeatures(): List<Feature> =

@@ -210,6 +210,7 @@ fun MapRenderer(
                             density = input.density,
                             layoutDirection = input.layoutDirection,
                             selectedFeatures = input.selectedFeatures,
+                            reusableBitmapsByLayer = vectorBitmapsByLayer,
                         )
                         commandsByLayer = vectorFrame.commandsByLayer
                         vectorBitmapsByLayer = vectorFrame.bitmapLayersByLayer

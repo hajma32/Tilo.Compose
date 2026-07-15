@@ -46,19 +46,8 @@ internal class LabelLayoutEngine(
                 labelBitmapCache = labelBitmapCache,
             )
         }
-        val acceptedBounds = mutableListOf<ScreenBounds>()
-        val accepted = mutableListOf<LabelCandidate>()
         val collisionPadding = drawScope.styleUnitToPx(collisionPaddingStyleUnits)
-
-        candidates.sortedWith(labelCollisionOrder()).forEach { candidate ->
-            val bounds = candidate.bounds.padded(collisionPadding)
-            if (acceptedBounds.none { it.intersects(bounds) }) {
-                acceptedBounds += bounds
-                accepted += candidate
-            }
-        }
-
-        return accepted
+        return selectLabelCollisionCandidates(candidates, collisionPadding)
             .sortedBy { it.order }
             .map { candidate ->
                 PlacedLabel(
@@ -78,7 +67,7 @@ internal class LabelLayoutEngine(
         drawScope: DrawScope,
         textMeasurer: TextMeasurer,
         labelBitmapCache: LabelBitmapCache,
-    ): LabelCandidate {
+    ): LabelCollisionCandidate {
         val anchor = map.worldToScreen(anchor)
         val metrics = drawScope.cachedLabelBitmapMetrics(
             text = text,
@@ -104,7 +93,7 @@ internal class LabelLayoutEngine(
             y = center.y - metrics.height / 2f,
         )
 
-        return LabelCandidate(
+        return LabelCollisionCandidate(
             command = this,
             center = center,
             topLeft = topLeft,
@@ -120,21 +109,6 @@ internal class LabelLayoutEngine(
         )
     }
 
-    private fun labelCollisionOrder(): Comparator<LabelCandidate> =
-        compareByDescending<LabelCandidate> { it.command.selected }
-            .thenComparator { a, b ->
-                val leftPriority = a.command.labelPriority
-                val rightPriority = b.command.labelPriority
-                when {
-                    leftPriority != null && rightPriority != null -> rightPriority.compareTo(leftPriority)
-                    leftPriority != null -> -1
-                    rightPriority != null -> 1
-                    else -> b.area.compareTo(a.area)
-                }
-            }
-            .thenByDescending { it.area }
-            .thenBy { it.order }
-
     private fun rotatedBounds(center: Offset, width: Float, height: Float, degrees: Float): ScreenBounds {
         val radians = degrees * PI.toFloat() / 180f
         val rotatedWidth = abs(width * cos(radians)) + abs(height * sin(radians))
@@ -146,19 +120,50 @@ internal class LabelLayoutEngine(
             bottom = center.y + rotatedHeight / 2f,
         )
     }
-
-    private data class LabelCandidate(
-        val command: RenderLabel,
-        val center: Offset,
-        val topLeft: Offset,
-        val width: Int,
-        val height: Int,
-        val bounds: ScreenBounds,
-        val order: Int,
-    ) {
-        val area: Float = width.toFloat() * height.toFloat()
-    }
 }
+
+internal data class LabelCollisionCandidate(
+    val command: RenderLabel,
+    val center: Offset,
+    val topLeft: Offset,
+    val width: Int,
+    val height: Int,
+    val bounds: ScreenBounds,
+    val order: Int,
+) {
+    val area: Float = width.toFloat() * height.toFloat()
+}
+
+internal fun selectLabelCollisionCandidates(
+    candidates: List<LabelCollisionCandidate>,
+    collisionPadding: Float,
+): List<LabelCollisionCandidate> {
+    val acceptedBounds = mutableListOf<ScreenBounds>()
+    val accepted = mutableListOf<LabelCollisionCandidate>()
+    candidates.sortedWith(labelCollisionOrder()).forEach { candidate ->
+        val bounds = candidate.bounds.padded(collisionPadding)
+        if (acceptedBounds.none { it.intersects(bounds) }) {
+            acceptedBounds += bounds
+            accepted += candidate
+        }
+    }
+    return accepted
+}
+
+private fun labelCollisionOrder(): Comparator<LabelCollisionCandidate> =
+    compareByDescending<LabelCollisionCandidate> { it.command.selected }
+        .thenComparator { a, b ->
+            val leftPriority = a.command.labelPriority
+            val rightPriority = b.command.labelPriority
+            when {
+                leftPriority != null && rightPriority != null -> rightPriority.compareTo(leftPriority)
+                leftPriority != null -> -1
+                rightPriority != null -> 1
+                else -> b.area.compareTo(a.area)
+            }
+        }
+        .thenByDescending { it.area }
+        .thenBy { it.order }
 
 internal fun DrawScope.drawPlacedLabels(
     labels: List<PlacedLabel>,

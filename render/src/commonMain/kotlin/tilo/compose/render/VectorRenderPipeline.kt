@@ -33,7 +33,7 @@ internal data class VectorLayerCacheKey(
 
 internal class VectorRenderPipeline(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
-    private val bitmapRenderer: VectorBitmapRenderer = VectorBitmapRenderer(),
+    private val bitmapRenderer: VectorBitmapRenderTarget = VectorBitmapRenderer(),
 ) {
     suspend fun buildFrame(
         vectorLayers: List<VectorLayer>,

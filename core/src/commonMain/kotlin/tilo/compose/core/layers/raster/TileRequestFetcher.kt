@@ -8,6 +8,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -54,6 +55,10 @@ internal class TileRequestFetcher(
             }
                 .awaitAll()
         }
+
+    fun close() {
+        fetchScope.cancel()
+    }
 
     private suspend fun fetchTile(request: TileRequest): Tile {
         val key = cacheKey(request)

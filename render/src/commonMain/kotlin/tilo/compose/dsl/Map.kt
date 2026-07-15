@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -287,13 +289,28 @@ class MapCameraState internal constructor(
  */
 @ExperimentalTiloApi
 @TiloDsl
-class MapLayerBuilder : LayerSink {
+class MapLayerBuilder private constructor(
+    private val rasterLayerStore: RasterLayerStore?,
+) : LayerSink {
     private val items = mutableListOf<Layer>()
+    private val layerIds = mutableSetOf<String>()
+    internal val managedRasterKeys = mutableSetOf<ManagedRasterLayerKey>()
+    internal val managedRasterUpdates = mutableMapOf<ManagedRasterLayerKey, RasterLayerUpdate>()
+
+    constructor() : this(rasterLayerStore = null)
+
+    internal companion object {
+        fun managed(rasterLayerStore: RasterLayerStore): MapLayerBuilder =
+            MapLayerBuilder(rasterLayerStore)
+    }
 
     /**
      * Advanced escape hatch for custom or pre-built layers.
      */
     override fun layer(layer: Layer) {
+        require(layerIds.add(layer.id)) {
+            "Duplicate layer id '${layer.id}'. Layer IDs must be unique within one TiloMap."
+        }
         items += layer
     }
 
@@ -348,25 +365,47 @@ class MapLayerBuilder : LayerSink {
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
     ) {
-        layer(
-            XYZTileLayer(
-                id = id,
-                projection = projection,
+        val resolvedAttributions = attributions.withSingle(attribution)
+        managedRasterLayer(
+            id = id,
+            zIndex = zIndex,
+            visible = visible,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
+            attributions = resolvedAttributions,
+            configuration = XyzRasterConfiguration(
+                projectionId = projection.id,
+                projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
                 grid = grid,
                 urlTemplate = urlTemplate,
                 tms = tms,
-                zIndex = zIndex,
-                visible = visible,
-                minZoom = minZoom,
-                maxZoom = maxZoom,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
                 overviewZoomOffset = overviewZoomOffset,
                 maxOverviewTiles = maxOverviewTiles,
                 overviewPrefetchMargin = overviewPrefetchMargin,
-                attributions = attributions.withSingle(attribution),
+            ),
+        ) {
+            StoredRasterLayer(
+                XYZTileLayer(
+                    id = id,
+                    projection = projection,
+                    grid = grid,
+                    urlTemplate = urlTemplate,
+                    tms = tms,
+                    zIndex = zIndex,
+                    visible = visible,
+                    minZoom = minZoom,
+                    maxZoom = maxZoom,
+                    maxVisibleTiles = maxVisibleTiles,
+                    prefetchMargin = prefetchMargin,
+                    overviewZoomOffset = overviewZoomOffset,
+                    maxOverviewTiles = maxOverviewTiles,
+                    overviewPrefetchMargin = overviewPrefetchMargin,
+                    attributions = resolvedAttributions,
+                )
             )
-        )
+        }
     }
 
     /**
@@ -375,6 +414,8 @@ class MapLayerBuilder : LayerSink {
      * The caller provides the tile reader so platform-specific SQLite access and
      * project-specific metadata stay outside the renderer. This supports
      * WebMercator, S-JTSK/Krovak, or any custom [projection] + [grid] pair.
+     * [sourceId] is the stable identity of the stored content; change it when
+     * switching databases or revisions that must not share cached tiles.
      */
     fun tileStoreLayer(
         id: String,
@@ -395,28 +436,57 @@ class MapLayerBuilder : LayerSink {
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
     ) {
-        layer(
-            RasterTileLayer(
-                id = id,
-                source = TileStoreTileSource(
-                    projection = projection,
-                    grid = grid,
-                    scheme = scheme,
-                    sourceId = sourceId,
-                    readTile = readTile,
-                ),
-                zIndex = zIndex,
-                visible = visible,
-                minZoom = minZoom,
-                maxZoom = maxZoom,
+        val resolvedAttributions = attributions.withSingle(attribution)
+        managedRasterLayer(
+            id = id,
+            zIndex = zIndex,
+            visible = visible,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
+            attributions = resolvedAttributions,
+            configuration = TileStoreRasterConfiguration(
+                projectionId = projection.id,
+                projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
+                grid = grid,
+                scheme = scheme,
+                sourceId = sourceId,
                 maxVisibleTiles = maxVisibleTiles,
                 prefetchMargin = prefetchMargin,
                 overviewZoomOffset = overviewZoomOffset,
                 maxOverviewTiles = maxOverviewTiles,
                 overviewPrefetchMargin = overviewPrefetchMargin,
-                attributions = attributions.withSingle(attribution),
+            ),
+            update = RasterLayerUpdate.TileReader(readTile),
+        ) {
+            val reader = MutableTileReader(readTile)
+            StoredRasterLayer(
+                layer = RasterTileLayer(
+                    id = id,
+                    source = TileStoreTileSource(
+                        projection = projection,
+                        grid = grid,
+                        scheme = scheme,
+                        sourceId = sourceId,
+                        readTile = reader::read,
+                    ),
+                    zIndex = zIndex,
+                    visible = visible,
+                    minZoom = minZoom,
+                    maxZoom = maxZoom,
+                    maxVisibleTiles = maxVisibleTiles,
+                    prefetchMargin = prefetchMargin,
+                    overviewZoomOffset = overviewZoomOffset,
+                    maxOverviewTiles = maxOverviewTiles,
+                    overviewPrefetchMargin = overviewPrefetchMargin,
+                    attributions = resolvedAttributions,
+                ),
+                update = { update ->
+                    if (update is RasterLayerUpdate.TileReader) {
+                        reader.delegate = update.readTile
+                    }
+                },
             )
-        )
+        }
     }
 
     /**
@@ -491,6 +561,89 @@ class MapLayerBuilder : LayerSink {
     }
 
     internal fun build(): List<Layer> = items.toList()
+
+    private fun managedRasterLayer(
+        id: String,
+        zIndex: Int,
+        visible: Boolean,
+        minZoom: Double?,
+        maxZoom: Double?,
+        attributions: List<Attribution>,
+        configuration: Any,
+        update: RasterLayerUpdate = RasterLayerUpdate.None,
+        create: () -> StoredRasterLayer,
+    ) {
+        require(layerIds.add(id)) {
+            "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
+        }
+        val store = rasterLayerStore
+        val layer = if (store == null) {
+            create().layer
+        } else {
+            val key = ManagedRasterLayerKey(layerId = id, configuration = configuration)
+            managedRasterKeys += key
+            managedRasterUpdates[key] = update
+            PresentedTileLayer(
+                runtime = store.getOrCreate(key, create),
+                id = id,
+                zIndex = zIndex,
+                visible = visible,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
+                attributions = attributions,
+            )
+        }
+        items += layer
+    }
+}
+
+/** Lightweight presentation snapshot backed by a stable fetch/cache runtime. */
+private data class PresentedTileLayer(
+    private val runtime: RasterTileLayer,
+    override val id: String,
+    override val zIndex: Int,
+    override val visible: Boolean,
+    override val minZoom: Double?,
+    override val maxZoom: Double?,
+    override val attributions: List<Attribution>,
+) : TileLayer by runtime {
+    init {
+        require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
+            "minZoom must not be greater than maxZoom"
+        }
+    }
+}
+
+private data class XyzRasterConfiguration(
+    val projectionId: String,
+    val projectionWorldUnitsPerMapUnit: Double,
+    val grid: TileGrid,
+    val urlTemplate: String,
+    val tms: Boolean,
+    val maxVisibleTiles: Int,
+    val prefetchMargin: Int,
+    val overviewZoomOffset: Int,
+    val maxOverviewTiles: Int,
+    val overviewPrefetchMargin: Int,
+)
+
+private data class TileStoreRasterConfiguration(
+    val projectionId: String,
+    val projectionWorldUnitsPerMapUnit: Double,
+    val grid: TileGrid,
+    val scheme: TileRowScheme,
+    val sourceId: String,
+    val maxVisibleTiles: Int,
+    val prefetchMargin: Int,
+    val overviewZoomOffset: Int,
+    val maxOverviewTiles: Int,
+    val overviewPrefetchMargin: Int,
+)
+
+private class MutableTileReader(
+    var delegate: suspend (TileCoordinate) -> ByteArray?,
+) {
+    suspend fun read(coordinate: TileCoordinate): ByteArray? = delegate(coordinate)
 }
 
 /**
@@ -539,7 +692,7 @@ fun rememberMapCameraState(
  */
 @Composable
 @ExperimentalTiloApi
-Oprfun TiloMap(
+fun TiloMap(
     cameraState: MapCameraState,
     modifier: Modifier = Modifier,
     onTapWorld: ((Point) -> Unit)? = null,
@@ -551,9 +704,7 @@ Oprfun TiloMap(
     invalidationKey: Any? = null,
     layers: MapLayerBuilder.() -> Unit,
 ) {
-    val layerBuilder = MapLayerBuilder()
-    layerBuilder.layers()
-    val builtLayers = layerBuilder.build()
+    val builtLayers = rememberManagedMapLayers(layers)
     Box(modifier = modifier) {
         MapRendererLayer(
             cameraState = cameraState,
@@ -580,6 +731,31 @@ Oprfun TiloMap(
             cameraControlsContent(cameraState)
         }
     }
+}
+
+/**
+ * UI-free lifecycle boundary for the map layer DSL.
+ *
+ * Keeping ownership here makes the runtime/cache behavior testable with the
+ * Compose runtime alone, without rendering a platform canvas.
+ */
+@Composable
+internal fun rememberManagedMapLayers(
+    layers: MapLayerBuilder.() -> Unit,
+): List<Layer> {
+    val rasterLayerStore = remember { RasterLayerStore() }
+    val layerBuilder = MapLayerBuilder.managed(rasterLayerStore)
+    layerBuilder.layers()
+    val builtLayers = layerBuilder.build()
+    val activeRasterKeys = layerBuilder.managedRasterKeys.toSet()
+    val activeRasterUpdates = layerBuilder.managedRasterUpdates.toMap()
+    SideEffect {
+        rasterLayerStore.retain(activeRasterKeys, activeRasterUpdates)
+    }
+    DisposableEffect(rasterLayerStore) {
+        onDispose(rasterLayerStore::close)
+    }
+    return builtLayers
 }
 
 @Composable

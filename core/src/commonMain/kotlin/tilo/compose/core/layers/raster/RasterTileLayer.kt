@@ -48,6 +48,10 @@ open class RasterTileLayer(
             fetchBytes = source::readTile,
         )
 
+    fun close() {
+        fetcher.close()
+    }
+
     override suspend fun loadTiles(map: MapState): List<Tile> {
         validateProjection(map)
         return fetcher.fetchTiles(requestPlan(map).visible)

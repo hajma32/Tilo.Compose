@@ -71,6 +71,7 @@ data class WMSCapabilities(
         styles: String = "",
         format: String = formats.firstOrNull() ?: "image/png",
         getMapVersion: String = "1.1.1",
+        axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
         zIndex: Int = 0,
         visible: Boolean = true,
         minZoom: Double? = null,
@@ -91,6 +92,7 @@ data class WMSCapabilities(
         styles = styles,
         format = format,
         getMapVersion = getMapVersion,
+        axisOrder = axisOrder,
         zIndex = zIndex,
         visible = visible,
         minZoom = minZoom,
@@ -113,6 +115,7 @@ data class WMSCapabilities(
         styles: String = "",
         format: String = formats.firstOrNull() ?: "image/png",
         getMapVersion: String = "1.1.1",
+        axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
         zIndex: Int = 0,
         visible: Boolean = true,
         minZoom: Double? = null,
@@ -129,7 +132,6 @@ data class WMSCapabilities(
         val resolvedBaseUrl = requireNotNull(baseUrl) {
             "WMS GetMap URL was not found in GetCapabilities. Pass baseUrl explicitly."
         }
-        val crsParamName = if (getMapVersion.startsWith("1.3")) "CRS" else "SRS"
         return WMSTileLayer(
             id = id,
             projection = projection,
@@ -140,7 +142,7 @@ data class WMSCapabilities(
             styles = styles,
             format = format,
             version = getMapVersion,
-            crsParamName = crsParamName,
+            axisOrder = axisOrder,
             zIndex = zIndex,
             visible = visible,
             minZoom = minZoom,
@@ -172,13 +174,16 @@ class WMSCapabilitiesLoader(
             version = version,
             getMapUrl = getMapBlock?.let(::onlineResourceHref),
             formats = getMapBlock?.let { tagTexts(it, "Format") }.orEmpty(),
-            layers = parseLayerBlocks(xml).mapNotNull(::parseLayer),
+            layers = parseLayerBlocks(xml).mapNotNull { parseLayer(it, version) },
         )
     }
 
-    private fun parseLayer(block: String): WMSLayerCapabilities? {
+    private fun parseLayer(
+        block: String,
+        version: String,
+    ): WMSLayerCapabilities? {
         val name = directTagText(block, "Name") ?: return null
-        val boundingBoxes = boundingBoxes(block)
+        val boundingBoxes = boundingBoxes(block, version)
         return WMSLayerCapabilities(
             name = name,
             title = directTagText(block, "Title"),
@@ -196,6 +201,7 @@ suspend fun createWMSTileLayerFromCapabilities(
     styles: String = "",
     format: String? = null,
     getMapVersion: String = "1.1.1",
+    axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
     zIndex: Int = 0,
     visible: Boolean = true,
     minZoom: Double? = null,
@@ -217,6 +223,7 @@ suspend fun createWMSTileLayerFromCapabilities(
         styles = styles,
         format = format ?: capabilities.formats.firstOrNull() ?: "image/png",
         getMapVersion = getMapVersion,
+        axisOrder = axisOrder,
         zIndex = zIndex,
         visible = visible,
         minZoom = minZoom,
@@ -240,6 +247,7 @@ suspend fun createWMSTileLayerFromCapabilities(
     styles: String = "",
     format: String? = null,
     getMapVersion: String = "1.1.1",
+    axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
     zIndex: Int = 0,
     visible: Boolean = true,
     minZoom: Double? = null,
@@ -261,6 +269,7 @@ suspend fun createWMSTileLayerFromCapabilities(
         styles = styles,
         format = format ?: capabilities.formats.firstOrNull() ?: "image/png",
         getMapVersion = getMapVersion,
+        axisOrder = axisOrder,
         zIndex = zIndex,
         visible = visible,
         minZoom = minZoom,
@@ -321,7 +330,10 @@ private fun crsValues(block: String): Set<String> =
         .filter { it.isNotBlank() }
         .toSet()
 
-private fun boundingBoxes(block: String): Map<String, BoundingBox> =
+private fun boundingBoxes(
+    block: String,
+    version: String,
+): Map<String, BoundingBox> =
     Regex("""<BoundingBox\b[^>]*>""")
         .findAll(block)
         .mapNotNull { match ->
@@ -331,7 +343,15 @@ private fun boundingBoxes(block: String): Map<String, BoundingBox> =
             val minY = attributes["miny"]?.toDoubleOrNull() ?: return@mapNotNull null
             val maxX = attributes["maxx"]?.toDoubleOrNull() ?: return@mapNotNull null
             val maxY = attributes["maxy"]?.toDoubleOrNull() ?: return@mapNotNull null
-            crs to BoundingBox.fromExtents(minX = minX, minY = minY, maxX = maxX, maxY = maxY)
+            val usesYxOrder =
+                version.startsWith("1.3") && WMSAxisOrder.forCrs(crs) == WMSAxisOrder.YX
+            val bounds =
+                if (usesYxOrder) {
+                    BoundingBox.fromExtents(minX = minY, minY = minX, maxX = maxY, maxY = maxX)
+                } else {
+                    BoundingBox.fromExtents(minX = minX, minY = minY, maxX = maxX, maxY = maxY)
+                }
+            crs to bounds
         }
         .toMap()
 

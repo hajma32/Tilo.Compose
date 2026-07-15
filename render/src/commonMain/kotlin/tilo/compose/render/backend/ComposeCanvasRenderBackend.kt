@@ -107,7 +107,7 @@ internal fun DrawScope.drawRenderScene(
     )
 }
 
-private fun DrawScope.drawVectorBitmapLayer(
+internal fun DrawScope.drawVectorBitmapLayer(
     layer: VectorBitmapRenderSceneLayer,
     map: MapState,
 ) {

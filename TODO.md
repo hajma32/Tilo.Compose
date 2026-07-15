@@ -5,8 +5,6 @@
 - Add injectable HTTP tile loading for `XYZTileSource` and `WMSTileSource`.
   This should cover tests, custom headers, auth, user-agent, retry policy, and
   rate limiting without making the happy-path DSL noisy.
-- Handle or explicitly document WMS 1.3.0 axis-order behavior, especially
-  `EPSG:4326` BBOX ordering.
 - Design a future `TileMatrixSet` or equivalent escape hatch for non-regular
   raster grids such as polar, irregular matrix, or sheet-based tiling systems.
 - Add a real `mbTilesLayer(...)` helper once platform SQLite access and metadata

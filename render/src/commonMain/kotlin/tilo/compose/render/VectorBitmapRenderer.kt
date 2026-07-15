@@ -17,10 +17,21 @@ import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.Viewport
 import kotlin.math.ceil
 
+internal fun interface VectorBitmapRenderTarget {
+    suspend fun render(
+        layer: VectorLayer,
+        commands: List<RenderCommand>,
+        map: tilo.compose.core.map.MapState,
+        strategy: VectorRenderStrategy.CachedBitmap,
+        density: Density,
+        layoutDirection: LayoutDirection,
+    ): VectorBitmapRenderSceneLayer?
+}
+
 internal class VectorBitmapRenderer(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
-) {
-    suspend fun render(
+) : VectorBitmapRenderTarget {
+    override suspend fun render(
         layer: VectorLayer,
         commands: List<RenderCommand>,
         map: tilo.compose.core.map.MapState,

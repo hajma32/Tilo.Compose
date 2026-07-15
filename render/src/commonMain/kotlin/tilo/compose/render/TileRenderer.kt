@@ -10,10 +10,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import tilo.compose.core.map.MapState
 import tilo.compose.core.tile.Tile
-import kotlin.math.ceil
-import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private val TILE_PLACEHOLDER_FILL = Color(0xFFE3F2FD)
 private val TILE_PLACEHOLDER_BORDER = Color(0xFF90CAF9)
@@ -28,9 +27,7 @@ internal fun DrawScope.drawTiles(
     map: MapState,
     decodedImages: List<ImageBitmap?>? = null
 ) {
-    val tileImages = tiles.mapIndexed { idx, tile ->
-        tile to (decodedImages?.getOrNull(idx) ?: tile.bytes?.let { tileDecoder(it) })
-    }
+    val tileImages = resolveTileImages(tiles, tileDecoder, decodedImages)
     tileImages.filter { (_, image) -> image == null }.forEach { (tile, _) ->
         drawTile(tile, image = null, map = map)
     }
@@ -38,6 +35,21 @@ internal fun DrawScope.drawTiles(
         drawTile(tile, image = image, map = map)
     }
 }
+
+internal fun resolveTileImages(
+    tiles: List<Tile>,
+    tileDecoder: (ByteArray) -> ImageBitmap?,
+    decodedImages: List<ImageBitmap?>?,
+): List<Pair<Tile, ImageBitmap?>> =
+    tiles.mapIndexed { index, tile ->
+        val image =
+            if (decodedImages != null) {
+                decodedImages.getOrNull(index)
+            } else {
+                tile.bytes?.let(tileDecoder)
+            }
+        tile to image
+    }
 
 private fun DrawScope.drawTile(
     tile: Tile,
@@ -57,14 +69,14 @@ private fun DrawScope.drawTile(
     }
 }
 
-private fun Tile.screenRect(map: MapState): TileScreenRect {
+internal fun Tile.screenRect(map: MapState): TileScreenRect {
     val topLeft = map.worldToScreen(bounds.topLeft)
     val bottomRight = map.worldToScreen(bounds.bottomRight)
 
-    val left = floor(min(topLeft.x, bottomRight.x)).toInt()
-    val top = floor(min(topLeft.y, bottomRight.y)).toInt()
-    val right = ceil(max(topLeft.x, bottomRight.x)).toInt()
-    val bottom = ceil(max(topLeft.y, bottomRight.y)).toInt()
+    val left = min(topLeft.x, bottomRight.x).roundToInt()
+    val top = min(topLeft.y, bottomRight.y).roundToInt()
+    val right = max(topLeft.x, bottomRight.x).roundToInt()
+    val bottom = max(topLeft.y, bottomRight.y).roundToInt()
 
     return TileScreenRect(
         x = left,
@@ -74,7 +86,7 @@ private fun Tile.screenRect(map: MapState): TileScreenRect {
     )
 }
 
-private data class TileScreenRect(
+internal data class TileScreenRect(
     val x: Int,
     val y: Int,
     val width: Int,

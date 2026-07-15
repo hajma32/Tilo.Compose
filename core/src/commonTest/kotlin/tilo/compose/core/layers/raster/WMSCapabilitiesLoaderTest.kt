@@ -4,9 +4,46 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.projection.Epsg5514Projection
 
 class WMSCapabilitiesLoaderTest {
+    /**
+     * Verifies normalization of WMS 1.3.0 EPSG:4326 metadata into internal XY coordinates.
+     *
+     * Input: capabilities XML whose bounding box is encoded in authoritative YX axis order.
+     * Expected: stored bounds use longitude X extents `-10..20` and latitude Y extents `30..50`.
+     */
+    @Test
+    fun normalizesWms130BoundingBoxToInternalXyOrder() {
+        val capabilities = WMSCapabilitiesLoader().parse(
+            """
+            <WMS_Capabilities version="1.3.0">
+              <Capability>
+                <Layer>
+                  <Layer>
+                    <Name>world</Name>
+                    <CRS>EPSG:4326</CRS>
+                    <BoundingBox CRS="EPSG:4326"
+                      minx="30.0" miny="-10.0" maxx="50.0" maxy="20.0"/>
+                  </Layer>
+                </Layer>
+              </Capability>
+            </WMS_Capabilities>
+            """.trimIndent()
+        )
+
+        val bounds = assertNotNull(capabilities.layer("world")).boundingBoxes["EPSG:4326"]
+
+        assertEquals(BoundingBox.fromExtents(-10.0, 20.0, 30.0, 50.0), bounds)
+    }
+
+    /**
+     * Verifies parsing of service metadata and derivation of single/composite tile grids.
+     *
+     * Input: WMS 1.1.1 XML with GetMap URL, two formats, and two EPSG:5514 layers.
+     * Expected: parsed endpoint/formats and grids matching individual and union bounding boxes.
+     */
     @Test
     fun parsesGetMapEndpointAndLayerBoundingBox() {
         val capabilities = WMSCapabilitiesLoader().parse(

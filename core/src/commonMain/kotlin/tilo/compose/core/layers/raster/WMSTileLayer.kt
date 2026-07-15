@@ -12,7 +12,8 @@ import tilo.compose.core.tile.TileGrid
  * No client-side tile reprojection is performed.
  *
  * [crs] is the WMS SRS/CRS value, e.g. "EPSG:5514".
- * [crsParamName] is "SRS" for WMS 1.1.1 and "CRS" for WMS 1.3.0.
+ * WMS 1.3.0 uses `CRS` and honors [axisOrder]; older versions use `SRS` and
+ * x/y BBOX order.
  */
 class WMSTileLayer(
     id: String,
@@ -24,7 +25,7 @@ class WMSTileLayer(
     styles: String = "",
     format: String = "image/png",
     version: String = "1.1.1",
-    crsParamName: String = "SRS",
+    axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(crs),
     zIndex: Int = 0,
     visible: Boolean = true,
     minZoom: Double? = null,
@@ -47,7 +48,7 @@ class WMSTileLayer(
         styles = styles,
         format = format,
         version = version,
-        crsParamName = crsParamName,
+        axisOrder = axisOrder,
     ),
     zIndex = zIndex,
     visible = visible,

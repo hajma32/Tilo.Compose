@@ -21,6 +21,12 @@ class VectorBitmapReuseTest {
         invalidateOnZoomDelta = 0.3,
     )
 
+    /**
+     * Verifies spatial reuse while a padded vector snapshot still covers the viewport.
+     *
+     * Input: a 1,400 × 1,200 snapshot, then pans of 150 and another 100 pixels.
+     * Expected: the first pan remains covered; the cumulative second pan invalidates reuse.
+     */
     @Test
     fun bitmapIsReusedWhilePaddedSnapshotCoversViewport() {
         val map = testMap()
@@ -35,6 +41,12 @@ class VectorBitmapReuseTest {
         assertFalse(bitmap.canCover(map, strategy))
     }
 
+    /**
+     * Verifies the inclusive zoom threshold used by cached vector snapshots.
+     *
+     * Input: a snapshot at zoom `10.0`, tested at zoom `10.3` and `10.31` with threshold `0.3`.
+     * Expected: reuse at the threshold and invalidation immediately beyond it.
+     */
     @Test
     fun bitmapIsInvalidatedOnlyAfterConfiguredZoomDelta() {
         val map = testMap()
@@ -47,6 +59,12 @@ class VectorBitmapReuseTest {
         assertFalse(bitmap.canCover(map, strategy))
     }
 
+    /**
+     * Verifies stable cache identity for equivalent DSL-style layer reconstruction.
+     *
+     * Input: two feature layers built from equal feature lists and the same render strategy.
+     * Expected: both layers produce identical vector cache keys.
+     */
     @Test
     fun equivalentFeatureListsKeepCacheIdentityAcrossRecomposition() {
         val features = listOf(Feature(key = "same", geometry = Point(1.0, 2.0)))

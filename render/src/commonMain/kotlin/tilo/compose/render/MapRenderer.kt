@@ -28,6 +28,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -171,7 +172,7 @@ fun MapRenderer(
     }
 
     LaunchedEffect(activeLayers) {
-        renderRequests.collectLatest { renderMap ->
+        renderRequests.collectLatestRenderRequest { renderMap ->
             val input = renderLoopInput
             supervisorScope {
                 var tilesByLayer: Map<String, List<Tile>> = emptyMap()
@@ -340,6 +341,10 @@ fun MapRenderer(
     )
 }
 
+internal suspend fun <T> Flow<T>.collectLatestRenderRequest(block: suspend (T) -> Unit) {
+    collectLatest(block)
+}
+
 private data class RenderLoopInput(
     val sortedLayers: List<Layer>,
     val tileLayers: List<TileLayer>,
@@ -352,12 +357,12 @@ private data class RenderLoopInput(
     val backend: RenderBackend,
 )
 
-private data class OverviewRenderRequest(
+internal data class OverviewRenderRequest(
     val id: Long,
     val map: MapState,
 )
 
-private class OverviewRequestTracker {
+internal class OverviewRequestTracker {
     private var latestId = 0L
 
     fun next(map: MapState): OverviewRenderRequest {
@@ -386,13 +391,13 @@ private fun Set<FeatureSelectionRef>.keysForLayer(layerId: String): Set<String> 
         .map { it.featureKey }
         .toSet()
 
-private fun <T> Map<String, T>.validFor(
+internal fun <T> Map<String, T>.validFor(
     currentKeys: Map<String, VectorLayerCacheKey>,
     previousKeys: Map<String, VectorLayerCacheKey>,
 ): Map<String, T> =
     filterKeys { layerId -> previousKeys[layerId] == currentKeys[layerId] }
 
-private fun Map<String, List<RenderCommand>>.validCommandsFor(
+internal fun Map<String, List<RenderCommand>>.validCommandsFor(
     currentKeys: Map<String, VectorLayerCacheKey>,
     previousKeys: Map<String, VectorLayerCacheKey>,
 ): Map<String, List<RenderCommand>> =
@@ -401,7 +406,7 @@ private fun Map<String, List<RenderCommand>>.validCommandsFor(
         previousKeys[layerId] == currentKey || currentKey.renderStrategy is VectorRenderStrategy.Immediate
     }
 
-private fun mergeRasterFrames(
+internal fun mergeRasterFrames(
     placeholderFrame: RasterFrame,
     fallbackFrame: RasterFrame,
     overviewFrame: RasterFrame,
@@ -446,7 +451,7 @@ private fun RasterFrame.imagesForLayer(layerId: String): List<ImageBitmap?> {
     return tiles.indices.map { index -> images.getOrNull(index) }
 }
 
-private fun RasterFrame.withRenderableTilesOnly(): RasterFrame {
+internal fun RasterFrame.withRenderableTilesOnly(): RasterFrame {
     val keptIndicesByLayer = buildMap {
         this@withRenderableTilesOnly.tilesByLayer.forEach { (layerId, tiles) ->
             val decodedImages = decodedImagesByLayer[layerId].orEmpty()
@@ -481,7 +486,7 @@ private fun RasterFrame.withRenderableTilesOnly(): RasterFrame {
 private fun RasterFrame.hasTiles(): Boolean =
     tilesByLayer.values.any { tiles -> tiles.isNotEmpty() }
 
-private suspend fun runRenderBranch(block: suspend () -> Unit) {
+internal suspend fun runRenderBranch(block: suspend () -> Unit) {
     try {
         block()
     } catch (error: CancellationException) {

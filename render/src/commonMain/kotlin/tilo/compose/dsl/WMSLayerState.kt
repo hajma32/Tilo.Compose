@@ -12,6 +12,7 @@ import kotlinx.coroutines.CancellationException
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.raster.WMSCapabilities
 import tilo.compose.core.layers.raster.WMSCapabilitiesLoader
+import tilo.compose.core.layers.raster.WMSAxisOrder
 import tilo.compose.core.layers.raster.WMSTileLayer
 import tilo.compose.core.projection.Projection
 
@@ -45,6 +46,7 @@ fun rememberWMSLayer(
     styles: String = "",
     format: String? = null,
     getMapVersion: String = "1.1.1",
+    axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
     zIndex: Int = 0,
     visible: Boolean = true,
     minZoom: Double? = null,
@@ -85,6 +87,7 @@ fun rememberWMSLayer(
         styles,
         format,
         getMapVersion,
+        axisOrder,
         zIndex,
         visible,
         minZoom,
@@ -113,6 +116,7 @@ fun rememberWMSLayer(
                 styles = styles,
                 format = format ?: loadedCapabilities.formats.firstOrNull() ?: "image/png",
                 getMapVersion = getMapVersion,
+                axisOrder = axisOrder,
                 zIndex = zIndex,
                 visible = visible,
                 minZoom = minZoom,
@@ -150,6 +154,7 @@ fun rememberWMSLayer(
     styles: String = "",
     format: String? = null,
     getMapVersion: String = "1.1.1",
+    axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
     zIndex: Int = 0,
     visible: Boolean = true,
     minZoom: Double? = null,
@@ -172,6 +177,7 @@ fun rememberWMSLayer(
         styles = styles,
         format = format,
         getMapVersion = getMapVersion,
+        axisOrder = axisOrder,
         zIndex = zIndex,
         visible = visible,
         minZoom = minZoom,

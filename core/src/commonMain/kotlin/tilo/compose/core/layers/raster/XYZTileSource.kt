@@ -1,8 +1,5 @@
 package tilo.compose.core.layers.raster
 
-import io.ktor.client.request.get
-import kotlinx.coroutines.CancellationException
-import tilo.compose.core.net.sharedHttpClient
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.TileGrid
@@ -14,25 +11,24 @@ import tilo.compose.core.tile.TileRequest
  * XYZ slippy-map sources are Web Mercator by default. Pass [projection] and
  * [grid] explicitly for custom grids that use the same address shape.
  */
-class XYZTileSource(
+class XYZTileSource internal constructor(
     private val urlTemplate: String,
     override val projection: Projection = Epsg3857Projection,
     override val grid: TileGrid = TileGrid.defaultFor(projection),
     private val tms: Boolean = false,
+    private val transport: TileHttpTransport,
 ) : RasterTileSource {
-    private val http = sharedHttpClient()
+    constructor(
+        urlTemplate: String,
+        projection: Projection = Epsg3857Projection,
+        grid: TileGrid = TileGrid.defaultFor(projection),
+        tms: Boolean = false,
+    ) : this(urlTemplate, projection, grid, tms, KtorTileHttpTransport())
 
     override fun cacheKey(request: TileRequest): String = buildUrl(request)
 
     override suspend fun readTile(request: TileRequest): ByteArray? =
-        try {
-            val response = http.get(buildUrl(request))
-            response.readTileImageBytesOrNull()
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
-            null
-        }
+        transport.readImage(buildUrl(request))
 
     private fun buildUrl(request: TileRequest): String {
         val (z, x, y) = request.coordinate

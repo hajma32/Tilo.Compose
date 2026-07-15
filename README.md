@@ -23,10 +23,11 @@ drawing, and live ČÚZK ortofoto rendered directly in S-JTSK (`EPSG:5514`).
 
 <table width="100%">
   <tr>
-    <td width="25%"><img src="docs/images/showcase-samples-osm.png" alt="Tilo.Samples minimal OpenStreetMap XYZ layer" width="100%"></td>
-    <td width="25%"><img src="docs/images/showcase-samples-callout.png" alt="Tilo.Samples feature selection with an app-owned Compose callout" width="100%"></td>
-    <td width="25%"><img src="docs/images/showcase-samples-drawing.png" alt="Tilo.Samples polygon drawing with undo, redo, clear, and save controls" width="100%"></td>
-    <td width="25%"><img src="docs/images/showcase-samples-non-mercator.png" alt="Tilo.Samples live ČÚZK ortofoto rendered in S-JTSK EPSG:5514" width="100%"></td>
+    <td width="20%"><img src="docs/images/showcase-samples-osm.png" alt="Tilo.Samples minimal OpenStreetMap XYZ layer" width="100%"></td>
+    <td width="20%"><img src="docs/images/showcase-samples-geometries.png" alt="Tilo.Samples points, line, polygon, labels, and selected feature styling" width="100%"></td>
+    <td width="20%"><img src="docs/images/showcase-samples-callout.png" alt="Tilo.Samples feature selection with an app-owned Compose callout" width="100%"></td>
+    <td width="20%"><img src="docs/images/showcase-samples-drawing.png" alt="Tilo.Samples polygon drawing with undo, redo, clear, and save controls" width="100%"></td>
+    <td width="20%"><img src="docs/images/showcase-samples-non-mercator.png" alt="Tilo.Samples live ČÚZK ortofoto rendered in S-JTSK EPSG:5514" width="100%"></td>
   </tr>
 </table>
 

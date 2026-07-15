@@ -6,6 +6,21 @@ This folder documents the user-facing Compose DSL exposed from
 The DSL is intentionally small and unstable for now. Tilo.Compose is still a
 work in progress, so names and behavior may change before a public 1.0 release.
 
+All public declarations in `tilo.compose.dsl` are marked with
+`@ExperimentalTiloApi`. Applications can acknowledge the pre-release API
+contract at the narrowest practical scope:
+
+```kotlin
+@OptIn(ExperimentalTiloApi::class)
+@Composable
+fun MapScreen() {
+    // TiloMap, rememberMapCameraState, and layer/style DSL usage
+}
+```
+
+The marker currently uses warning-level opt-in so early adopters receive a
+visible compatibility warning without being blocked from compiling.
+
 ## Start Here
 
 - [Getting Started](getting-started.md)
@@ -59,7 +74,6 @@ surface as of now.
 `TiloMap` accepts:
 
 - `modifier`
-- `backend`
 - `onTapWorld`
 - `onFeatureSelect`
 - `selectedFeatures`
@@ -135,7 +149,6 @@ Feature options:
 - `selectedStyle`
 - `labelStyle`
 - `selectedLabelStyle`
-- `callout`
 - `data`
 - `label(text, priority, style, selectedStyle)`
 

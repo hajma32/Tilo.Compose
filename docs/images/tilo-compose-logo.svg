@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96" role="img" aria-labelledby="title description">
+  <title id="title">Tilo.Compose</title>
+  <desc id="description">Tilo.Compose folded map logo</desc>
+  <style>
+    .brand-ink { fill: #17201c; }
+    .brand-outline { stroke: #17201c; }
+    @media (prefers-color-scheme: dark) {
+      .brand-ink { fill: #e7ece9; }
+      .brand-outline { stroke: #e7ece9; }
+    }
+  </style>
+  <g class="brand-outline" transform="translate(8 8)" fill="none" stroke-width="4" stroke-linejoin="round">
+    <path fill="#ffc09c" d="M2 14 27 23v56L2 70Z"/>
+    <path fill="#f58255" d="m27 23 28-16v56L27 79Z"/>
+    <path fill="#d95532" d="m55 7 27 13v56L55 63Z"/>
+  </g>
+  <text class="brand-ink" x="112" y="63" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="44" font-weight="700" letter-spacing="-2">Tilo.Compose</text>
+</svg>

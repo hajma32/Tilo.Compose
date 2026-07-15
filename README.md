@@ -1,73 +1,84 @@
-# Tilo.Compose
+<p align="center">
+  <img src="docs/images/tilo-compose-logo.svg" alt="Tilo.Compose" width="420">
+</p>
 
-Compose-first Kotlin Multiplatform map toolkit.
+Compose-first Kotlin Multiplatform maps and GIS toolkit.
 
-Tilo.Compose is an early-stage map framework for Compose apps. It focuses on a
-simple happy path for raster tiles, vector feature layers, labels, drawing, and
-CRS-aware map state.
+Tilo.Compose is an open-source Kotlin Multiplatform toolkit for building modern
+map and GIS applications with Compose. It scales from a simple OpenStreetMap
+view with a few markers to complex GIS workflows with multiple coordinate
+systems.
 
-Unlike web-map-only toolkits, Tilo.Compose is designed for maps that need to
-work in local and national coordinate reference systems, not only WGS84 or Web
-Mercator. The current showcase uses Czech S-JTSK / Krovak (`EPSG:5514`) as a
-first-class map projection.
+The framework provides a declarative Compose API, tiled raster layers (WMS, XYZ,
+and custom tile stores), projection-aware rendering, vector geometry and
+styling, label placement, feature selection, interactive drawing, spatial
+indexing, and extension points for custom data sources and coordinate
+transformations.
 
-> Work in progress: the project is still unstable and APIs may change before a
-> public 1.0 release.
+> ⚠️ Tilo is currently in alpha. Public APIs may change before 1.0.
 
 ## Showcase
 
-Current Android showcase app with XYZ raster tiles, vector styling, labels,
-selection callouts, attribution, scale bar, and zoom controls.
+The `Tilo.Samples` Android app exercises the public API with real maps: a minimal
+OpenStreetMap layer, feature selection and app-owned callouts, interactive
+drawing, and live ČÚZK ortofoto rendered directly in S-JTSK (`EPSG:5514`).
 
-<table>
+<table width="100%">
   <tr>
-    <td><img src="docs/images/showcase-vector-styles.png" alt="Tilo.Compose map with styled points, lines, polygons, labels, attribution and scale bar" width="360"></td>
-    <td><img src="docs/images/showcase-callout.png" alt="Tilo.Compose map feature selection callout with linked source" width="360"></td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/showcase-sjtsk-drawing-overview.png" alt="Tilo.Compose S-JTSK ortofoto map with dense labels, scale bar, attribution, zoom controls, and drawing FAB" width="360"></td>
-    <td><img src="docs/images/showcase-sjtsk-drawing-controls.png" alt="Tilo.Compose polygon drawing controls with orange draft geometry on S-JTSK ortofoto" width="360"></td>
+    <td width="25%"><img src="docs/images/showcase-samples-osm.png" alt="Tilo.Samples minimal OpenStreetMap XYZ layer" width="100%"></td>
+    <td width="25%"><img src="docs/images/showcase-samples-callout.png" alt="Tilo.Samples feature selection with an app-owned Compose callout" width="100%"></td>
+    <td width="25%"><img src="docs/images/showcase-samples-drawing.png" alt="Tilo.Samples polygon drawing with undo, redo, clear, and save controls" width="100%"></td>
+    <td width="25%"><img src="docs/images/showcase-samples-non-mercator.png" alt="Tilo.Samples live ČÚZK ortofoto rendered in S-JTSK EPSG:5514" width="100%"></td>
   </tr>
 </table>
 
 ## Quick Example
 
 ```kotlin
-val cameraState = rememberMapCameraState(
-    center = Point(-650_000.0, -1_100_000.0),
-    zoom = 11.5,
-    projection = sjtsk(),
-)
+@OptIn(ExperimentalTiloApi::class)
+@Composable
+fun MapScreen() {
+    val brno = Point(16.6068, 49.1951)
+    val cameraState = rememberMapCameraState(
+        center = Wgs84ToEpsg5514Transformation.sourceToTarget(brno),
+        zoom = 11.5,
+        projection = sjtsk(),
+        config = MapConfig.Default
+            .withTransformation(Wgs84ToEpsg5514Transformation)
+            .withTransformation(Epsg5514ToWgs84Transformation),
+    )
 
-val ortofoto = rememberWMSLayer(
-    id = "cuzk-ortofoto",
-    capabilitiesUrl = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer",
-    layerName = "0",
-    projection = sjtsk(),
-    format = "image/jpeg",
-)
+    val ortofoto = rememberWMSLayer(
+        id = "cuzk-ortofoto",
+        capabilitiesUrl = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer",
+        layerName = "0",
+        projection = sjtsk(),
+        format = "image/jpeg",
+    )
 
-val places = remember {
-    features {
-        point("brno", 16.6068, 49.1951) {
-            label("Brno", style = largeLabelStyle())
-            style = pointStyle {
-                size = 14.dp
-                fill(0xFF43A047)
-                stroke(0xFF263238, width = 2.dp)
+    val places = remember {
+        features {
+            point("brno", brno) {
+                label("Brno", style = largeLabelStyle())
+                style = pointStyle {
+                    size = 14.dp
+                    fill(0xFF43A047)
+                    stroke(0xFF263238, width = 2.dp)
+                }
             }
         }
     }
-}
 
-TiloMap(
-    cameraState = cameraState,
-) {
-    wmsTileLayer(ortofoto)
+    TiloMap(
+        cameraState = cameraState,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        wmsTileLayer(ortofoto)
 
-    featureLayer("places", places) {
-        projection = wgs84()
-        renderMode = cachedBitmap()
+        featureLayer("places", places) {
+            projection = wgs84()
+            renderMode = cachedBitmap()
+        }
     }
 }
 ```

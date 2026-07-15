@@ -14,6 +14,13 @@ import tilo.compose.core.tile.TileRequestPlan
  * Rendering remains CRS-agnostic: the layer plans tiles in [grid] world
  * coordinates, asks [source] for bytes, and returns tiles with bounds for the
  * renderer to place. No raster reprojection is performed client-side.
+ *
+ * A directly constructed layer is owned by its caller and must be [close]d
+ * when no map uses it anymore. Passing it to a map layer builder only borrows
+ * the layer; it does not transfer ownership. High-level map DSL functions that
+ * construct raster layers manage their own instances.
+ * [onError] is invoked once for each source request that throws; cancellation
+ * still propagates normally and an unavailable (`null`) tile is not an error.
  */
 open class RasterTileLayer(
     override val id: String,
@@ -29,7 +36,9 @@ open class RasterTileLayer(
     private val overviewPrefetchMargin: Int = 1,
     override val attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
-) : TileLayer {
+    onError: ((Throwable) -> Unit)? = null,
+) : TileLayer,
+    AutoCloseable {
     init {
         val minimum = minZoom
         val maximum = maxZoom
@@ -45,11 +54,13 @@ open class RasterTileLayer(
     private val fetcher =
         TileRequestFetcher(
             config = fetchConfig,
+            onError = onError,
             cacheKey = source::cacheKey,
             fetchBytes = source::readTile,
         )
 
-    fun close() {
+    /** Cancels owned tile requests. The layer must not be used after this call. */
+    final override fun close() {
         fetcher.close()
     }
 

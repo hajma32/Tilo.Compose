@@ -12,6 +12,7 @@ import tilo.compose.core.tile.TileGrid
  * `"https://tile.openstreetmap.org/{z}/{x}/{y}.png"`.
  *
  * For TMS row addressing set [tms] = true.
+ * The caller owns directly constructed instances and must close them after use.
  */
 class XYZTileLayer(
     id: String,
@@ -30,6 +31,7 @@ class XYZTileLayer(
     overviewPrefetchMargin: Int = 1,
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
+    onError: ((Throwable) -> Unit)? = null,
 ) : RasterTileLayer(
         id = id,
         source =
@@ -50,4 +52,5 @@ class XYZTileLayer(
         overviewPrefetchMargin = overviewPrefetchMargin,
         attributions = attributions,
         fetchConfig = fetchConfig,
+        onError = onError,
     )

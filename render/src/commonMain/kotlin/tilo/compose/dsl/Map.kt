@@ -49,6 +49,13 @@ import tilo.compose.core.tile.TileGrid
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.MapRenderer
 
+private const val OPEN_STREET_MAP_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+private val OPEN_STREET_MAP_ATTRIBUTION =
+    Attribution(
+        label = "© OpenStreetMap contributors",
+        url = "https://www.openstreetmap.org/copyright",
+    )
+
 /**
  * Immutable camera snapshot suitable for viewport-dependent data loading.
  *
@@ -317,6 +324,9 @@ class MapLayerBuilder private constructor(
 
     /**
      * Advanced escape hatch for custom or pre-built layers.
+     *
+     * The builder borrows [layer]. The caller retains ownership and remains
+     * responsible for closing it if it owns resources.
      */
     override fun layer(layer: Layer) {
         require(layerIds.add(layer.id)) {
@@ -327,6 +337,7 @@ class MapLayerBuilder private constructor(
 
     /**
      * Advanced shorthand for adding a custom or pre-built layer.
+     * Ownership remains with the caller.
      */
     operator fun Layer.unaryPlus() {
         layer(this)
@@ -334,6 +345,9 @@ class MapLayerBuilder private constructor(
 
     /**
      * Adds a pre-built raster tile layer.
+     *
+     * The builder borrows [layer] and never closes it. The caller must keep it
+     * alive while any map uses it and close resource-owning layers afterwards.
      */
     fun rasterLayer(layer: TileLayer?) {
         if (layer != null) {
@@ -344,6 +358,8 @@ class MapLayerBuilder private constructor(
     /**
      * Adds a WMS layer created by [rememberWMSLayer].
      *
+     * The remembered state owns and closes its raster runtime.
+     *
      * The layer is skipped while capabilities are still loading or if loading
      * failed. Inspect [WMSLayerState.isLoading] and [WMSLayerState.error] for UI
      * feedback.
@@ -353,10 +369,40 @@ class MapLayerBuilder private constructor(
     }
 
     /**
+     * Adds the standard OpenStreetMap Web Mercator basemap.
+     *
+     * This is a convenience preset for [xyzTileLayer] with the public OSM tile
+     * URL and required contributor attribution. Applications remain responsible
+     * for following the OpenStreetMap tile usage policy.
+     * [onError] receives tile transport failures without cancelling healthy tiles.
+     */
+    fun osmLayer(
+        id: String = "osm",
+        zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
+        onError: ((Throwable) -> Unit)? = null,
+    ) {
+        xyzTileLayer(
+            id = id,
+            urlTemplate = OPEN_STREET_MAP_URL,
+            zIndex = zIndex,
+            visible = visible,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
+            projection = Epsg3857Projection,
+            attribution = OPEN_STREET_MAP_ATTRIBUTION,
+            onError = onError,
+        )
+    }
+
+    /**
      * Adds a URL-template raster layer using `{z}`, `{x}`, `{y}` placeholders.
      *
      * Web Mercator is the default because that is what public XYZ slippy-map
      * services normally use. Pass [projection] and [grid] for custom grids.
+     * [onError] receives source failures without cancelling healthy tiles.
      */
     fun xyzTileLayer(
         id: String,
@@ -375,6 +421,7 @@ class MapLayerBuilder private constructor(
         overviewPrefetchMargin: Int = 1,
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
+        onError: ((Throwable) -> Unit)? = null,
     ) {
         val resolvedAttributions = attributions.withSingle(attribution)
         managedRasterLayer(
@@ -397,25 +444,34 @@ class MapLayerBuilder private constructor(
                     maxOverviewTiles = maxOverviewTiles,
                     overviewPrefetchMargin = overviewPrefetchMargin,
                 ),
+            update = RasterLayerUpdate.ErrorHandler(onError),
         ) {
+            val errorHandler = MutableRasterErrorHandler(onError)
             StoredRasterLayer(
-                XYZTileLayer(
-                    id = id,
-                    projection = projection,
-                    grid = grid,
-                    urlTemplate = urlTemplate,
-                    tms = tms,
-                    zIndex = zIndex,
-                    visible = visible,
-                    minZoom = minZoom,
-                    maxZoom = maxZoom,
-                    maxVisibleTiles = maxVisibleTiles,
-                    prefetchMargin = prefetchMargin,
-                    overviewZoomOffset = overviewZoomOffset,
-                    maxOverviewTiles = maxOverviewTiles,
-                    overviewPrefetchMargin = overviewPrefetchMargin,
-                    attributions = resolvedAttributions,
-                ),
+                layer =
+                    XYZTileLayer(
+                        id = id,
+                        projection = projection,
+                        grid = grid,
+                        urlTemplate = urlTemplate,
+                        tms = tms,
+                        zIndex = zIndex,
+                        visible = visible,
+                        minZoom = minZoom,
+                        maxZoom = maxZoom,
+                        maxVisibleTiles = maxVisibleTiles,
+                        prefetchMargin = prefetchMargin,
+                        overviewZoomOffset = overviewZoomOffset,
+                        maxOverviewTiles = maxOverviewTiles,
+                        overviewPrefetchMargin = overviewPrefetchMargin,
+                        attributions = resolvedAttributions,
+                        onError = errorHandler::report,
+                    ),
+                update = { update ->
+                    if (update is RasterLayerUpdate.ErrorHandler) {
+                        errorHandler.delegate = update.onError
+                    }
+                },
             )
         }
     }
@@ -428,6 +484,7 @@ class MapLayerBuilder private constructor(
      * WebMercator, S-JTSK/Krovak, or any custom [projection] + [grid] pair.
      * [sourceId] is the stable identity of the stored content; change it when
      * switching databases or revisions that must not share cached tiles.
+     * [onError] receives reader failures without cancelling healthy tiles.
      */
     fun tileStoreLayer(
         id: String,
@@ -447,6 +504,7 @@ class MapLayerBuilder private constructor(
         overviewPrefetchMargin: Int = 1,
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
+        onError: ((Throwable) -> Unit)? = null,
     ) {
         val resolvedAttributions = attributions.withSingle(attribution)
         managedRasterLayer(
@@ -469,9 +527,10 @@ class MapLayerBuilder private constructor(
                     maxOverviewTiles = maxOverviewTiles,
                     overviewPrefetchMargin = overviewPrefetchMargin,
                 ),
-            update = RasterLayerUpdate.TileReader(readTile),
+            update = RasterLayerUpdate.TileStore(readTile, onError),
         ) {
             val reader = MutableTileReader(readTile)
+            val errorHandler = MutableRasterErrorHandler(onError)
             StoredRasterLayer(
                 layer =
                     RasterTileLayer(
@@ -494,10 +553,12 @@ class MapLayerBuilder private constructor(
                         maxOverviewTiles = maxOverviewTiles,
                         overviewPrefetchMargin = overviewPrefetchMargin,
                         attributions = resolvedAttributions,
+                        onError = errorHandler::report,
                     ),
                 update = { update ->
-                    if (update is RasterLayerUpdate.TileReader) {
+                    if (update is RasterLayerUpdate.TileStore) {
                         reader.delegate = update.readTile
+                        errorHandler.delegate = update.onError
                     }
                 },
             )
@@ -506,6 +567,7 @@ class MapLayerBuilder private constructor(
 
     /**
      * Advanced alias for adding a pre-built raster tile layer.
+     * Ownership remains with the caller; see [rasterLayer].
      */
     fun tileLayer(layer: TileLayer?) {
         rasterLayer(layer)
@@ -513,6 +575,7 @@ class MapLayerBuilder private constructor(
 
     /**
      * Advanced alias for adding a WMS layer state.
+     * The remembered state retains ownership of its raster runtime.
      */
     fun tileLayer(state: WMSLayerState) {
         wmsTileLayer(state)

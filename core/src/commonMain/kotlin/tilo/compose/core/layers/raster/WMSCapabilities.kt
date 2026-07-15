@@ -64,6 +64,7 @@ data class WMSCapabilities(
         )
     }
 
+    /** Creates a caller-owned layer that must be closed after its last use. */
     fun createTileLayer(
         id: String,
         layerName: String,
@@ -85,6 +86,7 @@ data class WMSCapabilities(
         overviewPrefetchMargin: Int = 1,
         attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
+        onError: ((Throwable) -> Unit)? = null,
     ): WMSTileLayer =
         createTileLayer(
             id = id,
@@ -107,8 +109,10 @@ data class WMSCapabilities(
             overviewPrefetchMargin = overviewPrefetchMargin,
             attributions = attributions,
             fetchConfig = fetchConfig,
+            onError = onError,
         )
 
+    /** Creates a caller-owned layer that must be closed after its last use. */
     fun createTileLayer(
         id: String,
         layerNames: List<String>,
@@ -130,6 +134,7 @@ data class WMSCapabilities(
         overviewPrefetchMargin: Int = 1,
         attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
+        onError: ((Throwable) -> Unit)? = null,
     ): WMSTileLayer {
         val resolvedBaseUrl =
             requireNotNull(baseUrl) {
@@ -157,6 +162,7 @@ data class WMSCapabilities(
             overviewPrefetchMargin = overviewPrefetchMargin,
             attributions = attributions,
             fetchConfig = fetchConfig,
+            onError = onError,
         )
     }
 }
@@ -194,6 +200,7 @@ class WMSCapabilitiesLoader(
     }
 }
 
+/** Loads capabilities and creates a caller-owned layer that must be closed after use. */
 suspend fun createWMSTileLayerFromCapabilities(
     id: String,
     capabilitiesUrl: String,
@@ -215,6 +222,7 @@ suspend fun createWMSTileLayerFromCapabilities(
     overviewPrefetchMargin: Int = 1,
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
+    onError: ((Throwable) -> Unit)? = null,
 ): WMSTileLayer {
     val capabilities = WMSCapabilitiesLoader().load(capabilitiesUrl)
     return capabilities.createTileLayer(
@@ -237,9 +245,11 @@ suspend fun createWMSTileLayerFromCapabilities(
         overviewPrefetchMargin = overviewPrefetchMargin,
         attributions = attributions,
         fetchConfig = fetchConfig,
+        onError = onError,
     )
 }
 
+/** Loads capabilities and creates a caller-owned layer that must be closed after use. */
 suspend fun createWMSTileLayerFromCapabilities(
     id: String,
     capabilitiesUrl: String,
@@ -261,6 +271,7 @@ suspend fun createWMSTileLayerFromCapabilities(
     overviewPrefetchMargin: Int = 1,
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
+    onError: ((Throwable) -> Unit)? = null,
 ): WMSTileLayer {
     val capabilities = WMSCapabilitiesLoader().load(capabilitiesUrl)
     return capabilities.createTileLayer(
@@ -283,6 +294,7 @@ suspend fun createWMSTileLayerFromCapabilities(
         overviewPrefetchMargin = overviewPrefetchMargin,
         attributions = attributions,
         fetchConfig = fetchConfig,
+        onError = onError,
     )
 }
 

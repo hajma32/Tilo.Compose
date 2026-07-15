@@ -1,5 +1,6 @@
 package tilo.compose.core.layers.raster
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -19,23 +20,25 @@ import kotlinx.coroutines.withContext
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.TileRequest
 
+/** Cache and concurrency limits for a raster layer's tile fetches. */
 data class TileFetchConfig(
     val maxCacheEntries: Int = 200,
     val concurrency: Int = 8,
-    val dispatcher: CoroutineDispatcher = Dispatchers.Default,
-)
+) {
+    init {
+        require(maxCacheEntries >= 0) { "maxCacheEntries must be non-negative" }
+        require(concurrency > 0) { "concurrency must be positive" }
+    }
+}
 
 internal class TileRequestFetcher(
     private val config: TileFetchConfig = TileFetchConfig(),
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val onError: ((Throwable) -> Unit)? = null,
     private val cacheKey: (TileRequest) -> String,
     private val fetchBytes: suspend (TileRequest) -> ByteArray?,
 ) {
-    private val fetchScope = CoroutineScope(config.dispatcher + SupervisorJob())
-
-    init {
-        require(config.maxCacheEntries >= 0) { "maxCacheEntries must be non-negative" }
-        require(config.concurrency > 0) { "concurrency must be positive" }
-    }
+    private val fetchScope = CoroutineScope(dispatcher + SupervisorJob())
 
     private val fetchSemaphore = Semaphore(config.concurrency)
 
@@ -50,7 +53,7 @@ internal class TileRequestFetcher(
         coroutineScope {
             requests
                 .map { request ->
-                    async(config.dispatcher) {
+                    async(dispatcher) {
                         fetchTile(request)
                     }
                 }.awaitAll()
@@ -81,7 +84,7 @@ internal class TileRequestFetcher(
                                     inFlightMutex.withLock {
                                         created.started = true
                                     }
-                                    fetchBytes(request)?.also { bytes ->
+                                    readBytes(request)?.also { bytes ->
                                         cachePut(key, bytes)
                                     }
                                 }
@@ -120,6 +123,16 @@ internal class TileRequestFetcher(
             }
         }
     }
+
+    private suspend fun readBytes(request: TileRequest): ByteArray? =
+        try {
+            fetchBytes(request)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            onError?.invoke(error)
+            null
+        }
 
     private fun cleanUpWhenUnused(
         key: String,

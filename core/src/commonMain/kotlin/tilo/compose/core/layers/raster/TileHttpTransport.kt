@@ -2,7 +2,6 @@ package tilo.compose.core.layers.raster
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
-import kotlinx.coroutines.CancellationException
 import tilo.compose.core.net.sharedHttpClient
 
 /** Internal HTTP seam used by raster sources and deterministic network tests. */
@@ -13,12 +12,5 @@ internal fun interface TileHttpTransport {
 internal class KtorTileHttpTransport(
     private val http: HttpClient = sharedHttpClient(),
 ) : TileHttpTransport {
-    override suspend fun readImage(url: String): ByteArray? =
-        try {
-            http.get(url).readTileImageBytesOrNull()
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
-            null
-        }
+    override suspend fun readImage(url: String): ByteArray? = http.get(url).readTileImageBytesOrNull()
 }

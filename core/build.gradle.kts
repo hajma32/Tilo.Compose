@@ -19,6 +19,7 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 api(project(":geocore"))
+                implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.ktor.client.core)
             }
         }

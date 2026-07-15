@@ -14,6 +14,7 @@ import tilo.compose.core.tile.TileGrid
  * [crs] is the WMS SRS/CRS value, e.g. "EPSG:5514".
  * WMS 1.3.0 uses `CRS` and honors [axisOrder]; older versions use `SRS` and
  * x/y BBOX order.
+ * The caller owns directly constructed instances and must close them after use.
  */
 class WMSTileLayer(
     id: String,
@@ -37,6 +38,7 @@ class WMSTileLayer(
     overviewPrefetchMargin: Int = 1,
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
+    onError: ((Throwable) -> Unit)? = null,
 ) : RasterTileLayer(
         id = id,
         source =
@@ -62,4 +64,5 @@ class WMSTileLayer(
         overviewPrefetchMargin = overviewPrefetchMargin,
         attributions = attributions,
         fetchConfig = fetchConfig,
+        onError = onError,
     )

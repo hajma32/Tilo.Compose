@@ -23,9 +23,22 @@ internal class StoredRasterLayer(
 internal sealed interface RasterLayerUpdate {
     data object None : RasterLayerUpdate
 
-    class TileReader(
-        val readTile: suspend (TileCoordinate) -> ByteArray?,
+    class ErrorHandler(
+        val onError: ((Throwable) -> Unit)?,
     ) : RasterLayerUpdate
+
+    class TileStore(
+        val readTile: suspend (TileCoordinate) -> ByteArray?,
+        val onError: ((Throwable) -> Unit)?,
+    ) : RasterLayerUpdate
+}
+
+internal class MutableRasterErrorHandler(
+    var delegate: ((Throwable) -> Unit)?,
+) {
+    fun report(error: Throwable) {
+        delegate?.invoke(error)
+    }
 }
 
 /** Lightweight presentation snapshot backed by a stable fetch/cache runtime. */

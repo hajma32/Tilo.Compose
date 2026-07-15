@@ -1,7 +1,8 @@
 package tilo.compose.core.layers.raster
 
 import kotlinx.coroutines.async
-import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
@@ -26,6 +27,7 @@ class RasterTileLayerTest {
     fun sameViewportLoadsExactlyItsPlannedRequestsOnce() =
         runTest {
             val requests = mutableListOf<TileCoordinate>()
+            val requestsMutex = Mutex()
             val source =
                 object : RasterTileSource {
                     override val projection = Epsg3857Projection
@@ -34,7 +36,9 @@ class RasterTileLayerTest {
                     override fun cacheKey(request: TileRequest): String = request.coordinate.toString()
 
                     override suspend fun readTile(request: TileRequest): ByteArray {
-                        requests += request.coordinate
+                        requestsMutex.withLock {
+                            requests += request.coordinate
+                        }
                         return byteArrayOf(1)
                     }
                 }
@@ -43,7 +47,6 @@ class RasterTileLayerTest {
                     id = "network",
                     source = source,
                     prefetchMargin = 0,
-                    fetchConfig = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
                 )
             val map =
                 MapState(

@@ -14,11 +14,55 @@ import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TileRequestFetcherTest {
+    /** Invalid limits fail when the public configuration is constructed. */
+    @Test
+    fun invalidConfigurationIsRejectedImmediately() {
+        assertFailsWith<IllegalArgumentException> {
+            TileFetchConfig(maxCacheEntries = -1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            TileFetchConfig(concurrency = 0)
+        }
+    }
+
+    /**
+     * Verifies that a transport failure is observable without cancelling healthy tile results.
+     *
+     * Input: one request whose source throws and one request returning bytes.
+     * Expected: the failed tile is empty, the healthy tile succeeds, and the callback receives
+     * the original error once.
+     */
+    @Test
+    fun sourceFailureIsReportedAndIsolated() =
+        runTest {
+            val expectedError = IllegalStateException("DNS lookup failed")
+            val reportedErrors = mutableListOf<Throwable>()
+            val fetcher =
+                TileRequestFetcher(
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                    onError = reportedErrors::add,
+                    cacheKey = { request -> request.coordinate.toString() },
+                    fetchBytes = { request ->
+                        if (request.coordinate.x == 1) throw expectedError
+                        byteArrayOf(2)
+                    },
+                )
+
+            val tiles = fetcher.fetchTiles(listOf(request(1), request(2)))
+
+            assertEquals(null, tiles[0].bytes)
+            assertEquals(2, tiles[1].bytes?.single())
+            assertEquals(1, reportedErrors.size)
+            assertSame(expectedError, reportedErrors.single())
+        }
+
     /**
      * Verifies that a successful tile is reused from the in-memory cache.
      *
@@ -31,7 +75,7 @@ class TileRequestFetcherTest {
             var fetchCount = 0
             val fetcher =
                 TileRequestFetcher(
-                    config = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { request -> request.coordinate.toString() },
                     fetchBytes = {
                         fetchCount += 1
@@ -70,7 +114,7 @@ class TileRequestFetcherTest {
             var fetchCount = 0
             val fetcher =
                 TileRequestFetcher(
-                    config = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { "same" },
                     fetchBytes = {
                         fetchCount += 1
@@ -105,8 +149,8 @@ class TileRequestFetcherTest {
                     config =
                         TileFetchConfig(
                             maxCacheEntries = 2,
-                            dispatcher = StandardTestDispatcher(testScheduler),
                         ),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { request -> request.coordinate.x.toString() },
                     fetchBytes = { request ->
                         val x = request.coordinate.x
@@ -139,8 +183,8 @@ class TileRequestFetcherTest {
                     config =
                         TileFetchConfig(
                             maxCacheEntries = 0,
-                            dispatcher = StandardTestDispatcher(testScheduler),
                         ),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { "same" },
                     fetchBytes = {
                         fetchCount += 1
@@ -166,7 +210,7 @@ class TileRequestFetcherTest {
             val neverCompletes = CompletableDeferred<Unit>()
             val fetcher =
                 TileRequestFetcher(
-                    config = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { "same" },
                     fetchBytes = {
                         neverCompletes.await()
@@ -199,8 +243,8 @@ class TileRequestFetcherTest {
                     config =
                         TileFetchConfig(
                             concurrency = 2,
-                            dispatcher = StandardTestDispatcher(testScheduler),
                         ),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { request -> request.coordinate.toString() },
                     fetchBytes = {
                         active += 1
@@ -237,8 +281,8 @@ class TileRequestFetcherTest {
                     config =
                         TileFetchConfig(
                             concurrency = 2,
-                            dispatcher = StandardTestDispatcher(testScheduler),
                         ),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { request -> request.coordinate.toString() },
                     fetchBytes = {
                         active += 1
@@ -275,7 +319,7 @@ class TileRequestFetcherTest {
             val release = CompletableDeferred<Unit>()
             val fetcher =
                 TileRequestFetcher(
-                    config = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { "shared" },
                     fetchBytes = {
                         fetchCount += 1
@@ -310,7 +354,7 @@ class TileRequestFetcherTest {
             val release = CompletableDeferred<Unit>()
             val fetcher =
                 TileRequestFetcher(
-                    config = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { "same" },
                     fetchBytes = {
                         fetchCount += 1
@@ -344,8 +388,8 @@ class TileRequestFetcherTest {
                     config =
                         TileFetchConfig(
                             concurrency = 1,
-                            dispatcher = StandardTestDispatcher(testScheduler),
                         ),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { request -> request.coordinate.toString() },
                     fetchBytes = { request ->
                         if (request.coordinate.x == 1) {
@@ -383,7 +427,7 @@ class TileRequestFetcherTest {
             val release = CompletableDeferred<Unit>()
             val fetcher =
                 TileRequestFetcher(
-                    config = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
+                    dispatcher = StandardTestDispatcher(testScheduler),
                     cacheKey = { "same" },
                     fetchBytes = {
                         fetchCount += 1

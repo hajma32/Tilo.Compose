@@ -41,10 +41,10 @@ jobs:
         run: ./gradlew --no-daemon qualityCheck
 
       - name: Compile Android targets
-        run: ./gradlew --no-daemon :core:compileDebugKotlinAndroid :render:compileDebugKotlinAndroid :composeApp:compileDebugKotlinAndroid
+        run: ./gradlew --no-daemon :core:compileDebugKotlinAndroid :render:compileDebugKotlinAndroid :tilo-samples:compileDebugKotlinAndroid
 
       - name: Run JVM tests
         run: ./gradlew --no-daemon :draw:jvmTest :geocore:jvmTest :spatial-index:jvmTest
 
       - name: Run Android unit tests
-        run: ./gradlew --no-daemon :core:testDebugUnitTest :render:testDebugUnitTest :composeApp:testDebugUnitTest
+        run: ./gradlew --no-daemon :core:testDebugUnitTest :render:testDebugUnitTest

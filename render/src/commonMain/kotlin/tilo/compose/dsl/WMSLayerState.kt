@@ -104,6 +104,8 @@ internal fun rememberWMSLayerRuntimeState(): WMSLayerState {
  * Loads WMS GetCapabilities and remembers the resulting tile layer state.
  *
  * Pass the returned state to `wmsTileLayer(state)` inside [TiloMap].
+ * The state owns its raster runtime and closes it when it leaves composition.
+ * [onError] receives both GetCapabilities and tile request failures.
  */
 @Composable
 @ExperimentalTiloApi
@@ -129,11 +131,14 @@ fun rememberWMSLayer(
     overviewPrefetchMargin: Int = 1,
     attribution: Attribution? = null,
     attributions: List<Attribution> = emptyList(),
+    onError: ((Throwable) -> Unit)? = null,
 ): WMSLayerState {
     val state = rememberWMSLayerRuntimeState()
+    val errorHandler = remember { MutableRasterErrorHandler(onError) }
     var capabilities by remember(capabilitiesUrl) { mutableStateOf<WMSCapabilities?>(null) }
 
     SideEffect {
+        errorHandler.delegate = onError
         state.updatePresentation(
             id = id,
             zIndex = zIndex,
@@ -155,6 +160,7 @@ fun rememberWMSLayer(
         } catch (error: Throwable) {
             state.error = error
             capabilities = null
+            errorHandler.report(error)
         } finally {
             state.isLoading = false
         }
@@ -204,6 +210,7 @@ fun rememberWMSLayer(
                     maxOverviewTiles = maxOverviewTiles,
                     overviewPrefetchMargin = overviewPrefetchMargin,
                     attributions = emptyList(),
+                    onError = errorHandler::report,
                 ),
             )
         } catch (error: CancellationException) {
@@ -211,6 +218,7 @@ fun rememberWMSLayer(
         } catch (error: Throwable) {
             state.error = error
             state.replaceRuntime(null)
+            errorHandler.report(error)
         }
     }
 
@@ -220,6 +228,8 @@ fun rememberWMSLayer(
 /**
  * Loads several WMS sublayers as one composited GetMap tile layer.
  * Layer order is preserved in the comma-separated WMS `LAYERS` parameter.
+ * The returned state owns its raster runtime and closes it when it leaves composition.
+ * [onError] receives both GetCapabilities and tile request failures.
  */
 @Composable
 @ExperimentalTiloApi
@@ -244,6 +254,7 @@ fun rememberWMSLayer(
     overviewPrefetchMargin: Int = 1,
     attribution: Attribution? = null,
     attributions: List<Attribution> = emptyList(),
+    onError: ((Throwable) -> Unit)? = null,
 ): WMSLayerState {
     require(layerNames.isNotEmpty()) { "At least one WMS layer name is required." }
     return rememberWMSLayer(
@@ -267,5 +278,6 @@ fun rememberWMSLayer(
         overviewPrefetchMargin = overviewPrefetchMargin,
         attribution = attribution,
         attributions = attributions,
+        onError = onError,
     )
 }

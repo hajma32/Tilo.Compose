@@ -88,7 +88,8 @@ class TileHttpTransportTest {
      * Verifies recovery after a transient transport exception.
      *
      * Input: one failed HTTP attempt followed by a successful PNG response for the same URL.
-     * Expected: the first result is `null`, the second contains PNG bytes, and two attempts occur.
+     * Expected: the first exception reaches the fetcher-level error boundary, the second
+     * contains PNG bytes, and two attempts occur.
      */
     @Test
     fun transientNetworkFailureReturnsMissingTileAndNextRequestCanRecover() =
@@ -104,7 +105,9 @@ class TileHttpTransportTest {
                 )
             val transport = KtorTileHttpTransport(client)
             try {
-                assertNull(transport.readImage("https://tiles.test/tile"))
+                assertFailsWith<IllegalStateException> {
+                    transport.readImage("https://tiles.test/tile")
+                }
                 assertContentEquals(png, transport.readImage("https://tiles.test/tile"))
                 assertEquals(2, attempts)
             } finally {

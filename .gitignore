@@ -19,3 +19,9 @@ captures
 node_modules/
 /website/
 /zabaged-czech-map/
+/composeApp/
+/.agent/skills/
+/AGENT_SKILLS.md
+/CODING_GUIDELINES.md
+/CONTRIBUTING.md
+/TODO.md

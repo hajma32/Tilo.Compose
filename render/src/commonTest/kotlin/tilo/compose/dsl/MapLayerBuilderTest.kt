@@ -4,12 +4,14 @@ package tilo.compose.dsl
 
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.raster.TileRowScheme
 import tilo.compose.core.layers.raster.TileStoreTileSource
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
+import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
@@ -18,8 +20,52 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
+import kotlin.test.assertTrue
 
 class MapLayerBuilderTest {
+    /**
+     * Verifies that the advanced pre-built-layer path borrows its raster runtime.
+     *
+     * Input: a caller-owned layer passed to a managed builder, followed by store shutdown.
+     * Expected: the layer remains usable until the caller closes it.
+     */
+    @Test
+    fun prebuiltRasterLayerRemainsCallerOwned() =
+        runTest {
+            val grid = TileGrid()
+            val layer =
+                RasterTileLayer(
+                    id = "borrowed",
+                    source =
+                        TileStoreTileSource(
+                            projection = IdentityProjection,
+                            grid = grid,
+                            scheme = TileRowScheme.XYZ,
+                            readTile = { byteArrayOf(1) },
+                        ),
+                )
+            val store = RasterLayerStore()
+            val builder = MapLayerBuilder.managed(store)
+            builder.rasterLayer(layer)
+            store.retain(builder.managedRasterKeys)
+            store.close()
+
+            try {
+                val map =
+                    MapState(
+                        center = Point(0.0, 0.0),
+                        zoom = 0.0,
+                        viewport = Viewport(width = 256, height = 256),
+                        projection = IdentityProjection,
+                    )
+                val tiles = layer.loadTiles(map)
+                assertTrue(tiles.isNotEmpty())
+                assertTrue(tiles.all { tile -> tile.bytes?.single() == 1.toByte() })
+            } finally {
+                layer.close()
+            }
+        }
+
     /**
      * Verifies that tile-reader callback updates become visible only at the commit boundary.
      *
@@ -58,7 +104,7 @@ class MapLayerBuilderTest {
                                 ),
                         ),
                     update = { update ->
-                        if (update is RasterLayerUpdate.TileReader) {
+                        if (update is RasterLayerUpdate.TileStore) {
                             publishedReader = update.readTile
                         }
                     },
@@ -69,11 +115,11 @@ class MapLayerBuilderTest {
 
             store.retain(
                 activeKeys = setOf(key),
-                updates = mapOf(key to RasterLayerUpdate.TileReader(firstReader)),
+                updates = mapOf(key to RasterLayerUpdate.TileStore(firstReader, onError = null)),
             )
             assertEquals(1, publishedReader(TileCoordinate(x = 0, y = 0, z = 0))?.single())
 
-            val abandonedUpdates = mapOf(key to RasterLayerUpdate.TileReader(candidateReader))
+            val abandonedUpdates = mapOf(key to RasterLayerUpdate.TileStore(candidateReader, onError = null))
             assertEquals(
                 expected = 1,
                 actual = publishedReader(TileCoordinate(x = 0, y = 0, z = 0))?.single(),
@@ -82,6 +128,67 @@ class MapLayerBuilderTest {
 
             store.retain(activeKeys = setOf(key), updates = abandonedUpdates)
             assertEquals(2, publishedReader(TileCoordinate(x = 0, y = 0, z = 0))?.single())
+        }
+
+    /**
+     * Verifies callback updates without replacing the managed raster runtime.
+     *
+     * Input: the same failing tile store is recomposed with a different error callback.
+     * Expected: the second failure reaches only the latest callback.
+     */
+    @Test
+    fun managedRasterUsesLatestErrorCallback() =
+        runTest {
+            val store = RasterLayerStore()
+            val grid = TileGrid()
+            val expectedError = IllegalStateException("offline")
+            val readTile: suspend (TileCoordinate) -> ByteArray? = { throw expectedError }
+            var firstReports = 0
+            var secondReports = 0
+
+            val firstBuilder = MapLayerBuilder.managed(store)
+            firstBuilder.tileStoreLayer(
+                id = "base",
+                projection = IdentityProjection,
+                grid = grid,
+                readTile = readTile,
+                scheme = TileRowScheme.XYZ,
+                maxVisibleTiles = 1,
+                prefetchMargin = 0,
+                onError = { firstReports += 1 },
+            )
+            val firstLayer = firstBuilder.build().single() as TileLayer
+            store.retain(firstBuilder.managedRasterKeys, firstBuilder.managedRasterUpdates)
+
+            val map =
+                MapState(
+                    center = Point(0.0, 0.0),
+                    zoom = 0.0,
+                    viewport = Viewport(width = 256, height = 256),
+                    projection = IdentityProjection,
+                )
+            firstLayer.loadTiles(map)
+            assertTrue(firstReports > 0)
+            val firstReportCount = firstReports
+
+            val secondBuilder = MapLayerBuilder.managed(store)
+            secondBuilder.tileStoreLayer(
+                id = "base",
+                projection = IdentityProjection,
+                grid = grid,
+                readTile = readTile,
+                scheme = TileRowScheme.XYZ,
+                maxVisibleTiles = 1,
+                prefetchMargin = 0,
+                onError = { secondReports += 1 },
+            )
+            val secondLayer = secondBuilder.build().single() as TileLayer
+            store.retain(secondBuilder.managedRasterKeys, secondBuilder.managedRasterUpdates)
+            secondLayer.loadTiles(map)
+
+            assertEquals(firstReportCount, firstReports)
+            assertTrue(secondReports > 0)
+            store.close()
         }
 
     /**
@@ -163,6 +270,36 @@ class MapLayerBuilderTest {
         store.retain(secondBuilder.managedRasterKeys)
 
         assertNotSame(firstLayer, secondLayer)
+    }
+
+    /**
+     * Verifies that the zero-argument OSM preset creates a correctly configured XYZ layer.
+     *
+     * Input: a fresh layer builder and `osmLayer()` with all default arguments.
+     * Expected: one Web Mercator layer named `osm` with the required OpenStreetMap attribution.
+     */
+    @Test
+    fun osmLayerProvidesStandardWebMercatorSetup() {
+        val builder = MapLayerBuilder()
+        builder.osmLayer()
+
+        val layer = builder.build().single() as RasterTileLayer
+        try {
+            assertEquals("osm", layer.id)
+            assertEquals(Epsg3857Projection, layer.projection)
+            assertEquals(
+                expected =
+                    listOf(
+                        Attribution(
+                            label = "© OpenStreetMap contributors",
+                            url = "https://www.openstreetmap.org/copyright",
+                        ),
+                    ),
+                actual = layer.attributions,
+            )
+        } finally {
+            layer.close()
+        }
     }
 
     /**

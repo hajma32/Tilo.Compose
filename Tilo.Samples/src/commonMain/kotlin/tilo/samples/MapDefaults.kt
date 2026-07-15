@@ -12,7 +12,6 @@ import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.MapLayerBuilder
-import tilo.compose.dsl.attribution
 import tilo.compose.dsl.rememberMapCameraState
 import tilo.compose.dsl.sjtsk
 import tilo.compose.dsl.webMercator
@@ -20,7 +19,6 @@ import tilo.compose.dsl.webMercator
 internal const val CUZK_ORTHOPHOTO_URL =
     "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer"
 
-private const val OPEN_STREET_MAP_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 private val PRAGUE = Point(14.4378, 50.0755)
 private val DEFAULT_MAP_CONFIG = MapConfig(minZoom = 1.0, maxZoom = 20.0)
 
@@ -52,15 +50,5 @@ internal fun rememberSjtskCamera(): MapCameraState =
     )
 
 internal fun MapLayerBuilder.openStreetMapLayer() {
-    xyzTileLayer(
-        id = "osm-standard",
-        urlTemplate = OPEN_STREET_MAP_URL,
-        projection = webMercator(),
-        prefetchMargin = 1,
-        attribution =
-            attribution(
-                label = "© OpenStreetMap contributors",
-                url = "https://www.openstreetmap.org/copyright",
-            ),
-    )
+    osmLayer(id = "osm-standard")
 }

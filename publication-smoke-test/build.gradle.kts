@@ -1,6 +1,8 @@
 plugins {
     kotlin("multiplatform") version "2.3.0"
     id("com.android.library") version "8.11.2"
+    id("org.jetbrains.compose") version "1.10.0"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.3.0"
 }
 
 val tiloVersion = providers.gradleProperty("tilo.version").orElse("0.1.0-alpha01")

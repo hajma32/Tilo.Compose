@@ -28,7 +28,6 @@ dependencyResolutionManagement {
     }
 }
 
-include(":composeApp")
 include(":core")
 include(":draw")
 include(":geocore")

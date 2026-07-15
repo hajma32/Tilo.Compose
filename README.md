@@ -1,17 +1,15 @@
-<p align="center">
-  <img src="docs/images/tilo-compose-logo.svg" alt="Tilo.Compose" width="420">
-</p>
+<img src="docs/images/tilo-compose-logo.svg" alt="Tilo.Compose" width="420">
 
 Compose-first Kotlin Multiplatform maps and GIS toolkit.
 
-Tilo.Compose is an open-source Kotlin Multiplatform toolkit for building modern
-map and GIS applications with Compose. It scales from a simple OpenStreetMap
-view with a few markers to complex GIS workflows with multiple coordinate
-systems.
+Tilo.Compose is an **open-source Kotlin Multiplatform toolkit** for building
+modern **map and GIS applications with Compose**. It scales from a simple
+OpenStreetMap view with a few markers to complex GIS workflows with multiple
+coordinate systems.
 
-The framework provides a declarative Compose API, tiled raster layers (WMS, XYZ,
-and custom tile stores), projection-aware rendering, vector geometry and
-styling, label placement, feature selection, interactive drawing, spatial
+The framework provides a **declarative Compose API**, tiled raster layers (WMS,
+XYZ, and custom tile stores), **projection-aware rendering**, vector geometry
+and styling, label placement, feature selection, interactive drawing, spatial
 indexing, and extension points for custom data sources and coordinate
 transformations.
 

@@ -22,8 +22,7 @@ enum class WMSAxisOrder {
          * common latitude/longitude exception; custom axis-sensitive CRSs can
          * pass an explicit value to [WMSTileSource].
          */
-        fun forCrs(crs: String): WMSAxisOrder =
-            if (crs.equals("EPSG:4326", ignoreCase = true)) YX else XY
+        fun forCrs(crs: String): WMSAxisOrder = if (crs.equals("EPSG:4326", ignoreCase = true)) YX else XY
     }
 }
 
@@ -65,8 +64,7 @@ class WMSTileSource internal constructor(
 
     override fun cacheKey(request: TileRequest): String = buildUrl(request)
 
-    override suspend fun readTile(request: TileRequest): ByteArray? =
-        transport.readImage(buildUrl(request))
+    override suspend fun readTile(request: TileRequest): ByteArray? = transport.readImage(buildUrl(request))
 
     /**
      * Builds the WMS GetMap URL. Bounds are already in the source CRS.

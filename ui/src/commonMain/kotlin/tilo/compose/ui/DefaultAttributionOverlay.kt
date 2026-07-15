@@ -24,12 +24,13 @@ fun BoxScope.DefaultAttributionOverlay(attributions: List<Attribution>) {
     val uriHandler = LocalUriHandler.current
     val shape = RoundedCornerShape(8.dp)
     Row(
-        modifier = Modifier
-            .align(Alignment.BottomEnd)
-            .padding(8.dp)
-            .shadow(elevation = 4.dp, shape = shape)
-            .background(Color.White, shape = shape)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+        modifier =
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(8.dp)
+                .shadow(elevation = 4.dp, shape = shape)
+                .background(Color.White, shape = shape)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         attributions.forEachIndexed { index, attribution ->
             if (index > 0) {
@@ -40,21 +41,24 @@ fun BoxScope.DefaultAttributionOverlay(attributions: List<Attribution>) {
             }
             BasicText(
                 text = attribution.label,
-                modifier = attribution.url?.let { url ->
-                    Modifier.clickable { uriHandler.openUri(url) }
-                } ?: Modifier,
+                modifier =
+                    attribution.url?.let { url ->
+                        Modifier.clickable { uriHandler.openUri(url) }
+                    } ?: Modifier,
                 style = if (attribution.url != null) AttributionLinkTextStyle else AttributionTextStyle,
             )
         }
     }
 }
 
-private val AttributionTextStyle = TextStyle(
-    color = Color(0xFF111827),
-    fontSize = 11.sp,
-)
+private val AttributionTextStyle =
+    TextStyle(
+        color = Color(0xFF111827),
+        fontSize = 11.sp,
+    )
 
-private val AttributionLinkTextStyle = AttributionTextStyle.copy(
-    color = Color(0xFF111827),
-    textDecoration = TextDecoration.Underline,
-)
+private val AttributionLinkTextStyle =
+    AttributionTextStyle.copy(
+        color = Color(0xFF111827),
+        textDecoration = TextDecoration.Underline,
+    )

@@ -77,11 +77,13 @@ class DrawState internal constructor(
     fun onMapTap(point: Point) {
         if (!isDrawing) return
         pushUndo()
-        draftPoints = when (mode) {
-            DrawMode.Point -> listOf(point)
-            DrawMode.Line,
-            DrawMode.Polygon -> draftPoints + point
-        }
+        draftPoints =
+            when (mode) {
+                DrawMode.Point -> listOf(point)
+                DrawMode.Line,
+                DrawMode.Polygon,
+                -> draftPoints + point
+            }
         redoStack = emptyList()
         invalidate()
     }

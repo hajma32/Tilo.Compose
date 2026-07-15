@@ -30,8 +30,8 @@ internal fun rememberWebMercatorCamera(
     zoom: Double,
 ): MapCameraState =
     rememberMapCameraState(
-        center = Wgs84ToWebMercatorTransformation.sourceToTarget(center),
-        zoom = zoom,
+        initialCenter = Wgs84ToWebMercatorTransformation.sourceToTarget(center),
+        initialZoom = zoom,
         projection = webMercator(),
         config =
             DEFAULT_MAP_CONFIG
@@ -42,8 +42,8 @@ internal fun rememberWebMercatorCamera(
 @Composable
 internal fun rememberSjtskCamera(): MapCameraState =
     rememberMapCameraState(
-        center = Wgs84ToEpsg5514Transformation.sourceToTarget(PRAGUE),
-        zoom = 12.2,
+        initialCenter = Wgs84ToEpsg5514Transformation.sourceToTarget(PRAGUE),
+        initialZoom = 12.2,
         projection = sjtsk(),
         config =
             DEFAULT_MAP_CONFIG

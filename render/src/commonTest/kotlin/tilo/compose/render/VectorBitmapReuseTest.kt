@@ -2,10 +2,6 @@
 
 package tilo.compose.render
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.vector.FeatureLayer
@@ -13,13 +9,17 @@ import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.render.backend.VectorBitmapSnapshot
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class VectorBitmapReuseTest {
-
-    private val strategy = VectorRenderStrategy.CachedBitmap(
-        paddingPx = 200,
-        invalidateOnZoomDelta = 0.3,
-    )
+    private val strategy =
+        VectorRenderStrategy.CachedBitmap(
+            paddingPx = 200,
+            invalidateOnZoomDelta = 0.3,
+        )
 
     /**
      * Verifies spatial reuse while a padded vector snapshot still covers the viewport.
@@ -74,18 +74,20 @@ class VectorBitmapReuseTest {
         assertEquals(first.cacheKey(), rebuilt.cacheKey())
     }
 
-    private fun testMap() = MapState(
-        center = Point(0.0, 0.0),
-        zoom = 10.0,
-        viewport = Viewport(width = 1_000, height = 800),
-    )
+    private fun testMap() =
+        MapState(
+            center = Point(0.0, 0.0),
+            zoom = 10.0,
+            viewport = Viewport(width = 1_000, height = 800),
+        )
 
-    private fun testBitmapLayer() = VectorBitmapSnapshot(
-        center = Point(0.0, 0.0),
-        zoom = 10.0,
-        bitmapWidth = 1_400,
-        bitmapHeight = 1_200,
-        displayWidth = 1_400,
-        displayHeight = 1_200,
-    )
+    private fun testBitmapLayer() =
+        VectorBitmapSnapshot(
+            center = Point(0.0, 0.0),
+            zoom = 10.0,
+            bitmapWidth = 1_400,
+            bitmapHeight = 1_200,
+            displayWidth = 1_400,
+            displayHeight = 1_200,
+        )
 }

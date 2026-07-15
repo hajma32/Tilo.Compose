@@ -37,15 +37,16 @@ internal class LabelLayoutEngine(
     ): List<PlacedLabel> {
         if (labels.isEmpty()) return emptyList()
 
-        val candidates = labels.mapIndexed { index, label ->
-            label.toCandidate(
-                order = index,
-                map = map,
-                drawScope = drawScope,
-                textMeasurer = textMeasurer,
-                labelBitmapCache = labelBitmapCache,
-            )
-        }
+        val candidates =
+            labels.mapIndexed { index, label ->
+                label.toCandidate(
+                    order = index,
+                    map = map,
+                    drawScope = drawScope,
+                    textMeasurer = textMeasurer,
+                    labelBitmapCache = labelBitmapCache,
+                )
+            }
         val collisionPadding = drawScope.styleUnitToPx(collisionPaddingStyleUnits)
         return selectLabelCollisionCandidates(candidates, collisionPadding)
             .sortedBy { it.order }
@@ -69,29 +70,32 @@ internal class LabelLayoutEngine(
         labelBitmapCache: LabelBitmapCache,
     ): LabelCollisionCandidate {
         val anchor = map.worldToScreen(anchor)
-        val metrics = drawScope.cachedLabelBitmapMetrics(
-            text = text,
-            style = style,
-            textMeasurer = textMeasurer,
-            cache = labelBitmapCache,
-        )
-        val center = if (followsLine) {
-            val offset = metrics.height / 2f + drawScope.styleUnitToPx(style.offsetY)
-            val radians = rotationDegrees * PI / 180.0
-            Offset(
-                x = anchor.x.toFloat() - sin(radians).toFloat() * offset,
-                y = anchor.y.toFloat() + cos(radians).toFloat() * offset,
+        val metrics =
+            drawScope.cachedLabelBitmapMetrics(
+                text = text,
+                style = style,
+                textMeasurer = textMeasurer,
+                cache = labelBitmapCache,
             )
-        } else {
+        val center =
+            if (followsLine) {
+                val offset = metrics.height / 2f + drawScope.styleUnitToPx(style.offsetY)
+                val radians = rotationDegrees * PI / 180.0
+                Offset(
+                    x = anchor.x.toFloat() - sin(radians).toFloat() * offset,
+                    y = anchor.y.toFloat() + cos(radians).toFloat() * offset,
+                )
+            } else {
+                Offset(
+                    x = anchor.x.toFloat(),
+                    y = anchor.y.toFloat() + drawScope.styleUnitToPx(style.offsetY) + metrics.height / 2f,
+                )
+            }
+        val topLeft =
             Offset(
-                x = anchor.x.toFloat(),
-                y = anchor.y.toFloat() + drawScope.styleUnitToPx(style.offsetY) + metrics.height / 2f,
+                x = center.x - metrics.width / 2f,
+                y = center.y - metrics.height / 2f,
             )
-        }
-        val topLeft = Offset(
-            x = center.x - metrics.width / 2f,
-            y = center.y - metrics.height / 2f,
-        )
 
         return LabelCollisionCandidate(
             command = this,
@@ -99,17 +103,23 @@ internal class LabelLayoutEngine(
             topLeft = topLeft,
             width = metrics.width,
             height = metrics.height,
-            bounds = rotatedBounds(
-                center = center,
-                width = metrics.width.toFloat(),
-                height = metrics.height.toFloat(),
-                degrees = rotationDegrees.toFloat(),
-            ),
+            bounds =
+                rotatedBounds(
+                    center = center,
+                    width = metrics.width.toFloat(),
+                    height = metrics.height.toFloat(),
+                    degrees = rotationDegrees.toFloat(),
+                ),
             order = order,
         )
     }
 
-    private fun rotatedBounds(center: Offset, width: Float, height: Float, degrees: Float): ScreenBounds {
+    private fun rotatedBounds(
+        center: Offset,
+        width: Float,
+        height: Float,
+        degrees: Float,
+    ): ScreenBounds {
         val radians = degrees * PI.toFloat() / 180f
         val rotatedWidth = abs(width * cos(radians)) + abs(height * sin(radians))
         val rotatedHeight = abs(width * sin(radians)) + abs(height * cos(radians))
@@ -161,8 +171,7 @@ private fun labelCollisionOrder(): Comparator<LabelCollisionCandidate> =
                 rightPriority != null -> 1
                 else -> b.area.compareTo(a.area)
             }
-        }
-        .thenByDescending { it.area }
+        }.thenByDescending { it.area }
         .thenBy { it.order }
 
 internal fun DrawScope.drawPlacedLabels(
@@ -172,20 +181,22 @@ internal fun DrawScope.drawPlacedLabels(
     labelBitmapCache: LabelBitmapCache,
 ) {
     labels.forEach { label ->
-        val bitmap = cachedLabelBitmap(
-            text = label.command.text,
-            style = label.command.style,
-            textMeasurer = textMeasurer,
-            offscreenDrawScope = offscreenDrawScope,
-            cache = labelBitmapCache,
-        )
+        val bitmap =
+            cachedLabelBitmap(
+                text = label.command.text,
+                style = label.command.style,
+                textMeasurer = textMeasurer,
+                offscreenDrawScope = offscreenDrawScope,
+                cache = labelBitmapCache,
+            )
         rotate(degrees = label.command.rotationDegrees.toFloat(), pivot = label.center) {
             drawImage(
                 image = bitmap,
-                dstOffset = IntOffset(
-                    x = label.topLeft.x.roundToInt(),
-                    y = label.topLeft.y.roundToInt(),
-                ),
+                dstOffset =
+                    IntOffset(
+                        x = label.topLeft.x.roundToInt(),
+                        y = label.topLeft.y.roundToInt(),
+                    ),
                 dstSize = IntSize(label.width, label.height),
             )
         }

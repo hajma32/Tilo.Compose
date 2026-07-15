@@ -4,10 +4,10 @@
 package tilo.compose.render.backend
 
 import androidx.compose.ui.graphics.ImageBitmap
-import tilo.compose.render.ExperimentalTiloRenderingApi
-import tilo.compose.render.RenderCommand
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.tile.Tile
+import tilo.compose.render.ExperimentalTiloRenderingApi
+import tilo.compose.render.RenderCommand
 
 @ExperimentalTiloRenderingApi
 sealed interface RenderSceneLayer {
@@ -20,14 +20,14 @@ data class RasterRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
     val tiles: List<Tile>,
-    val decodedImages: List<ImageBitmap?>? = null
+    val decodedImages: List<ImageBitmap?>? = null,
 ) : RenderSceneLayer
 
 @ExperimentalTiloRenderingApi
 class VectorRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
-    val commands: List<RenderCommand>
+    val commands: List<RenderCommand>,
 ) : RenderSceneLayer
 
 @ExperimentalTiloRenderingApi
@@ -50,7 +50,7 @@ data class VectorBitmapSnapshot(
 
 @ExperimentalTiloRenderingApi
 data class RenderScene(
-    val layers: List<RenderSceneLayer>
+    val layers: List<RenderSceneLayer>,
 ) {
     companion object {
         val Empty = RenderScene(emptyList())

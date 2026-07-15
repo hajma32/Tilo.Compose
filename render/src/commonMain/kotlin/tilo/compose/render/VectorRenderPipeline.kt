@@ -4,15 +4,15 @@ package tilo.compose.render
 
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
-import tilo.compose.render.backend.VectorBitmapSnapshot
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
-import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.map.MapState
+import tilo.compose.core.selection.FeatureSelectionRef
+import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
+import tilo.compose.render.backend.VectorBitmapSnapshot
 import kotlin.math.abs
 import kotlin.math.pow
 
@@ -53,13 +53,14 @@ internal class VectorRenderPipeline(
                 cacheKeysByLayer[layer.id] = layer.cacheKey(selectedFeatureKeys)
                 val features = layer.source.getFeatures(map)
                 val projected = transformFeaturesToMapProjection(features, layer.projection, map)
-                val commands = CommandBuilder.build(
-                    map = map,
-                    features = projected,
-                    layerId = layer.id,
-                    selectedFeatureKeys = selectedFeatureKeys,
-                    layerStyle = layer.style,
-                )
+                val commands =
+                    CommandBuilder.build(
+                        map = map,
+                        features = projected,
+                        layerId = layer.id,
+                        selectedFeatureKeys = selectedFeatureKeys,
+                        layerStyle = layer.style,
+                    )
 
                 when (val strategy = layer.renderStrategy) {
                     VectorRenderStrategy.Immediate -> {
@@ -70,16 +71,17 @@ internal class VectorRenderPipeline(
                         val labels = commands.filterIsInstance<RenderLabel>()
                         val geometry = commands.filterNot { it is RenderLabel }
                         commandsByLayer[layer.id] = labels
-                        val bitmapLayer = reusableBitmapsByLayer[layer.id]
-                            ?.takeIf { it.snapshot.canCover(map, strategy) }
-                            ?: bitmapRenderer.render(
-                                layer = layer,
-                                commands = geometry,
-                                map = map,
-                                strategy = strategy,
-                                density = density,
-                                layoutDirection = layoutDirection,
-                            )
+                        val bitmapLayer =
+                            reusableBitmapsByLayer[layer.id]
+                                ?.takeIf { it.snapshot.canCover(map, strategy) }
+                                ?: bitmapRenderer.render(
+                                    layer = layer,
+                                    commands = geometry,
+                                    map = map,
+                                    strategy = strategy,
+                                    density = density,
+                                    layoutDirection = layoutDirection,
+                                )
                         bitmapLayer?.let {
                             bitmapLayersByLayer[layer.id] = bitmapLayer
                         }
@@ -113,7 +115,7 @@ internal class VectorRenderPipeline(
                             layerId = layer.id,
                             selectedFeatureKeys = selectedFeatureKeys,
                             layerStyle = layer.style,
-                        )
+                        ),
                     )
                 }
             }
@@ -134,7 +136,7 @@ internal fun VectorBitmapSnapshot.canCover(
     map: MapState,
     strategy: VectorRenderStrategy.CachedBitmap,
 ): Boolean {
-    if (abs(map.zoom - zoom) > strategy.invalidateOnZoomDelta + ZoomComparisonEpsilon) return false
+    if (abs(map.zoom - zoom) > strategy.invalidateOnZoomDelta + ZOOM_COMPARISON_EPSILON) return false
 
     val anchor = map.worldToScreen(center)
     val scale = 2.0.pow(map.zoom - zoom)
@@ -146,7 +148,7 @@ internal fun VectorBitmapSnapshot.canCover(
         anchor.y + halfHeight >= map.viewport.height
 }
 
-private const val ZoomComparisonEpsilon = 1e-9
+private const val ZOOM_COMPARISON_EPSILON = 1e-9
 
 private fun Set<FeatureSelectionRef>.keysForLayer(layerId: String): Set<String> =
     asSequence()

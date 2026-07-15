@@ -19,8 +19,7 @@ import tilo.compose.core.geometry.Polygon
  * metadata.
  */
 @ExperimentalTiloApi
-fun features(block: FeatureListBuilder.() -> Unit): List<Feature> =
-    FeatureListBuilder().apply(block).build()
+fun features(block: FeatureListBuilder.() -> Unit): List<Feature> = FeatureListBuilder().apply(block).build()
 
 /**
  * Builder used by [features].
@@ -39,17 +38,18 @@ class FeatureListBuilder {
         block: FeatureOptions.() -> Unit = {},
     ) {
         val options = FeatureOptions().apply(block)
-        items += Feature(
-            key = key,
-            geometry = geometry,
-            style = options.style,
-            selectedStyle = options.selectedStyle,
-            label = options.label,
-            labelPriority = options.labelPriority,
-            labelStyle = options.labelStyle,
-            selectedLabelStyle = options.selectedLabelStyle,
-            data = options.data,
-        )
+        items +=
+            Feature(
+                key = key,
+                geometry = geometry,
+                style = options.style,
+                selectedStyle = options.selectedStyle,
+                label = options.label,
+                labelPriority = options.labelPriority,
+                labelStyle = options.labelStyle,
+                selectedLabelStyle = options.selectedLabelStyle,
+                data = options.data,
+            )
     }
 
     /**

@@ -3,11 +3,13 @@ plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.dokka)
+    alias(libs.plugins.mavenPublish)
 }
 
 kotlin {
     androidTarget {
-        publishLibraryVariants("debug", "release")
+        publishLibraryVariants("release")
     }
     iosArm64()
     iosSimulatorArm64()
@@ -42,9 +44,19 @@ kotlin {
 
 android {
     namespace = "tilo.compose.ui"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk =
+        libs.versions.android.compileSdk
+            .get()
+            .toInt()
 
     defaultConfig {
-        minSdk = libs.versions.android.minSdk.get().toInt()
+        minSdk =
+            libs.versions.android.minSdk
+                .get()
+                .toInt()
     }
+}
+
+compose.resources {
+    packageOfResClass = "tilo.compose.ui.generated.resources"
 }

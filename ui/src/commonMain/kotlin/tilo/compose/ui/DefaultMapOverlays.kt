@@ -9,8 +9,7 @@ import tilo.compose.core.scale.ScaleBar
 fun defaultAttributionContent(): @Composable BoxScope.(List<Attribution>) -> Unit =
     { attributions -> DefaultAttributionOverlay(attributions) }
 
-fun defaultScaleBarContent(): @Composable BoxScope.(ScaleBar) -> Unit =
-    { scaleBar -> DefaultScaleBar(scaleBar) }
+fun defaultScaleBarContent(): @Composable BoxScope.(ScaleBar) -> Unit = { scaleBar -> DefaultScaleBar(scaleBar) }
 
 fun defaultZoomControlsContent(): @Composable BoxScope.(MapCameraController) -> Unit =
     { cameraState -> DefaultZoomControls(cameraState) }

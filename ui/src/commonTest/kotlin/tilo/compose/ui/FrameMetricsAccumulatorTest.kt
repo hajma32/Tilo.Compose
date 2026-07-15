@@ -4,13 +4,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class FrameMetricsAccumulatorTest {
-
     @Test
     fun reportsFpsFrameTimesAndSkippedFrames() {
-        val accumulator = FrameMetricsAccumulator(
-            targetFrameRate = 60,
-            sampleWindowNanos = 50_000_000L,
-        )
+        val accumulator =
+            FrameMetricsAccumulator(
+                targetFrameRate = 60,
+                sampleWindowNanos = 50_000_000L,
+            )
 
         accumulator.recordFrame(0L)
         accumulator.recordFrame(16_666_666L)

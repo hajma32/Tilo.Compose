@@ -4,8 +4,8 @@ Tilo.Compose is designed around a simple Compose-first happy path:
 
 ```kotlin
 val cameraState = rememberMapCameraState(
-    center = Point(-650_000.0, -1_100_000.0),
-    zoom = 11.5,
+    initialCenter = Point(-650_000.0, -1_100_000.0),
+    initialZoom = 11.5,
     projection = sjtsk(),
 )
 

@@ -6,32 +6,40 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import tilo.compose.core.layers.raster.TileLayer
-import tilo.compose.core.tile.Tile
 import tilo.compose.core.map.MapState
+import tilo.compose.core.tile.Tile
 
 internal data class RasterFrame(
     val tilesByLayer: Map<String, List<Tile>>,
     val decodedImagesByLayer: Map<String, List<ImageBitmap?>>,
+    val sourceIdentitiesByLayer: Map<String, Any> = emptyMap(),
 ) {
     companion object {
-        val Empty = RasterFrame(
-            tilesByLayer = emptyMap(),
-            decodedImagesByLayer = emptyMap(),
-        )
+        val Empty =
+            RasterFrame(
+                tilesByLayer = emptyMap(),
+                decodedImagesByLayer = emptyMap(),
+                sourceIdentitiesByLayer = emptyMap(),
+            )
     }
 }
 
 internal class RasterRenderPipeline(
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
-    fun buildPlaceholderFrame(tileLayers: List<TileLayer>, map: MapState): RasterFrame =
+    fun buildPlaceholderFrame(
+        tileLayers: List<TileLayer>,
+        map: MapState,
+    ): RasterFrame =
         RasterFrame(
-            tilesByLayer = buildMap {
-                tileLayers.forEach { layer ->
-                    put(layer.id, layer.planTiles(map))
-                }
-            },
+            tilesByLayer =
+                buildMap {
+                    tileLayers.forEach { layer ->
+                        put(layer.id, layer.planTiles(map))
+                    }
+                },
             decodedImagesByLayer = emptyMap(),
+            sourceIdentitiesByLayer = tileLayers.sourceIdentitiesByLayer(),
         )
 
     suspend fun buildVisibleFrame(
@@ -44,6 +52,7 @@ internal class RasterRenderPipeline(
         return RasterFrame(
             tilesByLayer = tilesByLayer,
             decodedImagesByLayer = decodedImagesByLayer,
+            sourceIdentitiesByLayer = tileLayers.sourceIdentitiesByLayer(),
         )
     }
 
@@ -57,10 +66,14 @@ internal class RasterRenderPipeline(
         return RasterFrame(
             tilesByLayer = tilesByLayer,
             decodedImagesByLayer = decodedImagesByLayer,
+            sourceIdentitiesByLayer = tileLayers.sourceIdentitiesByLayer(),
         )
     }
 
-    suspend fun prefetch(tileLayers: List<TileLayer>, map: MapState) {
+    suspend fun prefetch(
+        tileLayers: List<TileLayer>,
+        map: MapState,
+    ) {
         withContext(dispatcher) {
             tileLayers.forEach { layer ->
                 layer.prefetchTiles(map)
@@ -68,7 +81,10 @@ internal class RasterRenderPipeline(
         }
     }
 
-    suspend fun prefetchOverview(tileLayers: List<TileLayer>, map: MapState) {
+    suspend fun prefetchOverview(
+        tileLayers: List<TileLayer>,
+        map: MapState,
+    ) {
         withContext(dispatcher) {
             tileLayers.forEach { layer ->
                 layer.prefetchOverviewTiles(map)
@@ -131,3 +147,6 @@ internal class RasterRenderPipeline(
         }
     }
 }
+
+internal fun List<TileLayer>.sourceIdentitiesByLayer(): Map<String, Any> =
+    associate { layer -> layer.id to layer.sourceIdentity }

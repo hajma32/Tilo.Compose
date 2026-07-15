@@ -27,8 +27,7 @@ class XYZTileSource internal constructor(
 
     override fun cacheKey(request: TileRequest): String = buildUrl(request)
 
-    override suspend fun readTile(request: TileRequest): ByteArray? =
-        transport.readImage(buildUrl(request))
+    override suspend fun readTile(request: TileRequest): ByteArray? = transport.readImage(buildUrl(request))
 
     private fun buildUrl(request: TileRequest): String {
         val (z, x, y) = request.coordinate

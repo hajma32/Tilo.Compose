@@ -12,11 +12,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RenderCoordinationTest {
-
     /**
      * Verifies latest-request-wins behavior during rapid viewport changes.
      *
@@ -24,33 +24,35 @@ class RenderCoordinationTest {
      * Expected: obsolete collectors are cancelled and only `C` reaches publication.
      */
     @Test
-    fun rapidViewportChangesPublishOnlyLatestFrame() = runTest {
-        val requests = MutableSharedFlow<String>(extraBufferCapacity = 2)
-        val firstStarted = CompletableDeferred<Unit>()
-        val neverReleaseObsolete = CompletableDeferred<Unit>()
-        val published = mutableListOf<String>()
-        val collector = backgroundScope.launch {
-            requests.collectLatestRenderRequest { viewport ->
-                if (viewport != "C") {
-                    if (viewport == "A") firstStarted.complete(Unit)
-                    neverReleaseObsolete.await()
+    fun rapidViewportChangesPublishOnlyLatestFrame() =
+        runTest {
+            val requests = MutableSharedFlow<String>(extraBufferCapacity = 2)
+            val firstStarted = CompletableDeferred<Unit>()
+            val neverReleaseObsolete = CompletableDeferred<Unit>()
+            val published = mutableListOf<String>()
+            val collector =
+                backgroundScope.launch {
+                    requests.collectLatestRenderRequest { viewport ->
+                        if (viewport != "C") {
+                            if (viewport == "A") firstStarted.complete(Unit)
+                            neverReleaseObsolete.await()
+                        }
+                        published += viewport
+                    }
                 }
-                published += viewport
-            }
+            runCurrent()
+
+            requests.emit("A")
+            firstStarted.await()
+            requests.emit("B")
+            runCurrent()
+            requests.emit("C")
+            runCurrent()
+
+            assertEquals(listOf("C"), published)
+            assertFalse(neverReleaseObsolete.isCompleted)
+            collector.cancel()
         }
-        runCurrent()
-
-        requests.emit("A")
-        firstStarted.await()
-        requests.emit("B")
-        runCurrent()
-        requests.emit("C")
-        runCurrent()
-
-        assertEquals(listOf("C"), published)
-        assertFalse(neverReleaseObsolete.isCompleted)
-        collector.cancel()
-    }
 
     /**
      * Verifies rejection of an overview result created for an obsolete viewport.
@@ -61,8 +63,22 @@ class RenderCoordinationTest {
     @Test
     fun staleOverviewRequestCannotReplaceLatestViewport() {
         val tracker = OverviewRequestTracker()
-        val first = tracker.next(testMap(center = tilo.compose.core.geometry.Point(1.0, 0.0)))
-        val latest = tracker.next(testMap(center = tilo.compose.core.geometry.Point(2.0, 0.0)))
+        val first =
+            tracker.next(
+                testMap(
+                    center =
+                        tilo.compose.core.geometry
+                            .Point(1.0, 0.0),
+                ),
+            )
+        val latest =
+            tracker.next(
+                testMap(
+                    center =
+                        tilo.compose.core.geometry
+                            .Point(2.0, 0.0),
+                ),
+            )
 
         assertFalse(tracker.isLatest(first))
         assertTrue(tracker.isLatest(latest))
@@ -72,56 +88,70 @@ class RenderCoordinationTest {
      * Verifies supervisor isolation when vector rendering fails.
      *
      * Input: a throwing vector branch and a healthy raster branch running as siblings.
-     * Expected: the vector error is contained and raster publication still occurs.
+     * Expected: the error is reported exactly once and raster publication still occurs.
      */
     @Test
-    fun vectorFailureDoesNotPreventRasterBranchPublication() = runTest {
-        var rasterPublished = false
+    fun vectorFailureDoesNotPreventRasterBranchPublication() =
+        runTest {
+            var rasterPublished = false
+            val failure = IllegalStateException("broken vector source")
+            val reported = mutableListOf<Throwable>()
 
-        supervisorScope {
-            launch {
-                runRenderBranch { error("broken vector source") }
+            supervisorScope {
+                launch {
+                    runRenderBranch(onError = reported::add) { throw failure }
+                }
+                launch {
+                    runRenderBranch { rasterPublished = true }
+                }
             }
-            launch {
-                runRenderBranch { rasterPublished = true }
-            }
+
+            assertTrue(rasterPublished)
+            assertEquals(1, reported.size)
+            assertSame(failure, reported.single())
         }
-
-        assertTrue(rasterPublished)
-    }
 
     /**
      * Verifies supervisor isolation when raster rendering fails.
      *
      * Input: a throwing raster branch and a healthy vector branch running as siblings.
-     * Expected: the raster error is contained and vector publication still occurs.
+     * Expected: the error is reported exactly once and vector publication still occurs.
      */
     @Test
-    fun rasterFailureDoesNotPreventVectorBranchPublication() = runTest {
-        var vectorPublished = false
+    fun rasterFailureDoesNotPreventVectorBranchPublication() =
+        runTest {
+            var vectorPublished = false
+            val failure = IllegalArgumentException("broken tile source")
+            val reported = mutableListOf<Throwable>()
 
-        supervisorScope {
-            launch {
-                runRenderBranch { error("broken tile decoder") }
+            supervisorScope {
+                launch {
+                    runRenderBranch(onError = reported::add) { throw failure }
+                }
+                launch {
+                    runRenderBranch { vectorPublished = true }
+                }
             }
-            launch {
-                runRenderBranch { vectorPublished = true }
-            }
+
+            assertTrue(vectorPublished)
+            assertEquals(1, reported.size)
+            assertSame(failure, reported.single())
         }
-
-        assertTrue(vectorPublished)
-    }
 
     /**
      * Verifies that branch-level fault isolation never hides coroutine cancellation.
      *
      * Input: a render branch throwing `CancellationException`.
-     * Expected: the cancellation is rethrown to stop obsolete render work.
+     * Expected: the cancellation is rethrown to stop obsolete render work and is not reported as an error.
      */
     @Test
-    fun renderBranchNeverSwallowsCancellation() = runTest {
-        assertFailsWith<CancellationException> {
-            runRenderBranch { throw CancellationException("obsolete") }
+    fun renderBranchNeverSwallowsCancellation() =
+        runTest {
+            val reported = mutableListOf<Throwable>()
+
+            assertFailsWith<CancellationException> {
+                runRenderBranch(onError = reported::add) { throw CancellationException("obsolete") }
+            }
+            assertTrue(reported.isEmpty())
         }
-    }
 }

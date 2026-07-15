@@ -1,13 +1,13 @@
 package tilo.compose.render
 
+import tilo.compose.core.geometry.Point
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
-import tilo.compose.core.geometry.Point
+import kotlin.test.assertTrue
 
 class RasterRenderingContractTest {
-
     /**
      * Verifies shared-edge rounding for horizontal and vertical tile neighbours.
      *
@@ -17,22 +17,25 @@ class RasterRenderingContractTest {
     @Test
     fun adjacentTilesProduceGaplessNonOverlappingPixelRectsAtFractionalZoom() {
         val map = testMap(zoom = 0.37, width = 257, height = 193, pixelRatio = 1.5)
-        val left = testTile(
-            x = 0,
-            topLeft = Point(-1.25, 0.8),
-            bottomRight = Point(0.15, -0.6),
-        ).screenRect(map)
-        val right = testTile(
-            x = 1,
-            topLeft = Point(0.15, 0.8),
-            bottomRight = Point(1.55, -0.6),
-        ).screenRect(map)
-        val below = testTile(
-            x = 0,
-            y = 1,
-            topLeft = Point(-1.25, -0.6),
-            bottomRight = Point(0.15, -2.0),
-        ).screenRect(map)
+        val left =
+            testTile(
+                x = 0,
+                topLeft = Point(-1.25, 0.8),
+                bottomRight = Point(0.15, -0.6),
+            ).screenRect(map)
+        val right =
+            testTile(
+                x = 1,
+                topLeft = Point(0.15, 0.8),
+                bottomRight = Point(1.55, -0.6),
+            ).screenRect(map)
+        val below =
+            testTile(
+                x = 0,
+                y = 1,
+                topLeft = Point(-1.25, -0.6),
+                bottomRight = Point(0.15, -2.0),
+            ).screenRect(map)
 
         assertEquals(left.x + left.width, right.x)
         assertEquals(left.y + left.height, below.y)
@@ -46,11 +49,12 @@ class RasterRenderingContractTest {
      */
     @Test
     fun invertedTileBoundsStillProducePositiveRect() {
-        val rect = testTile(
-            x = 0,
-            topLeft = Point(2.0, -2.0),
-            bottomRight = Point(-2.0, 2.0),
-        ).screenRect(testMap())
+        val rect =
+            testTile(
+                x = 0,
+                topLeft = Point(2.0, -2.0),
+                bottomRight = Point(-2.0, 2.0),
+            ).screenRect(testMap())
 
         assertEquals(true, rect.width > 0)
         assertEquals(true, rect.height > 0)
@@ -72,12 +76,25 @@ class RasterRenderingContractTest {
         val fallbackImage = TestImageBitmap(width = 3)
         val currentImage = TestImageBitmap(width = 4)
 
-        val merged = mergeRasterFrames(
-            placeholderFrame = RasterFrame(mapOf("tiles" to listOf(placeholder)), emptyMap()),
-            overviewFrame = RasterFrame(mapOf("tiles" to listOf(overview)), mapOf("tiles" to listOf(overviewImage))),
-            fallbackFrame = RasterFrame(mapOf("tiles" to listOf(fallback)), mapOf("tiles" to listOf(fallbackImage))),
-            currentFrame = RasterFrame(mapOf("tiles" to listOf(current)), mapOf("tiles" to listOf(currentImage))),
-        )
+        val merged =
+            mergeRasterFrames(
+                placeholderFrame = RasterFrame(mapOf("tiles" to listOf(placeholder)), emptyMap()),
+                overviewFrame =
+                    RasterFrame(
+                        mapOf("tiles" to listOf(overview)),
+                        mapOf("tiles" to listOf(overviewImage)),
+                    ),
+                fallbackFrame =
+                    RasterFrame(
+                        mapOf("tiles" to listOf(fallback)),
+                        mapOf("tiles" to listOf(fallbackImage)),
+                    ),
+                currentFrame =
+                    RasterFrame(
+                        mapOf("tiles" to listOf(current)),
+                        mapOf("tiles" to listOf(currentImage)),
+                    ),
+            )
 
         assertEquals(listOf(placeholder, overview, fallback, current), merged.tilesByLayer.getValue("tiles"))
         val images = merged.decodedImagesByLayer.getValue("tiles")
@@ -99,12 +116,87 @@ class RasterRenderingContractTest {
         val first = TestImageBitmap(width = 1)
         val third = TestImageBitmap(width = 3)
 
-        val filtered = RasterFrame(
-            tilesByLayer = mapOf("tiles" to tiles),
-            decodedImagesByLayer = mapOf("tiles" to listOf(first, null, third)),
-        ).withRenderableTilesOnly()
+        val filtered =
+            RasterFrame(
+                tilesByLayer = mapOf("tiles" to tiles),
+                decodedImagesByLayer = mapOf("tiles" to listOf(first, null, third)),
+            ).withRenderableTilesOnly()
 
         assertEquals(listOf(tiles[0], tiles[2]), filtered.tilesByLayer.getValue("tiles"))
         assertEquals(listOf(first, third), filtered.decodedImagesByLayer.getValue("tiles"))
+    }
+
+    /**
+     * Verifies that a replacement source cannot inherit fallback tiles by reusing a layer ID.
+     *
+     * Input: fallback content from one source and a placeholder from a new source under ID `tiles`.
+     * Expected: only the new placeholder remains and the old decoded image is absent.
+     */
+    @Test
+    fun sourceReplacementDropsFallbackForSameLayerId() {
+        val oldSource = Any()
+        val newSource = Any()
+        val staleTile = testTile(x = 1, bytes = byteArrayOf(1))
+        val newPlaceholder = testTile(x = 2, bytes = null)
+        val staleImage = TestImageBitmap(width = 1)
+
+        val merged =
+            mergeRasterFrames(
+                placeholderFrame =
+                    RasterFrame(
+                        tilesByLayer = mapOf("tiles" to listOf(newPlaceholder)),
+                        decodedImagesByLayer = emptyMap(),
+                        sourceIdentitiesByLayer = mapOf("tiles" to newSource),
+                    ),
+                fallbackFrame =
+                    RasterFrame(
+                        tilesByLayer = mapOf("tiles" to listOf(staleTile)),
+                        decodedImagesByLayer = mapOf("tiles" to listOf(staleImage)),
+                        sourceIdentitiesByLayer = mapOf("tiles" to oldSource),
+                    ),
+                overviewFrame = RasterFrame.Empty,
+                currentFrame = RasterFrame.Empty,
+                currentSourceIdentities = mapOf("tiles" to newSource),
+            )
+
+        assertEquals(listOf(newPlaceholder), merged.tilesByLayer.getValue("tiles"))
+        assertEquals(listOf(null), merged.decodedImagesByLayer.getValue("tiles"))
+        assertTrue(staleImage !in merged.decodedImagesByLayer.getValue("tiles"))
+    }
+
+    /**
+     * Verifies that viewport changes preserve useful fallback from the same runtime source.
+     *
+     * Input: prior decoded content and a new placeholder sharing one source identity.
+     * Expected: both tiles remain ordered for rendering and the prior decoded image is retained.
+     */
+    @Test
+    fun viewportChangeKeepsFallbackForSameSource() {
+        val source = Any()
+        val fallbackTile = testTile(x = 1, bytes = byteArrayOf(1))
+        val placeholder = testTile(x = 2, bytes = null)
+        val fallbackImage = TestImageBitmap(width = 1)
+
+        val merged =
+            mergeRasterFrames(
+                placeholderFrame =
+                    RasterFrame(
+                        tilesByLayer = mapOf("tiles" to listOf(placeholder)),
+                        decodedImagesByLayer = emptyMap(),
+                        sourceIdentitiesByLayer = mapOf("tiles" to source),
+                    ),
+                fallbackFrame =
+                    RasterFrame(
+                        tilesByLayer = mapOf("tiles" to listOf(fallbackTile)),
+                        decodedImagesByLayer = mapOf("tiles" to listOf(fallbackImage)),
+                        sourceIdentitiesByLayer = mapOf("tiles" to source),
+                    ),
+                overviewFrame = RasterFrame.Empty,
+                currentFrame = RasterFrame.Empty,
+                currentSourceIdentities = mapOf("tiles" to source),
+            )
+
+        assertEquals(listOf(placeholder, fallbackTile), merged.tilesByLayer.getValue("tiles"))
+        assertEquals(listOf(null, fallbackImage), merged.decodedImagesByLayer.getValue("tiles"))
     }
 }

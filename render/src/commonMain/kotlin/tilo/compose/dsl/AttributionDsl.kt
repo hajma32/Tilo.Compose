@@ -9,8 +9,10 @@ import tilo.compose.core.layers.Layer
  * Creates attribution metadata for a map layer.
  */
 @ExperimentalTiloApi
-fun attribution(label: String, url: String? = null): Attribution =
-    Attribution(label = label, url = url)
+fun attribution(
+    label: String,
+    url: String? = null,
+): Attribution = Attribution(label = label, url = url)
 
 internal fun List<Layer>.attributions(): List<Attribution> =
     flatMap { it.attributions }

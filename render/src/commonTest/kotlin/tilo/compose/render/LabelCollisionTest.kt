@@ -3,12 +3,11 @@
 package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
+import tilo.compose.core.geometry.Point
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import tilo.compose.core.geometry.Point
 
 class LabelCollisionTest {
-
     /**
      * Verifies that selection has the highest collision priority for labels.
      *
@@ -70,13 +69,14 @@ class LabelCollisionTest {
         left: Float = 0f,
     ): LabelCollisionCandidate =
         LabelCollisionCandidate(
-            command = RenderLabel(
-                id = id,
-                text = id,
-                anchor = Point(0.0, 0.0),
-                labelPriority = priority,
-                selected = selected,
-            ),
+            command =
+                RenderLabel(
+                    id = id,
+                    text = id,
+                    anchor = Point(0.0, 0.0),
+                    labelPriority = priority,
+                    selected = selected,
+                ),
             center = Offset(left + width / 2f, height / 2f),
             topLeft = Offset(left, 0f),
             width = width,

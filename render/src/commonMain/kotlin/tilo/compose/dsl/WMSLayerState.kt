@@ -3,17 +3,20 @@
 package tilo.compose.dsl
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import tilo.compose.core.layers.Attribution
+import tilo.compose.core.layers.raster.RasterTileLayer
+import tilo.compose.core.layers.raster.TileLayer
+import tilo.compose.core.layers.raster.WMSAxisOrder
 import tilo.compose.core.layers.raster.WMSCapabilities
 import tilo.compose.core.layers.raster.WMSCapabilitiesLoader
-import tilo.compose.core.layers.raster.WMSAxisOrder
-import tilo.compose.core.layers.raster.WMSTileLayer
 import tilo.compose.core.projection.Projection
 
 /**
@@ -21,14 +24,80 @@ import tilo.compose.core.projection.Projection
  */
 @ExperimentalTiloApi
 class WMSLayerState internal constructor() {
-    internal var layer: WMSTileLayer? by mutableStateOf(null)
-        internal set
+    private var runtime: RasterTileLayer? = null
+    private var presentation: WMSLayerPresentation? = null
+
+    internal var layer: TileLayer? by mutableStateOf(null)
+        private set
 
     var isLoading: Boolean by mutableStateOf(false)
         internal set
 
     var error: Throwable? by mutableStateOf(null)
         internal set
+
+    internal fun updatePresentation(
+        id: String,
+        zIndex: Int,
+        visible: Boolean,
+        minZoom: Double?,
+        maxZoom: Double?,
+        attributions: List<Attribution>,
+    ) {
+        val next = WMSLayerPresentation(id, zIndex, visible, minZoom, maxZoom, attributions)
+        if (presentation == next) return
+        presentation = next
+        publishLayer()
+    }
+
+    internal fun replaceRuntime(next: RasterTileLayer?) {
+        if (runtime === next) return
+        val previous = runtime
+        runtime = next
+        publishLayer()
+        previous?.close()
+    }
+
+    internal fun close() {
+        replaceRuntime(null)
+    }
+
+    private fun publishLayer() {
+        val activeRuntime = runtime
+        val activePresentation = presentation
+        layer =
+            if (activeRuntime == null || activePresentation == null) {
+                null
+            } else {
+                PresentedTileLayer(
+                    runtime = activeRuntime,
+                    id = activePresentation.id,
+                    zIndex = activePresentation.zIndex,
+                    visible = activePresentation.visible,
+                    minZoom = activePresentation.minZoom,
+                    maxZoom = activePresentation.maxZoom,
+                    attributions = activePresentation.attributions,
+                )
+            }
+    }
+}
+
+private data class WMSLayerPresentation(
+    val id: String,
+    val zIndex: Int,
+    val visible: Boolean,
+    val minZoom: Double?,
+    val maxZoom: Double?,
+    val attributions: List<Attribution>,
+)
+
+@Composable
+internal fun rememberWMSLayerRuntimeState(): WMSLayerState {
+    val state = remember { WMSLayerState() }
+    DisposableEffect(state) {
+        onDispose(state::close)
+    }
+    return state
 }
 
 /**
@@ -38,6 +107,7 @@ class WMSLayerState internal constructor() {
  */
 @Composable
 @ExperimentalTiloApi
+@Suppress("TooGenericExceptionCaught") // WMS failures are exposed as state; cancellation is still rethrown.
 fun rememberWMSLayer(
     id: String,
     capabilitiesUrl: String,
@@ -60,13 +130,24 @@ fun rememberWMSLayer(
     attribution: Attribution? = null,
     attributions: List<Attribution> = emptyList(),
 ): WMSLayerState {
-    val state = remember { WMSLayerState() }
+    val state = rememberWMSLayerRuntimeState()
     var capabilities by remember(capabilitiesUrl) { mutableStateOf<WMSCapabilities?>(null) }
+
+    SideEffect {
+        state.updatePresentation(
+            id = id,
+            zIndex = zIndex,
+            visible = visible,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
+            attributions = attributions.withSingle(attribution),
+        )
+    }
 
     LaunchedEffect(capabilitiesUrl) {
         state.isLoading = true
         state.error = null
-        state.layer = null
+        state.replaceRuntime(null)
         try {
             capabilities = WMSCapabilitiesLoader().load(capabilitiesUrl)
         } catch (error: CancellationException) {
@@ -88,52 +169,48 @@ fun rememberWMSLayer(
         format,
         getMapVersion,
         axisOrder,
-        zIndex,
-        visible,
-        minZoom,
-        maxZoom,
         tileSize,
         maxVisibleTiles,
         prefetchMargin,
         overviewZoomOffset,
         maxOverviewTiles,
         overviewPrefetchMargin,
-        attribution,
-        attributions,
     ) {
         val loadedCapabilities = capabilities
         if (loadedCapabilities == null) {
-            state.layer = null
+            state.replaceRuntime(null)
             return@LaunchedEffect
         }
 
         state.error = null
         try {
-            state.layer = loadedCapabilities.createTileLayer(
-                id = id,
-                layerName = layerName,
-                projection = projection,
-                styles = styles,
-                format = format ?: loadedCapabilities.formats.firstOrNull() ?: "image/png",
-                getMapVersion = getMapVersion,
-                axisOrder = axisOrder,
-                zIndex = zIndex,
-                visible = visible,
-                minZoom = minZoom,
-                maxZoom = maxZoom,
-                tileSize = tileSize,
-                maxVisibleTiles = maxVisibleTiles,
-                prefetchMargin = prefetchMargin,
-                overviewZoomOffset = overviewZoomOffset,
-                maxOverviewTiles = maxOverviewTiles,
-                overviewPrefetchMargin = overviewPrefetchMargin,
-                attributions = attributions.withSingle(attribution),
+            state.replaceRuntime(
+                loadedCapabilities.createTileLayer(
+                    id = id,
+                    layerName = layerName,
+                    projection = projection,
+                    styles = styles,
+                    format = format ?: loadedCapabilities.formats.firstOrNull() ?: "image/png",
+                    getMapVersion = getMapVersion,
+                    axisOrder = axisOrder,
+                    zIndex = 0,
+                    visible = true,
+                    minZoom = null,
+                    maxZoom = null,
+                    tileSize = tileSize,
+                    maxVisibleTiles = maxVisibleTiles,
+                    prefetchMargin = prefetchMargin,
+                    overviewZoomOffset = overviewZoomOffset,
+                    maxOverviewTiles = maxOverviewTiles,
+                    overviewPrefetchMargin = overviewPrefetchMargin,
+                    attributions = emptyList(),
+                ),
             )
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
             state.error = error
-            state.layer = null
+            state.replaceRuntime(null)
         }
     }
 

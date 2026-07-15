@@ -26,9 +26,9 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import tilo.compose.core.map.MapCameraController
-import tilocompose.ui.generated.resources.Res
-import tilocompose.ui.generated.resources.ic_add_24
-import tilocompose.ui.generated.resources.ic_remove_24
+import tilo.compose.ui.generated.resources.Res
+import tilo.compose.ui.generated.resources.ic_add_24
+import tilo.compose.ui.generated.resources.ic_remove_24
 
 @Composable
 fun BoxScope.DefaultZoomControls(
@@ -51,15 +51,17 @@ fun BoxScope.DefaultZoomControls(
 
     fun animateZoom(delta: Double) {
         zoomAnimationJob?.cancel()
-        zoomAnimationJob = coroutineScope.launch {
-            onZoomBy(delta)
-        }
+        zoomAnimationJob =
+            coroutineScope.launch {
+                onZoomBy(delta)
+            }
     }
 
     Column(
-        modifier = Modifier
-            .align(Alignment.TopEnd)
-            .padding(top = 16.dp, end = 12.dp),
+        modifier =
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 16.dp, end = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ZoomButton(
@@ -84,11 +86,12 @@ private fun ZoomButton(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .size(44.dp)
-            .shadow(elevation = 4.dp, shape = CircleShape)
-            .background(Color.White, CircleShape)
-            .clickable(onClick = onClick),
+        modifier =
+            modifier
+                .size(44.dp)
+                .shadow(elevation = 4.dp, shape = CircleShape)
+                .background(Color.White, CircleShape)
+                .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Image(

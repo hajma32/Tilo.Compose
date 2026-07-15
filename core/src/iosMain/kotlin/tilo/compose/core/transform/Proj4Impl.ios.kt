@@ -2,7 +2,11 @@ package tilo.compose.core.transform
 
 import tilo.compose.core.geometry.Point
 
-internal actual fun proj4Transform(point: Point, sourceCrs: String, targetCrs: String): Point =
+internal actual fun proj4Transform(
+    point: Point,
+    sourceCrs: String,
+    targetCrs: String,
+): Point =
     if (sourceCrs == targetCrs) {
         point
     } else {

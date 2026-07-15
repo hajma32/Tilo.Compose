@@ -34,13 +34,14 @@ data class MapDebugMetrics(
     val skippedFrames: Int,
 ) {
     companion object {
-        val Empty = MapDebugMetrics(
-            framesPerSecond = 0.0,
-            averageFramesPerSecond30Seconds = 0.0,
-            averageFrameTimeMillis = 0.0,
-            maxFrameTimeMillis = 0.0,
-            skippedFrames = 0,
-        )
+        val Empty =
+            MapDebugMetrics(
+                framesPerSecond = 0.0,
+                averageFramesPerSecond30Seconds = 0.0,
+                averageFrameTimeMillis = 0.0,
+                maxFrameTimeMillis = 0.0,
+                skippedFrames = 0,
+            )
     }
 }
 
@@ -64,12 +65,13 @@ fun BoxScope.DefaultMapDebugOverlay(
     require(sampleWindowMillis in 1L..60_000L) { "sampleWindowMillis must be between 1 and 60000" }
     if (!enabled) return
 
-    val accumulator = remember(targetFrameRate, sampleWindowMillis) {
-        FrameMetricsAccumulator(
-            targetFrameRate = targetFrameRate,
-            sampleWindowNanos = sampleWindowMillis * NanosPerMillisecond,
-        )
-    }
+    val accumulator =
+        remember(targetFrameRate, sampleWindowMillis) {
+            FrameMetricsAccumulator(
+                targetFrameRate = targetFrameRate,
+                sampleWindowNanos = sampleWindowMillis * NANOS_PER_MILLISECOND,
+            )
+        }
     var metrics by remember(targetFrameRate, sampleWindowMillis) {
         mutableStateOf(MapDebugMetrics.Empty)
     }
@@ -84,12 +86,13 @@ fun BoxScope.DefaultMapDebugOverlay(
 
     val shape = RoundedCornerShape(8.dp)
     Column(
-        modifier = modifier
-            .align(alignment)
-            .padding(12.dp)
-            .shadow(elevation = 4.dp, shape = shape)
-            .background(DebugOverlayBackground, shape)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+        modifier =
+            modifier
+                .align(alignment)
+                .padding(12.dp)
+                .shadow(elevation = 4.dp, shape = shape)
+                .background(DEBUG_OVERLAY_BACKGROUND, shape)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
         DebugLine("Zoom", cameraState.zoom.format(2))
         DebugLine("FPS", metrics.framesPerSecond.format(1))
@@ -101,10 +104,13 @@ fun BoxScope.DefaultMapDebugOverlay(
 }
 
 @Composable
-private fun DebugLine(label: String, value: String) {
+private fun DebugLine(
+    label: String,
+    value: String,
+) {
     BasicText(
         text = "$label: $value",
-        style = DebugOverlayTextStyle,
+        style = DEBUG_OVERLAY_TEXT_STYLE,
     )
 }
 
@@ -112,7 +118,7 @@ internal class FrameMetricsAccumulator(
     targetFrameRate: Int,
     private val sampleWindowNanos: Long,
 ) {
-    private val frameBudgetNanos = NanosPerSecond / targetFrameRate
+    private val frameBudgetNanos = NANOS_PER_SECOND / targetFrameRate
     private var previousFrameNanos: Long? = null
     private var windowStartNanos: Long? = null
     private var frameIntervals = 0
@@ -125,7 +131,7 @@ internal class FrameMetricsAccumulator(
         val previous = previousFrameNanos
         previousFrameNanos = frameTimeNanos
         rollingFrameTimes.addLast(frameTimeNanos)
-        val rollingWindowStart = frameTimeNanos - RollingFpsWindowNanos
+        val rollingWindowStart = frameTimeNanos - ROLLING_FPS_WINDOW_NANOS
         while (rollingFrameTimes.size > 1 && rollingFrameTimes.first() < rollingWindowStart) {
             rollingFrameTimes.removeFirst()
         }
@@ -144,13 +150,14 @@ internal class FrameMetricsAccumulator(
         val elapsedNanos = frameTimeNanos - windowStart
         if (elapsedNanos < sampleWindowNanos) return null
 
-        val result = MapDebugMetrics(
-            framesPerSecond = frameIntervals * NanosPerSecond.toDouble() / elapsedNanos,
-            averageFramesPerSecond30Seconds = rollingFramesPerSecond(),
-            averageFrameTimeMillis = totalFrameTimeNanos.toDouble() / frameIntervals / NanosPerMillisecond,
-            maxFrameTimeMillis = maxFrameTimeNanos.toDouble() / NanosPerMillisecond,
-            skippedFrames = skippedFrames,
-        )
+        val result =
+            MapDebugMetrics(
+                framesPerSecond = frameIntervals * NANOS_PER_SECOND.toDouble() / elapsedNanos,
+                averageFramesPerSecond30Seconds = rollingFramesPerSecond(),
+                averageFrameTimeMillis = totalFrameTimeNanos.toDouble() / frameIntervals / NANOS_PER_MILLISECOND,
+                maxFrameTimeMillis = maxFrameTimeNanos.toDouble() / NANOS_PER_MILLISECOND,
+                skippedFrames = skippedFrames,
+            )
         windowStartNanos = frameTimeNanos
         frameIntervals = 0
         totalFrameTimeNanos = 0L
@@ -163,16 +170,17 @@ internal class FrameMetricsAccumulator(
         if (rollingFrameTimes.size < 2) return 0.0
         val elapsedNanos = rollingFrameTimes.last() - rollingFrameTimes.first()
         if (elapsedNanos <= 0L) return 0.0
-        return (rollingFrameTimes.size - 1) * NanosPerSecond.toDouble() / elapsedNanos
+        return (rollingFrameTimes.size - 1) * NANOS_PER_SECOND.toDouble() / elapsedNanos
     }
 }
 
 private fun Double.format(decimalPlaces: Int): String {
-    val factor = when (decimalPlaces) {
-        1 -> 10.0
-        2 -> 100.0
-        else -> 1.0
-    }
+    val factor =
+        when (decimalPlaces) {
+            1 -> 10.0
+            2 -> 100.0
+            else -> 1.0
+        }
     val rounded = kotlin.math.round(this * factor).toLong()
     val absolute = kotlin.math.abs(rounded)
     val sign = if (rounded < 0L) "-" else ""
@@ -182,11 +190,12 @@ private fun Double.format(decimalPlaces: Int): String {
     return "$sign$whole.$fraction"
 }
 
-private const val NanosPerMillisecond = 1_000_000L
-private const val NanosPerSecond = 1_000_000_000L
-private const val RollingFpsWindowNanos = 30L * NanosPerSecond
-private val DebugOverlayBackground = Color(0xE6111827)
-private val DebugOverlayTextStyle = TextStyle(
-    color = Color.White,
-    fontSize = 11.sp,
-)
+private const val NANOS_PER_MILLISECOND = 1_000_000L
+private const val NANOS_PER_SECOND = 1_000_000_000L
+private const val ROLLING_FPS_WINDOW_NANOS = 30L * NANOS_PER_SECOND
+private val DEBUG_OVERLAY_BACKGROUND = Color(0xE6111827)
+private val DEBUG_OVERLAY_TEXT_STYLE =
+    TextStyle(
+        color = Color.White,
+        fontSize = 11.sp,
+    )

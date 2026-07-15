@@ -44,6 +44,6 @@ fun LayerSink.drawLayer(
             id = id,
             zIndex = zIndex,
             projection = projection,
-        )
+        ),
     )
 }

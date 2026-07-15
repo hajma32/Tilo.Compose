@@ -2,20 +2,20 @@
 
 package tilo.compose.render
 
-import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
-import tilo.compose.render.backend.VectorBitmapSnapshot
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.Viewport
+import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
+import tilo.compose.render.backend.VectorBitmapSnapshot
 import kotlin.math.ceil
+import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 
 internal fun interface VectorBitmapRenderTarget {
     suspend fun render(
@@ -50,23 +50,27 @@ internal class VectorBitmapRenderer(
             val bitmap = ImageBitmap(bitmapWidth, bitmapHeight)
             val canvas = GraphicsCanvas(bitmap)
             val drawScope = CanvasDrawScope()
-            val bitmapMap = tilo.compose.core.map.MapState(
-                center = map.center,
-                zoom = map.zoom,
-                projection = map.projection,
-                config = map.config,
-                viewport = Viewport(
-                    width = bitmapWidth,
-                    height = bitmapHeight,
-                    pixelRatio = map.viewport.pixelRatio * bitmapScale,
-                ),
-            )
+            val bitmapMap =
+                tilo.compose.core.map.MapState(
+                    center = map.center,
+                    zoom = map.zoom,
+                    projection = map.projection,
+                    config = map.config,
+                    viewport =
+                        Viewport(
+                            width = bitmapWidth,
+                            height = bitmapHeight,
+                            pixelRatio = map.viewport.pixelRatio * bitmapScale,
+                        ),
+                )
 
             drawScope.draw(
                 density = density,
                 layoutDirection = layoutDirection,
                 canvas = canvas,
-                size = androidx.compose.ui.geometry.Size(bitmapWidth.toFloat(), bitmapHeight.toFloat()),
+                size =
+                    androidx.compose.ui.geometry
+                        .Size(bitmapWidth.toFloat(), bitmapHeight.toFloat()),
             ) {
                 drawFeatureGeometry(
                     commands = commands,
@@ -78,14 +82,15 @@ internal class VectorBitmapRenderer(
                 id = layer.id,
                 zIndex = layer.zIndex,
                 bitmap = bitmap,
-                snapshot = VectorBitmapSnapshot(
-                    center = map.center,
-                    zoom = map.zoom,
-                    bitmapWidth = bitmapWidth,
-                    bitmapHeight = bitmapHeight,
-                    displayWidth = displayWidth,
-                    displayHeight = displayHeight,
-                ),
+                snapshot =
+                    VectorBitmapSnapshot(
+                        center = map.center,
+                        zoom = map.zoom,
+                        bitmapWidth = bitmapWidth,
+                        bitmapHeight = bitmapHeight,
+                        displayWidth = displayWidth,
+                        displayHeight = displayHeight,
+                    ),
             )
         }
 }

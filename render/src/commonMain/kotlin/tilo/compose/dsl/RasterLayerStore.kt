@@ -1,6 +1,8 @@
 package tilo.compose.dsl
 
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.raster.RasterTileLayer
+import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.tile.TileCoordinate
 
 /** Stable identity of a raster runtime created by the high-level map DSL. */
@@ -26,6 +28,21 @@ internal sealed interface RasterLayerUpdate {
     ) : RasterLayerUpdate
 }
 
+/** Lightweight presentation snapshot backed by a stable fetch/cache runtime. */
+internal data class PresentedTileLayer(
+    private val runtime: RasterTileLayer,
+    override val id: String,
+    override val zIndex: Int,
+    override val visible: Boolean,
+    override val minZoom: Double?,
+    override val maxZoom: Double?,
+    override val attributions: List<Attribution>,
+) : TileLayer by runtime {
+    init {
+        require(minZoom == null || maxZoom == null || minZoom <= maxZoom) { "minZoom must not be greater than maxZoom" }
+    }
+}
+
 /**
  * Owns raster runtimes across recompositions of one TiloMap instance.
  *
@@ -39,8 +56,7 @@ internal class RasterLayerStore {
     fun getOrCreate(
         key: ManagedRasterLayerKey,
         create: () -> StoredRasterLayer,
-    ): RasterTileLayer =
-        layers.getOrPut(key, create).layer
+    ): RasterTileLayer = layers.getOrPut(key, create).layer
 
     fun retain(
         activeKeys: Set<ManagedRasterLayerKey>,

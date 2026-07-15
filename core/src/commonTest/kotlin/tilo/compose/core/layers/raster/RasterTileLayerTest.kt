@@ -3,9 +3,6 @@ package tilo.compose.core.layers.raster
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
@@ -14,6 +11,9 @@ import tilo.compose.core.projection.Epsg5514Projection
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.core.tile.TileRequest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class RasterTileLayerTest {
     /**
@@ -23,41 +23,45 @@ class RasterTileLayerTest {
      * Expected: the source receives exactly the planned coordinates, each only once.
      */
     @Test
-    fun sameViewportLoadsExactlyItsPlannedRequestsOnce() = runTest {
-        val requests = mutableListOf<TileCoordinate>()
-        val source = object : RasterTileSource {
-            override val projection = Epsg3857Projection
-            override val grid = TileGrid.WebMercator
+    fun sameViewportLoadsExactlyItsPlannedRequestsOnce() =
+        runTest {
+            val requests = mutableListOf<TileCoordinate>()
+            val source =
+                object : RasterTileSource {
+                    override val projection = Epsg3857Projection
+                    override val grid = TileGrid.WebMercator
 
-            override fun cacheKey(request: TileRequest): String = request.coordinate.toString()
+                    override fun cacheKey(request: TileRequest): String = request.coordinate.toString()
 
-            override suspend fun readTile(request: TileRequest): ByteArray {
-                requests += request.coordinate
-                return byteArrayOf(1)
-            }
+                    override suspend fun readTile(request: TileRequest): ByteArray {
+                        requests += request.coordinate
+                        return byteArrayOf(1)
+                    }
+                }
+            val layer =
+                RasterTileLayer(
+                    id = "network",
+                    source = source,
+                    prefetchMargin = 0,
+                    fetchConfig = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
+                )
+            val map =
+                MapState(
+                    center = Point(0.0, 0.0),
+                    zoom = 1.0,
+                    viewport = Viewport(width = 256, height = 256),
+                    projection = Epsg3857Projection,
+                )
+            val planned = layer.planTiles(map).map { it.coordinate }
+
+            val first = async { layer.loadTiles(map) }
+            val second = async { layer.loadTiles(map) }
+            first.await()
+            second.await()
+
+            assertEquals(planned.toSet(), requests.toSet())
+            assertEquals(planned.size, requests.size)
         }
-        val layer = RasterTileLayer(
-            id = "network",
-            source = source,
-            prefetchMargin = 0,
-            fetchConfig = TileFetchConfig(dispatcher = StandardTestDispatcher(testScheduler)),
-        )
-        val map = MapState(
-            center = Point(0.0, 0.0),
-            zoom = 1.0,
-            viewport = Viewport(width = 256, height = 256),
-            projection = Epsg3857Projection,
-        )
-        val planned = layer.planTiles(map).map { it.coordinate }
-
-        val first = async { layer.loadTiles(map) }
-        val second = async { layer.loadTiles(map) }
-        first.await()
-        second.await()
-
-        assertEquals(planned.toSet(), requests.toSet())
-        assertEquals(planned.size, requests.size)
-    }
 
     /**
      * Verifies the default projection and grid selected by an XYZ source.
@@ -90,7 +94,10 @@ class RasterTileLayerTest {
                 readTile = { byteArrayOf(1) },
             )
 
-        val key = source.cacheKey(TileRequest(TileCoordinate(z = 2, x = 3, y = 1), grid.tileBounds(x = 3, y = 1, zoom = 2)))
+        val key =
+            source.cacheKey(
+                TileRequest(TileCoordinate(z = 2, x = 3, y = 1), grid.tileBounds(x = 3, y = 1, zoom = 2)),
+            )
 
         assertEquals("tile-store:EPSG:5514:2:3:6", key)
     }

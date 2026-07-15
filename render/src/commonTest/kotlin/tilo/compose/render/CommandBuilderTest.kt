@@ -2,9 +2,6 @@
 
 package tilo.compose.render
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
@@ -16,9 +13,11 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 class CommandBuilderTest {
-
     /**
      * Verifies command generation for every supported geometry family.
      *
@@ -28,22 +27,24 @@ class CommandBuilderTest {
     @Test
     fun allGeometryTypesProduceStableExpectedCommands() {
         val polygon = square(-4.0, -4.0, -2.0, -2.0)
-        val features = listOf(
-            Feature(key = "point", geometry = Point(0.0, 0.0)),
-            Feature(key = "multipoint", geometry = MultiPoint(listOf(Point(1.0, 1.0), Point(2.0, 2.0)))),
-            Feature(key = "line", geometry = LineString(listOf(Point(-2.0, 0.0), Point(2.0, 0.0)))),
-            Feature(
-                key = "multiline",
-                geometry = MultiLineString(
-                    listOf(
-                        LineString(listOf(Point(-2.0, 1.0), Point(2.0, 1.0))),
-                        LineString(listOf(Point(-2.0, 2.0), Point(2.0, 2.0))),
-                    ),
+        val features =
+            listOf(
+                Feature(key = "point", geometry = Point(0.0, 0.0)),
+                Feature(key = "multipoint", geometry = MultiPoint(listOf(Point(1.0, 1.0), Point(2.0, 2.0)))),
+                Feature(key = "line", geometry = LineString(listOf(Point(-2.0, 0.0), Point(2.0, 0.0)))),
+                Feature(
+                    key = "multiline",
+                    geometry =
+                        MultiLineString(
+                            listOf(
+                                LineString(listOf(Point(-2.0, 1.0), Point(2.0, 1.0))),
+                                LineString(listOf(Point(-2.0, 2.0), Point(2.0, 2.0))),
+                            ),
+                        ),
                 ),
-            ),
-            Feature(key = "polygon", geometry = polygon),
-            Feature(key = "multipolygon", geometry = MultiPolygon(listOf(polygon, square(3.0, 3.0, 5.0, 5.0)))),
-        )
+                Feature(key = "polygon", geometry = polygon),
+                Feature(key = "multipolygon", geometry = MultiPolygon(listOf(polygon, square(3.0, 3.0, 5.0, 5.0)))),
+            )
 
         val commands = CommandBuilder.build(testMap(width = 100, height = 100), features)
 
@@ -75,14 +76,16 @@ class CommandBuilderTest {
      */
     @Test
     fun offscreenFeaturesAreCulledButPaddedEdgeFeaturesRemain() {
-        val commands = CommandBuilder.build(
-            map = testMap(width = 100, height = 100),
-            features = listOf(
-                Feature(key = "center", geometry = Point(0.0, 0.0)),
-                Feature(key = "padded-edge", geometry = Point(59.0, 0.0)),
-                Feature(key = "outside", geometry = Point(61.0, 0.0)),
-            ),
-        )
+        val commands =
+            CommandBuilder.build(
+                map = testMap(width = 100, height = 100),
+                features =
+                    listOf(
+                        Feature(key = "center", geometry = Point(0.0, 0.0)),
+                        Feature(key = "padded-edge", geometry = Point(59.0, 0.0)),
+                        Feature(key = "outside", geometry = Point(61.0, 0.0)),
+                    ),
+            )
 
         assertEquals(listOf("center:point", "padded-edge:point"), commands.map(RenderCommand::id))
     }
@@ -95,17 +98,19 @@ class CommandBuilderTest {
      */
     @Test
     fun selectedFeatureUsesLayerSelectionStyleAndMarksLabel() {
-        val selectedStyle = PointStyle(
-            size = 30.0,
-            fill = FillStyle(ColorValue(0xFFFF0000u)),
-        )
-        val commands = CommandBuilder.build(
-            map = testMap(),
-            features = listOf(Feature(key = "selected", geometry = Point(0.0, 0.0), label = "Selected")),
-            layerId = "places",
-            selectedFeatureKeys = setOf("selected"),
-            layerStyle = FeatureLayerStyle(selectedPoint = selectedStyle),
-        )
+        val selectedStyle =
+            PointStyle(
+                size = 30.0,
+                fill = FillStyle(ColorValue(0xFFFF0000u)),
+            )
+        val commands =
+            CommandBuilder.build(
+                map = testMap(),
+                features = listOf(Feature(key = "selected", geometry = Point(0.0, 0.0), label = "Selected")),
+                layerId = "places",
+                selectedFeatureKeys = setOf("selected"),
+                layerStyle = FeatureLayerStyle(selectedPoint = selectedStyle),
+            )
 
         assertEquals(selectedStyle, assertIs<RenderPoint>(commands[0]).style)
         assertEquals(true, assertIs<RenderLabel>(commands[1]).selected)
@@ -119,16 +124,18 @@ class CommandBuilderTest {
      */
     @Test
     fun lineLabelUsesReadableMidpointRotation() {
-        val commands = CommandBuilder.build(
-            map = testMap(),
-            features = listOf(
-                Feature(
-                    key = "road",
-                    geometry = LineString(listOf(Point(10.0, 10.0), Point(-10.0, -10.0))),
-                    label = "Road",
-                ),
-            ),
-        )
+        val commands =
+            CommandBuilder.build(
+                map = testMap(),
+                features =
+                    listOf(
+                        Feature(
+                            key = "road",
+                            geometry = LineString(listOf(Point(10.0, 10.0), Point(-10.0, -10.0))),
+                            label = "Road",
+                        ),
+                    ),
+            )
 
         val label = assertIs<RenderLabel>(commands.last())
         assertEquals(Point(0.0, 0.0), label.anchor)
@@ -136,7 +143,12 @@ class CommandBuilderTest {
         assertEquals(-45.0, label.rotationDegrees, absoluteTolerance = 0.0001)
     }
 
-    private fun square(minX: Double, minY: Double, maxX: Double, maxY: Double): Polygon =
+    private fun square(
+        minX: Double,
+        minY: Double,
+        maxX: Double,
+        maxY: Double,
+    ): Polygon =
         Polygon(
             listOf(
                 listOf(

@@ -28,8 +28,8 @@ The map camera projection defines the coordinate system of the map state:
 
 ```kotlin
 val cameraState = rememberMapCameraState(
-    center = Point(-650_000.0, -1_100_000.0),
-    zoom = 11.5,
+    initialCenter = Point(-650_000.0, -1_100_000.0),
+    initialZoom = 11.5,
     projection = sjtsk(),
 )
 ```
@@ -52,8 +52,8 @@ client-side. A raster layer must provide tiles in the same CRS as the map:
 
 ```kotlin
 val cameraState = rememberMapCameraState(
-    center = Point(-650_000.0, -1_100_000.0),
-    zoom = 11.5,
+    initialCenter = Point(-650_000.0, -1_100_000.0),
+    initialZoom = 11.5,
     projection = sjtsk(),
 )
 

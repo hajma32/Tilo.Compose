@@ -18,14 +18,14 @@ import tilo.compose.core.projection.Projection
 internal fun transformFeaturesToMapProjection(
     features: List<Feature>,
     featuresSourceProjection: Projection?,
-    map: MapState
+    map: MapState,
 ): List<Feature> {
     val source = featuresSourceProjection ?: return features
     if (source === map.projection) return features
 
     return features.map { feature ->
         feature.copy(
-            geometry = transformGeometry(feature.geometry, map, source)
+            geometry = transformGeometry(feature.geometry, map, source),
         )
     }
 }
@@ -33,7 +33,7 @@ internal fun transformFeaturesToMapProjection(
 private fun transformGeometry(
     geometry: Geometry,
     map: MapState,
-    source: Projection
+    source: Projection,
 ): Geometry {
     fun tp(p: Point) = map.transformSourceToTarget(p, source, map.projection)
 
@@ -46,4 +46,3 @@ private fun transformGeometry(
         is MultiPolygon -> MultiPolygon(geometry.polygons.map { Polygon(it.rings.map { ring -> ring.map(::tp) }) })
     }
 }
-

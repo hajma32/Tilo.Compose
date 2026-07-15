@@ -2,10 +2,10 @@
 
 package tilo.compose.dsl
 
+import tilo.compose.core.layers.vector.VectorRenderStrategy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import tilo.compose.core.layers.vector.VectorRenderStrategy
 
 class FeatureRenderModeTest {
     @Test

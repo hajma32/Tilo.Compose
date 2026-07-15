@@ -7,6 +7,7 @@ TiloMap(
     cameraState = cameraState,
     modifier = Modifier.fillMaxSize(),
     onFeatureSelect = { selections -> /* show app UI */ },
+    onRenderError = { error -> /* report unexpected failure */ },
     selectedFeatures = selectedRefs,
     attributionContent = defaultAttributionContent(),
     scaleBarContent = defaultScaleBarContent(),
@@ -20,6 +21,10 @@ TiloMap(
 }
 ```
 
+`onRenderError` observes unexpected renderer failures without turning ordinary
+missing or undecodable tiles into fatal errors. Coroutine cancellation still
+propagates so obsolete viewport work stops promptly.
+
 The `TiloMap` content block is only for layers. Default UI is injected through
 content slots so applications can use the provided overlays or replace them with
 their own composables.
@@ -30,8 +35,8 @@ Create camera state with `rememberMapCameraState`:
 
 ```kotlin
 val cameraState = rememberMapCameraState(
-    center = Point(-650_000.0, -1_100_000.0),
-    zoom = 11.5,
+    initialCenter = Point(-650_000.0, -1_100_000.0),
+    initialZoom = 11.5,
     projection = sjtsk(),
 )
 ```

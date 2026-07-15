@@ -116,9 +116,10 @@ class MapLayerCompositionRegressionTest {
                         }
                     }
             }.use { composition ->
-                val request = async {
-                    (currentLayers.single() as TileLayer).loadTiles(singleTileMap)
-                }
+                val request =
+                    async {
+                        (currentLayers.single() as TileLayer).loadTiles(singleTileMap)
+                    }
                 requestStarted.await()
 
                 includeLayer.value = false

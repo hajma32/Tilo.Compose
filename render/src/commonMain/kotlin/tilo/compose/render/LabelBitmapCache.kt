@@ -2,19 +2,17 @@
 
 package tilo.compose.render
 
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -24,6 +22,7 @@ import tilo.compose.core.feature.LabelFontStyle
 import tilo.compose.core.feature.LabelFontWeight
 import tilo.compose.core.feature.LabelStyle
 import kotlin.math.ceil
+import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 
 private const val DEFAULT_LABEL_CACHE_SIZE = 2_048
 
@@ -33,7 +32,10 @@ class LabelBitmapCache(
 ) {
     private val entries = LinkedHashMap<LabelBitmapKey, LabelCacheEntry>()
 
-    internal fun layoutOrPut(key: LabelBitmapKey, create: () -> LabelBitmapLayout): LabelBitmapLayout {
+    internal fun layoutOrPut(
+        key: LabelBitmapKey,
+        create: () -> LabelBitmapLayout,
+    ): LabelBitmapLayout {
         entries.remove(key)?.let { cached ->
             entries[key] = cached
             return cached.layout
@@ -99,10 +101,11 @@ internal data class LabelBitmapLayout(
     val paddingX: Int,
     val paddingY: Int,
 ) {
-    val metrics = LabelBitmapMetrics(
-        width = (textLayout.size.width + paddingX * 2).coerceAtLeast(1),
-        height = (textLayout.size.height + paddingY * 2).coerceAtLeast(1),
-    )
+    val metrics =
+        LabelBitmapMetrics(
+            width = (textLayout.size.width + paddingX * 2).coerceAtLeast(1),
+            height = (textLayout.size.height + paddingY * 2).coerceAtLeast(1),
+        )
 }
 
 internal fun DrawScope.cachedLabelBitmap(
@@ -127,12 +130,16 @@ internal fun DrawScope.cachedLabelBitmapMetrics(
     cache: LabelBitmapCache,
 ): LabelBitmapMetrics {
     val key = labelBitmapKey(text, style)
-    return cache.layoutOrPut(key) {
-        measureLabelBitmapLayout(text, style, textMeasurer)
-    }.metrics
+    return cache
+        .layoutOrPut(key) {
+            measureLabelBitmapLayout(text, style, textMeasurer)
+        }.metrics
 }
 
-private fun DrawScope.labelBitmapKey(text: String, style: LabelStyle): LabelBitmapKey =
+private fun DrawScope.labelBitmapKey(
+    text: String,
+    style: LabelStyle,
+): LabelBitmapKey =
     LabelBitmapKey(
         text = text,
         style = style,
@@ -158,7 +165,7 @@ private fun DrawScope.measureLabelBitmapLayout(
 internal fun DrawScope.createLabelBitmap(
     style: LabelStyle,
     layout: LabelBitmapLayout,
-    offscreenDrawScope: CanvasDrawScope
+    offscreenDrawScope: CanvasDrawScope,
 ): ImageBitmap {
     val textColor = style.color.toColor()
     val haloColor = style.haloColor.toColor()
@@ -179,23 +186,26 @@ internal fun DrawScope.createLabelBitmap(
         density = this,
         layoutDirection = layoutDirection,
         canvas = canvas,
-        size = Size(width.toFloat(), height.toFloat())
+        size = Size(width.toFloat(), height.toFloat()),
     ) {
         if (background != null) {
             drawRoundRect(
                 color = background.color.toColor().copy(alpha = background.opacity.toFloat()),
-                topLeft = Offset(
-                    x = baseTopLeft.x - backgroundPaddingX,
-                    y = baseTopLeft.y - backgroundPaddingY,
-                ),
-                size = Size(
-                    width = textLayout.size.width + backgroundPaddingX * 2,
-                    height = textLayout.size.height + backgroundPaddingY * 2,
-                ),
-                cornerRadius = CornerRadius(
-                    x = (background.cornerRadius * density).toFloat(),
-                    y = (background.cornerRadius * density).toFloat(),
-                ),
+                topLeft =
+                    Offset(
+                        x = baseTopLeft.x - backgroundPaddingX,
+                        y = baseTopLeft.y - backgroundPaddingY,
+                    ),
+                size =
+                    Size(
+                        width = textLayout.size.width + backgroundPaddingX * 2,
+                        height = textLayout.size.height + backgroundPaddingY * 2,
+                    ),
+                cornerRadius =
+                    CornerRadius(
+                        x = (background.cornerRadius * density).toFloat(),
+                        y = (background.cornerRadius * density).toFloat(),
+                    ),
             )
         }
         if (haloWidthPx > 0f) {

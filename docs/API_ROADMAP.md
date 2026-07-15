@@ -9,8 +9,8 @@ Tilo.Compose should make the simple case simple:
 ```kotlin
 TiloMap(
     cameraState = rememberMapCameraState(
-        center = Point(16.6068, 49.1951),
-        zoom = 12.0,
+        initialCenter = Point(16.6068, 49.1951),
+        initialZoom = 12.0,
         projection = Epsg5514,
     )
 ) {
@@ -138,8 +138,8 @@ Introduce Compose-friendly state helpers:
 
 ```kotlin
 val cameraState = rememberMapCameraState(
-    center = Point(16.6068, 49.1951),
-    zoom = 12.0,
+    initialCenter = Point(16.6068, 49.1951),
+    initialZoom = 12.0,
     projection = Epsg5514,
 )
 ```

@@ -37,6 +37,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run Kotlin quality gates
+        run: ./gradlew --no-daemon qualityCheck
+
       - name: Compile Android targets
         run: ./gradlew --no-daemon :core:compileDebugKotlinAndroid :render:compileDebugKotlinAndroid :composeApp:compileDebugKotlinAndroid
 

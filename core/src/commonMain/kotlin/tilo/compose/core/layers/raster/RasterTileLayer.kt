@@ -40,6 +40,7 @@ open class RasterTileLayer(
 
     override val projection: Projection = source.projection
     override val grid: TileGrid = source.grid
+    override val sourceIdentity: Any = source
 
     private val fetcher =
         TileRequestFetcher(

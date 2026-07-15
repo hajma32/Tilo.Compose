@@ -25,7 +25,7 @@ internal fun DrawScope.drawTiles(
     tiles: List<Tile>,
     tileDecoder: (ByteArray) -> ImageBitmap?,
     map: MapState,
-    decodedImages: List<ImageBitmap?>? = null
+    decodedImages: List<ImageBitmap?>? = null,
 ) {
     val tileImages = resolveTileImages(tiles, tileDecoder, decodedImages)
     tileImages.filter { (_, image) -> image == null }.forEach { (tile, _) ->
@@ -64,7 +64,7 @@ private fun DrawScope.drawTile(
         drawImage(
             image = image,
             dstOffset = IntOffset(rect.x, rect.y),
-            dstSize = IntSize(rect.width, rect.height)
+            dstSize = IntSize(rect.width, rect.height),
         )
     }
 }

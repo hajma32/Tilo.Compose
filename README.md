@@ -39,8 +39,8 @@ drawing, and live ČÚZK ortofoto rendered directly in S-JTSK (`EPSG:5514`).
 fun MapScreen() {
     val brno = Point(16.6068, 49.1951)
     val cameraState = rememberMapCameraState(
-        center = Wgs84ToEpsg5514Transformation.sourceToTarget(brno),
-        zoom = 11.5,
+        initialCenter = Wgs84ToEpsg5514Transformation.sourceToTarget(brno),
+        initialZoom = 11.5,
         projection = sjtsk(),
         config = MapConfig.Default
             .withTransformation(Wgs84ToEpsg5514Transformation)

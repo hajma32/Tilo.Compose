@@ -40,14 +40,16 @@ internal data class TransitVehicle(
 )
 
 internal object ArcGisTransitDecoder {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
 
     fun decode(message: String): List<TransitVehicle> =
         runCatching {
-            json.parseToJsonElement(message)
+            json
+                .parseToJsonElement(message)
                 .featureCandidates()
                 .mapNotNull(::decodeFeature)
         }.getOrDefault(emptyList())
@@ -59,20 +61,13 @@ internal object ArcGisTransitDecoder {
         val geometryFields = geometry?.let(::CaseInsensitiveFields)
 
         val id = fields.string("id")?.takeIf(String::isNotBlank) ?: return null
-        val longitude = fields.double("lng", "lon", "longitude")
-            ?: geometryFields?.double("x", "lng", "lon")
-            ?: return null
-        val latitude = fields.double("lat", "latitude")
-            ?: geometryFields?.double("y", "lat")
-            ?: return null
-        if (longitude !in -180.0..180.0 || latitude !in -90.0..90.0) return null
-
+        val position = decodePosition(fields, geometryFields) ?: return null
         val inactive = fields.booleanLike("isinactive")
         return TransitVehicle(
             id = id,
             actualType = fields.int("vtype").toTransitType(),
             plannedType = fields.int("ltype").toTransitType(),
-            position = Point(longitude, latitude),
+            position = position,
             bearingDegrees = fields.double("bearing"),
             lineId = fields.int("lineid"),
             lineName = fields.string("linename")?.takeIf(String::isNotBlank),
@@ -86,22 +81,36 @@ internal object ArcGisTransitDecoder {
             updatedAtMillis = fields.long("timeupdated", "lastupdate"),
         )
     }
+
+    private fun decodePosition(
+        fields: CaseInsensitiveFields,
+        geometryFields: CaseInsensitiveFields?,
+    ): Point? {
+        val longitude =
+            fields.double("lng", "lon", "longitude")
+                ?: geometryFields?.double("x", "lng", "lon")
+                ?: return null
+        val latitude =
+            fields.double("lat", "latitude")
+                ?: geometryFields?.double("y", "lat")
+                ?: return null
+        if (longitude !in -180.0..180.0 || latitude !in -90.0..90.0) return null
+        return Point(longitude, latitude)
+    }
 }
 
-private class CaseInsensitiveFields(source: JsonObject) {
+private class CaseInsensitiveFields(
+    source: JsonObject,
+) {
     private val values = source.entries.associate { (key, value) -> key.lowercase() to value }
 
-    fun string(vararg names: String): String? =
-        primitive(*names)?.content?.takeUnless { it == "null" }
+    fun string(vararg names: String): String? = primitive(*names)?.content?.takeUnless { it == "null" }
 
-    fun int(vararg names: String): Int? =
-        primitive(*names)?.intOrNull ?: string(*names)?.toIntOrNull()
+    fun int(vararg names: String): Int? = primitive(*names)?.intOrNull ?: string(*names)?.toIntOrNull()
 
-    fun long(vararg names: String): Long? =
-        primitive(*names)?.longOrNull ?: string(*names)?.toLongOrNull()
+    fun long(vararg names: String): Long? = primitive(*names)?.longOrNull ?: string(*names)?.toLongOrNull()
 
-    fun double(vararg names: String): Double? =
-        primitive(*names)?.doubleOrNull ?: string(*names)?.toDoubleOrNull()
+    fun double(vararg names: String): Double? = primitive(*names)?.doubleOrNull ?: string(*names)?.toDoubleOrNull()
 
     fun booleanLike(vararg names: String): Boolean? {
         val primitive = primitive(*names) ?: return null

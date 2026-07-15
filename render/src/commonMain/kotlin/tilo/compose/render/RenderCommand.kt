@@ -18,21 +18,21 @@ sealed interface RenderCommand {
 data class RenderPoint(
     override val id: String,
     val point: Point,
-    val style: PointStyle = PointStyle()
+    val style: PointStyle = PointStyle(),
 ) : RenderCommand
 
 @ExperimentalTiloRenderingApi
 data class RenderLineString(
     override val id: String,
     val points: List<Point>,
-    val style: LineStyle = LineStyle()
+    val style: LineStyle = LineStyle(),
 ) : RenderCommand
 
 @ExperimentalTiloRenderingApi
 data class RenderPolygon(
     override val id: String,
     val rings: List<List<Point>>,
-    val style: PolygonStyle = PolygonStyle()
+    val style: PolygonStyle = PolygonStyle(),
 ) : RenderCommand
 
 @ExperimentalTiloRenderingApi

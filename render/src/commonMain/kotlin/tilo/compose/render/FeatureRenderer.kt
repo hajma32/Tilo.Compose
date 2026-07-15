@@ -3,14 +3,14 @@
 package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import tilo.compose.core.feature.DashPattern
 import tilo.compose.core.feature.FillPattern
 import tilo.compose.core.feature.FillStyle
@@ -44,7 +44,10 @@ internal fun DrawScope.drawFeatureGeometry(
     }
 }
 
-private fun DrawScope.drawPoint(command: RenderPoint, map: MapState) {
+private fun DrawScope.drawPoint(
+    command: RenderPoint,
+    map: MapState,
+) {
     val screenPoint = map.worldToScreen(command.point)
     val center = Offset(screenPoint.x.toFloat(), screenPoint.y.toFloat())
     val size = styleUnitToPx(command.style.size).coerceAtLeast(1f)
@@ -57,24 +60,32 @@ private fun DrawScope.drawPoint(command: RenderPoint, map: MapState) {
     }
 }
 
-private fun DrawScope.drawLineString(command: RenderLineString, map: MapState) {
+private fun DrawScope.drawLineString(
+    command: RenderLineString,
+    map: MapState,
+) {
     if (command.points.size < 2) return
     val path = command.points.toOpenPath(map)
     command.style.casing?.let { casing ->
         drawPath(
             path = path,
             color = casing.color.toColor(casing.opacity),
-            style = toComposeStroke(casing)
+            style = toComposeStroke(casing),
         )
     }
     drawPath(
         path = path,
-        color = command.style.stroke.color.toColor(command.style.stroke.opacity),
-        style = toComposeStroke(command.style.stroke)
+        color =
+            command.style.stroke.color
+                .toColor(command.style.stroke.opacity),
+        style = toComposeStroke(command.style.stroke),
     )
 }
 
-private fun DrawScope.drawPolygon(command: RenderPolygon, map: MapState) {
+private fun DrawScope.drawPolygon(
+    command: RenderPolygon,
+    map: MapState,
+) {
     val path = command.rings.toPath(map)
     if (path.isEmpty) return
 
@@ -89,7 +100,7 @@ private fun DrawScope.drawPolygon(command: RenderPolygon, map: MapState) {
         drawPath(
             path = path,
             color = casing.color.toColor(casing.opacity),
-            style = toComposeStroke(casing)
+            style = toComposeStroke(casing),
         )
     }
 
@@ -97,12 +108,17 @@ private fun DrawScope.drawPolygon(command: RenderPolygon, map: MapState) {
         drawPath(
             path = path,
             color = stroke.color.toColor(stroke.opacity),
-            style = toComposeStroke(stroke)
+            style = toComposeStroke(stroke),
         )
     }
 }
 
-private fun DrawScope.drawPointFill(shape: PointShape, center: Offset, size: Float, fill: FillStyle) {
+private fun DrawScope.drawPointFill(
+    shape: PointShape,
+    center: Offset,
+    size: Float,
+    fill: FillStyle,
+) {
     val color = fill.color.toColor(fill.opacity)
     val path = pointPath(shape, center, size)
     if (path != null) {
@@ -112,7 +128,12 @@ private fun DrawScope.drawPointFill(shape: PointShape, center: Offset, size: Flo
     }
 }
 
-private fun DrawScope.drawPointStroke(shape: PointShape, center: Offset, size: Float, stroke: StrokeStyle) {
+private fun DrawScope.drawPointStroke(
+    shape: PointShape,
+    center: Offset,
+    size: Float,
+    stroke: StrokeStyle,
+) {
     val style = toComposeStroke(stroke)
     val color = stroke.color.toColor(stroke.opacity)
     val path = pointPath(shape, center, size)
@@ -123,46 +144,54 @@ private fun DrawScope.drawPointStroke(shape: PointShape, center: Offset, size: F
     }
 }
 
-private fun pointPath(shape: PointShape, center: Offset, size: Float): Path? {
+private fun pointPath(
+    shape: PointShape,
+    center: Offset,
+    size: Float,
+): Path? {
     val half = size / 2f
     return when (shape) {
         PointShape.Circle -> null
-        PointShape.Square -> Path().apply {
-            moveTo(center.x - half, center.y - half)
-            lineTo(center.x + half, center.y - half)
-            lineTo(center.x + half, center.y + half)
-            lineTo(center.x - half, center.y + half)
-            close()
-        }
-        PointShape.Diamond -> Path().apply {
-            moveTo(center.x, center.y - half)
-            lineTo(center.x + half, center.y)
-            lineTo(center.x, center.y + half)
-            lineTo(center.x - half, center.y)
-            close()
-        }
-        PointShape.Triangle -> Path().apply {
-            moveTo(center.x, center.y - half)
-            lineTo(center.x + half, center.y + half)
-            lineTo(center.x - half, center.y + half)
-            close()
-        }
-        PointShape.Cross -> Path().apply {
-            val arm = size / 5f
-            moveTo(center.x - arm, center.y - half)
-            lineTo(center.x + arm, center.y - half)
-            lineTo(center.x + arm, center.y - arm)
-            lineTo(center.x + half, center.y - arm)
-            lineTo(center.x + half, center.y + arm)
-            lineTo(center.x + arm, center.y + arm)
-            lineTo(center.x + arm, center.y + half)
-            lineTo(center.x - arm, center.y + half)
-            lineTo(center.x - arm, center.y + arm)
-            lineTo(center.x - half, center.y + arm)
-            lineTo(center.x - half, center.y - arm)
-            lineTo(center.x - arm, center.y - arm)
-            close()
-        }
+        PointShape.Square ->
+            Path().apply {
+                moveTo(center.x - half, center.y - half)
+                lineTo(center.x + half, center.y - half)
+                lineTo(center.x + half, center.y + half)
+                lineTo(center.x - half, center.y + half)
+                close()
+            }
+        PointShape.Diamond ->
+            Path().apply {
+                moveTo(center.x, center.y - half)
+                lineTo(center.x + half, center.y)
+                lineTo(center.x, center.y + half)
+                lineTo(center.x - half, center.y)
+                close()
+            }
+        PointShape.Triangle ->
+            Path().apply {
+                moveTo(center.x, center.y - half)
+                lineTo(center.x + half, center.y + half)
+                lineTo(center.x - half, center.y + half)
+                close()
+            }
+        PointShape.Cross ->
+            Path().apply {
+                val arm = size / 5f
+                moveTo(center.x - arm, center.y - half)
+                lineTo(center.x + arm, center.y - half)
+                lineTo(center.x + arm, center.y - arm)
+                lineTo(center.x + half, center.y - arm)
+                lineTo(center.x + half, center.y + arm)
+                lineTo(center.x + arm, center.y + arm)
+                lineTo(center.x + arm, center.y + half)
+                lineTo(center.x - arm, center.y + half)
+                lineTo(center.x - arm, center.y + arm)
+                lineTo(center.x - half, center.y + arm)
+                lineTo(center.x - half, center.y - arm)
+                lineTo(center.x - arm, center.y - arm)
+                close()
+            }
     }
 }
 
@@ -178,9 +207,10 @@ private fun List<tilo.compose.core.geometry.Point>.toOpenPath(map: MapState): Pa
 }
 
 private fun List<List<tilo.compose.core.geometry.Point>>.toPath(map: MapState): Path {
-    val path = Path().apply {
-        fillType = PathFillType.EvenOdd
-    }
+    val path =
+        Path().apply {
+            fillType = PathFillType.EvenOdd
+        }
     forEach { ring ->
         if (ring.isEmpty()) return@forEach
         val first = map.worldToScreen(ring.first())
@@ -207,7 +237,10 @@ private fun DrawScope.drawFillPattern(
     }
 }
 
-private fun DrawScope.drawHatchPattern(pattern: FillPattern.Hatch, bounds: ScreenBounds) {
+private fun DrawScope.drawHatchPattern(
+    pattern: FillPattern.Hatch,
+    bounds: ScreenBounds,
+) {
     val spacing = styleUnitToPx(pattern.spacing).coerceAtLeast(1f)
     val angle = (pattern.angleDegrees / 180.0 * PI).toFloat()
     val dx = cos(angle)
@@ -231,7 +264,10 @@ private fun DrawScope.drawHatchPattern(pattern: FillPattern.Hatch, bounds: Scree
     }
 }
 
-private fun DrawScope.drawDotsPattern(pattern: FillPattern.Dots, bounds: ScreenBounds) {
+private fun DrawScope.drawDotsPattern(
+    pattern: FillPattern.Dots,
+    bounds: ScreenBounds,
+) {
     val spacing = styleUnitToPx(pattern.spacing).coerceAtLeast(1f)
     val radius = styleUnitToPx(pattern.radius).coerceAtLeast(0.5f)
     var y = bounds.top
@@ -241,7 +277,7 @@ private fun DrawScope.drawDotsPattern(pattern: FillPattern.Dots, bounds: ScreenB
             drawCircle(
                 color = pattern.color.toColor(),
                 radius = radius,
-                center = Offset(x, y)
+                center = Offset(x, y),
             )
             x += spacing
         }

@@ -40,10 +40,10 @@ import tilo.compose.core.map.MapState
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.projection.Projection
-import tilo.compose.core.selection.FeatureSelection
-import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.scale.ScaleBar
 import tilo.compose.core.scale.ScaleBarCalculator
+import tilo.compose.core.selection.FeatureSelection
+import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.render.ExperimentalTiloRenderingApi
@@ -115,39 +115,45 @@ class MapCameraState internal constructor(
 
         val viewport = mapState.viewport
         val topLeft = mapState.screenToWorld(Point(0.0, 0.0))
-        val bottomRight = mapState.screenToWorld(
-            Point(viewport.width.toDouble(), viewport.height.toDouble())
-        )
+        val bottomRight =
+            mapState.screenToWorld(
+                Point(viewport.width.toDouble(), viewport.height.toDouble()),
+            )
         val minX = minOf(topLeft.x, bottomRight.x)
         val maxX = maxOf(topLeft.x, bottomRight.x)
         val minY = minOf(topLeft.y, bottomRight.y)
         val maxY = maxOf(topLeft.y, bottomRight.y)
         val padX = (maxX - minX) * paddingFraction
         val padY = (maxY - minY) * paddingFraction
-        val bounds = BoundingBox.fromExtents(
-            minX = minX - padX,
-            maxX = maxX + padX,
-            minY = minY - padY,
-            maxY = maxY + padY,
-        )
+        val bounds =
+            BoundingBox.fromExtents(
+                minX = minX - padX,
+                maxX = maxX + padX,
+                minY = minY - padY,
+                maxY = maxY + padY,
+            )
 
         return MapViewportSnapshot(
             bounds = bounds,
             zoom = mapState.zoom,
             viewportWidth = viewport.width,
             viewportHeight = viewport.height,
-            resolution = if (viewport.width > 0) {
-                (maxX - minX) / viewport.width
-            } else {
-                Double.POSITIVE_INFINITY
-            },
+            resolution =
+                if (viewport.width > 0) {
+                    (maxX - minX) / viewport.width
+                } else {
+                    Double.POSITIVE_INFINITY
+                },
         )
     }
 
     /**
      * Pans the camera by screen pixels.
      */
-    fun panBy(dx: Double, dy: Double) {
+    fun panBy(
+        dx: Double,
+        dy: Double,
+    ) {
         val previousCenter = mapState.center
         mapState.panBy(dx, dy)
         if (mapState.center != previousCenter) {
@@ -204,7 +210,10 @@ class MapCameraState internal constructor(
         zoomBy(delta = delta, focus = null)
     }
 
-    override fun zoomBy(delta: Double, focus: Point?) {
+    override fun zoomBy(
+        delta: Double,
+        focus: Point?,
+    ) {
         val previousCenter = mapState.center
         val previousZoom = mapState.zoom
         mapState.zoomBy(delta = delta, focus = focus)
@@ -248,7 +257,10 @@ class MapCameraState internal constructor(
     }
 
     /** Centers the map on [bounds], leaving a density-independent [padding]. */
-    fun fitBounds(bounds: BoundingBox, padding: Dp = 48.dp) {
+    fun fitBounds(
+        bounds: BoundingBox,
+        padding: Dp = 48.dp,
+    ) {
         val previousCenter = mapState.center
         val previousZoom = mapState.zoom
         val requestedPaddingPx = padding.value * mapState.viewport.pixelRatio
@@ -300,8 +312,7 @@ class MapLayerBuilder private constructor(
     constructor() : this(rasterLayerStore = null)
 
     internal companion object {
-        fun managed(rasterLayerStore: RasterLayerStore): MapLayerBuilder =
-            MapLayerBuilder(rasterLayerStore)
+        fun managed(rasterLayerStore: RasterLayerStore): MapLayerBuilder = MapLayerBuilder(rasterLayerStore)
     }
 
     /**
@@ -373,18 +384,19 @@ class MapLayerBuilder private constructor(
             minZoom = minZoom,
             maxZoom = maxZoom,
             attributions = resolvedAttributions,
-            configuration = XyzRasterConfiguration(
-                projectionId = projection.id,
-                projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
-                grid = grid,
-                urlTemplate = urlTemplate,
-                tms = tms,
-                maxVisibleTiles = maxVisibleTiles,
-                prefetchMargin = prefetchMargin,
-                overviewZoomOffset = overviewZoomOffset,
-                maxOverviewTiles = maxOverviewTiles,
-                overviewPrefetchMargin = overviewPrefetchMargin,
-            ),
+            configuration =
+                XyzRasterConfiguration(
+                    projectionId = projection.id,
+                    projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
+                    grid = grid,
+                    urlTemplate = urlTemplate,
+                    tms = tms,
+                    maxVisibleTiles = maxVisibleTiles,
+                    prefetchMargin = prefetchMargin,
+                    overviewZoomOffset = overviewZoomOffset,
+                    maxOverviewTiles = maxOverviewTiles,
+                    overviewPrefetchMargin = overviewPrefetchMargin,
+                ),
         ) {
             StoredRasterLayer(
                 XYZTileLayer(
@@ -403,7 +415,7 @@ class MapLayerBuilder private constructor(
                     maxOverviewTiles = maxOverviewTiles,
                     overviewPrefetchMargin = overviewPrefetchMargin,
                     attributions = resolvedAttributions,
-                )
+                ),
             )
         }
     }
@@ -444,42 +456,45 @@ class MapLayerBuilder private constructor(
             minZoom = minZoom,
             maxZoom = maxZoom,
             attributions = resolvedAttributions,
-            configuration = TileStoreRasterConfiguration(
-                projectionId = projection.id,
-                projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
-                grid = grid,
-                scheme = scheme,
-                sourceId = sourceId,
-                maxVisibleTiles = maxVisibleTiles,
-                prefetchMargin = prefetchMargin,
-                overviewZoomOffset = overviewZoomOffset,
-                maxOverviewTiles = maxOverviewTiles,
-                overviewPrefetchMargin = overviewPrefetchMargin,
-            ),
-            update = RasterLayerUpdate.TileReader(readTile),
-        ) {
-            val reader = MutableTileReader(readTile)
-            StoredRasterLayer(
-                layer = RasterTileLayer(
-                    id = id,
-                    source = TileStoreTileSource(
-                        projection = projection,
-                        grid = grid,
-                        scheme = scheme,
-                        sourceId = sourceId,
-                        readTile = reader::read,
-                    ),
-                    zIndex = zIndex,
-                    visible = visible,
-                    minZoom = minZoom,
-                    maxZoom = maxZoom,
+            configuration =
+                TileStoreRasterConfiguration(
+                    projectionId = projection.id,
+                    projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
+                    grid = grid,
+                    scheme = scheme,
+                    sourceId = sourceId,
                     maxVisibleTiles = maxVisibleTiles,
                     prefetchMargin = prefetchMargin,
                     overviewZoomOffset = overviewZoomOffset,
                     maxOverviewTiles = maxOverviewTiles,
                     overviewPrefetchMargin = overviewPrefetchMargin,
-                    attributions = resolvedAttributions,
                 ),
+            update = RasterLayerUpdate.TileReader(readTile),
+        ) {
+            val reader = MutableTileReader(readTile)
+            StoredRasterLayer(
+                layer =
+                    RasterTileLayer(
+                        id = id,
+                        source =
+                            TileStoreTileSource(
+                                projection = projection,
+                                grid = grid,
+                                scheme = scheme,
+                                sourceId = sourceId,
+                                readTile = reader::read,
+                            ),
+                        zIndex = zIndex,
+                        visible = visible,
+                        minZoom = minZoom,
+                        maxZoom = maxZoom,
+                        maxVisibleTiles = maxVisibleTiles,
+                        prefetchMargin = prefetchMargin,
+                        overviewZoomOffset = overviewZoomOffset,
+                        maxOverviewTiles = maxOverviewTiles,
+                        overviewPrefetchMargin = overviewPrefetchMargin,
+                        attributions = resolvedAttributions,
+                    ),
                 update = { update ->
                     if (update is RasterLayerUpdate.TileReader) {
                         reader.delegate = update.readTile
@@ -535,7 +550,7 @@ class MapLayerBuilder private constructor(
                 features = features,
                 renderStrategy = renderMode.toVectorRenderStrategy(),
                 style = style,
-            )
+            ),
         )
     }
 
@@ -577,40 +592,24 @@ class MapLayerBuilder private constructor(
             "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
         }
         val store = rasterLayerStore
-        val layer = if (store == null) {
-            create().layer
-        } else {
-            val key = ManagedRasterLayerKey(layerId = id, configuration = configuration)
-            managedRasterKeys += key
-            managedRasterUpdates[key] = update
-            PresentedTileLayer(
-                runtime = store.getOrCreate(key, create),
-                id = id,
-                zIndex = zIndex,
-                visible = visible,
-                minZoom = minZoom,
-                maxZoom = maxZoom,
-                attributions = attributions,
-            )
-        }
+        val layer =
+            if (store == null) {
+                create().layer
+            } else {
+                val key = ManagedRasterLayerKey(layerId = id, configuration = configuration)
+                managedRasterKeys += key
+                managedRasterUpdates[key] = update
+                PresentedTileLayer(
+                    runtime = store.getOrCreate(key, create),
+                    id = id,
+                    zIndex = zIndex,
+                    visible = visible,
+                    minZoom = minZoom,
+                    maxZoom = maxZoom,
+                    attributions = attributions,
+                )
+            }
         items += layer
-    }
-}
-
-/** Lightweight presentation snapshot backed by a stable fetch/cache runtime. */
-private data class PresentedTileLayer(
-    private val runtime: RasterTileLayer,
-    override val id: String,
-    override val zIndex: Int,
-    override val visible: Boolean,
-    override val minZoom: Double?,
-    override val maxZoom: Double?,
-    override val attributions: List<Attribution>,
-) : TileLayer by runtime {
-    init {
-        require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
-            "minZoom must not be greater than maxZoom"
-        }
     }
 }
 
@@ -665,23 +664,28 @@ class FeatureLayerOptions {
 
 /**
  * Remembers camera state for [TiloMap].
+ *
+ * [initialCenter] and [initialZoom] initialize a newly remembered state and are
+ * not reapplied by later recompositions. [projection] and [config] are immutable
+ * properties of [MapCameraState]; changing either replaces the remembered state.
  */
 @Composable
 @ExperimentalTiloApi
 fun rememberMapCameraState(
-    center: Point = Point(0.0, 0.0),
-    zoom: Double = 0.0,
+    initialCenter: Point = Point(0.0, 0.0),
+    initialZoom: Double = 0.0,
     projection: Projection = IdentityProjection,
     config: MapConfig = MapConfig.Default,
 ): MapCameraState =
-    remember {
+    remember(projection, config) {
         MapCameraState(
-            mapState = MapState(
-                center = center,
-                zoom = zoom,
-                projection = projection,
-                config = config,
-            )
+            mapState =
+                MapState(
+                    center = initialCenter,
+                    zoom = initialZoom,
+                    projection = projection,
+                    config = config,
+                ),
         )
     }
 
@@ -689,6 +693,8 @@ fun rememberMapCameraState(
  * Compose map surface.
  *
  * Declare raster, vector, drawing, and custom layers in [layers].
+ * Unexpected render branch failures are reported through [onRenderError];
+ * ordinary missing or undecodable raster tiles remain isolated.
  */
 @Composable
 @ExperimentalTiloApi
@@ -697,6 +703,7 @@ fun TiloMap(
     modifier: Modifier = Modifier,
     onTapWorld: ((Point) -> Unit)? = null,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    onRenderError: ((Throwable) -> Unit)? = null,
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
     scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
@@ -711,6 +718,7 @@ fun TiloMap(
             layers = builtLayers,
             onTapWorld = onTapWorld,
             onFeatureSelect = onFeatureSelect,
+            onRenderError = onRenderError,
             selectedFeatures = selectedFeatures,
             invalidationKey = invalidationKey,
         )
@@ -740,9 +748,7 @@ fun TiloMap(
  * Compose runtime alone, without rendering a platform canvas.
  */
 @Composable
-internal fun rememberManagedMapLayers(
-    layers: MapLayerBuilder.() -> Unit,
-): List<Layer> {
+internal fun rememberManagedMapLayers(layers: MapLayerBuilder.() -> Unit): List<Layer> {
     val rasterLayerStore = remember { RasterLayerStore() }
     val layerBuilder = MapLayerBuilder.managed(rasterLayerStore)
     layerBuilder.layers()
@@ -777,6 +783,7 @@ private fun MapRendererLayer(
     layers: List<Layer>,
     onTapWorld: ((Point) -> Unit)?,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
+    onRenderError: ((Throwable) -> Unit)?,
     selectedFeatures: Set<FeatureSelectionRef>,
     invalidationKey: Any?,
 ) {
@@ -787,6 +794,7 @@ private fun MapRendererLayer(
         modifier = Modifier.fillMaxSize(),
         onTapWorld = onTapWorld,
         onFeatureSelect = onFeatureSelect,
+        onRenderError = onRenderError,
         selectedFeatures = selectedFeatures,
         invalidationKey = invalidationKey to cameraControlRevision,
         onMapChanged = cameraState::markChanged,

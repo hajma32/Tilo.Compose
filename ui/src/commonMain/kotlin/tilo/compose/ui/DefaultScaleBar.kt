@@ -32,19 +32,21 @@ fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val widthDp = (scaleBar.widthPx / density.density).dp
-    val labels = remember(textMeasurer, scaleBar.label, scaleBar.midpointLabel) {
-        ScaleBarLabelLayouts(
-            start = textMeasurer.measureLabel("0"),
-            middle = textMeasurer.measureLabel(scaleBar.midpointLabel),
-            end = textMeasurer.measureLabel(scaleBar.label),
-        )
-    }
+    val labels =
+        remember(textMeasurer, scaleBar.label, scaleBar.midpointLabel) {
+            ScaleBarLabelLayouts(
+                start = textMeasurer.measureLabel("0"),
+                middle = textMeasurer.measureLabel(scaleBar.midpointLabel),
+                end = textMeasurer.measureLabel(scaleBar.label),
+            )
+        }
     Canvas(
-        modifier = Modifier
-            .align(Alignment.BottomStart)
-            .padding(start = 12.dp, bottom = 2.dp)
-            .requiredWidth(widthDp)
-            .height(30.dp),
+        modifier =
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 12.dp, bottom = 2.dp)
+                .requiredWidth(widthDp)
+                .height(30.dp),
     ) {
         val barHeight = 12.dp.toPx()
         val radius = 3.dp.toPx()
@@ -101,33 +103,35 @@ private val ScaleBarColor = Color(0xFF111827)
 private val ScaleBarTextColor = Color.Black
 private val ScaleBarLightColor = Color.White
 
-private val ScaleBarTextStyle = TextStyle(
-    color = ScaleBarTextColor,
-    fontSize = 9.sp,
-    fontWeight = FontWeight.Normal,
-    fontSynthesis = FontSynthesis.None,
-)
+private val ScaleBarTextStyle =
+    TextStyle(
+        color = ScaleBarTextColor,
+        fontSize = 9.sp,
+        fontWeight = FontWeight.Normal,
+        fontSynthesis = FontSynthesis.None,
+    )
 
 private val ScaleBarHaloTextStyle = ScaleBarTextStyle.copy(color = Color.White)
 
-private val ScaleBarHaloOffsets = listOf(
-    Offset(-3.0f, -3.0f),
-    Offset(0.0f, -3.0f),
-    Offset(3.0f, -3.0f),
-    Offset(-2.0f, -2.0f),
-    Offset(0.0f, -2.0f),
-    Offset(2.0f, -2.0f),
-    Offset(-3.0f, 0.0f),
-    Offset(-2.0f, 0.0f),
-    Offset(2.0f, 0.0f),
-    Offset(3.0f, 0.0f),
-    Offset(-2.0f, 2.0f),
-    Offset(0.0f, 2.0f),
-    Offset(2.0f, 2.0f),
-    Offset(-3.0f, 3.0f),
-    Offset(0.0f, 3.0f),
-    Offset(3.0f, 3.0f),
-)
+private val ScaleBarHaloOffsets =
+    listOf(
+        Offset(-3.0f, -3.0f),
+        Offset(0.0f, -3.0f),
+        Offset(3.0f, -3.0f),
+        Offset(-2.0f, -2.0f),
+        Offset(0.0f, -2.0f),
+        Offset(2.0f, -2.0f),
+        Offset(-3.0f, 0.0f),
+        Offset(-2.0f, 0.0f),
+        Offset(2.0f, 0.0f),
+        Offset(3.0f, 0.0f),
+        Offset(-2.0f, 2.0f),
+        Offset(0.0f, 2.0f),
+        Offset(2.0f, 2.0f),
+        Offset(-3.0f, 3.0f),
+        Offset(0.0f, 3.0f),
+        Offset(3.0f, 3.0f),
+    )
 
 @OptIn(ExperimentalTextApi::class)
 private fun androidx.compose.ui.text.TextMeasurer.measureLabel(text: String): ScaleBarLabelLayout =
@@ -174,14 +178,16 @@ private fun DrawScope.drawLabelWithHalo(
     y: Float,
     alignment: LabelAlignment,
 ) {
-    val topLeft = Offset(
-        x = when (alignment) {
-            LabelAlignment.Start -> x
-            LabelAlignment.Center -> x - label.fill.size.width / 2.0f
-            LabelAlignment.End -> x - label.fill.size.width
-        },
-        y = y,
-    )
+    val topLeft =
+        Offset(
+            x =
+                when (alignment) {
+                    LabelAlignment.Start -> x
+                    LabelAlignment.Center -> x - label.fill.size.width / 2.0f
+                    LabelAlignment.End -> x - label.fill.size.width
+                },
+            y = y,
+        )
     ScaleBarHaloOffsets.forEach { offset ->
         drawText(
             textLayoutResult = label.halo,
@@ -206,7 +212,9 @@ private fun ScaleBarLabelLayout.fitsBetween(
 ): Boolean {
     val middleLeft = centerX - fill.size.width / 2.0f
     val middleRight = centerX + fill.size.width / 2.0f
-    val startRight = start.fill.size.width.toFloat()
+    val startRight =
+        start.fill.size.width
+            .toFloat()
     val endLeft = fullWidth - end.fill.size.width
     return middleLeft >= startRight + spacing && middleRight <= endLeft - spacing
 }

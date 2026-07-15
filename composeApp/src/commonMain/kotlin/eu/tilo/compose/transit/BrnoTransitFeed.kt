@@ -42,6 +42,7 @@ internal class BrnoTransitFeed(
         client.close()
     }
 
+    @Suppress("TooGenericExceptionCaught") // A stream failure of any kind must transition into reconnect state.
     fun states(): Flow<TransitFeedState> =
         channelFlow {
             val output = this
@@ -70,54 +71,61 @@ internal class BrnoTransitFeed(
                 }
 
             while (currentCoroutineContext().isActive) {
-                val connectingStatus = if (firstConnection) {
-                    TransitConnectionStatus.Connecting
-                } else {
-                    TransitConnectionStatus.Reconnecting
-                }
+                val connectingStatus =
+                    if (firstConnection) {
+                        TransitConnectionStatus.Connecting
+                    } else {
+                        TransitConnectionStatus.Reconnecting
+                    }
                 output.send(snapshot(connectingStatus))
 
                 var reconnectStateEmitted = false
                 try {
-                    client.webSocket(urlString = BrnoTransitWebSocketUrl) {
+                    client.webSocket(urlString = BRNO_TRANSIT_WEB_SOCKET_URL) {
                         firstConnection = false
                         output.send(snapshot(TransitConnectionStatus.Live))
-                        val publisher = launch {
-                            while (isActive) {
-                                delay(PublishIntervalMillis)
-                                val shouldPublish = mutex.withLock {
-                                    val beforePrune = tracked.size
-                                    tracked.entries.removeAll { (_, trackedVehicle) ->
-                                        trackedVehicle.lastSeen.elapsedNow() >= VehicleStaleAfter
+                        val publisher =
+                            launch {
+                                while (isActive) {
+                                    delay(PUBLISH_INTERVAL_MILLIS)
+                                    val shouldPublish =
+                                        mutex.withLock {
+                                            val beforePrune = tracked.size
+                                            tracked.entries.removeAll { (_, trackedVehicle) ->
+                                                trackedVehicle.lastSeen.elapsedNow() >= VehicleStaleAfter
+                                            }
+                                            val changed = dirty || tracked.size != beforePrune
+                                            dirty = false
+                                            changed
+                                        }
+                                    if (shouldPublish) {
+                                        output.send(snapshot(TransitConnectionStatus.Live))
                                     }
-                                    val changed = dirty || tracked.size != beforePrune
-                                    dirty = false
-                                    changed
-                                }
-                                if (shouldPublish) {
-                                    output.send(snapshot(TransitConnectionStatus.Live))
                                 }
                             }
-                        }
 
                         try {
                             for (frame in incoming) {
-                                val message = (frame as? Frame.Text)?.readText() ?: continue
-                                val updates = ArcGisTransitDecoder.decode(message)
-                                if (updates.isEmpty()) continue
-                                reconnectDelayMillis = 1_000L
-                                mutex.withLock {
-                                    updates.forEach { vehicle ->
-                                        if (vehicle.active) {
-                                            tracked[vehicle.id] = TrackedVehicle(
-                                                vehicle = vehicle,
-                                                lastSeen = TimeSource.Monotonic.markNow(),
-                                            )
-                                        } else {
-                                            tracked.remove(vehicle.id)
+                                val message = (frame as? Frame.Text)?.readText()
+                                if (message != null) {
+                                    val updates = ArcGisTransitDecoder.decode(message)
+                                    if (updates.isNotEmpty()) {
+                                        reconnectDelayMillis = 1_000L
+                                        mutex.withLock {
+                                            updates.forEach { vehicle ->
+                                                if (vehicle.active) {
+                                                    tracked[vehicle.id] =
+                                                        TrackedVehicle(
+                                                            vehicle = vehicle,
+                                                            lastSeen = TimeSource.Monotonic.markNow(),
+                                                        )
+                                                } else {
+                                                    tracked.remove(vehicle.id)
+                                                }
+                                            }
+                                            dirty = true
                                         }
                                     }
-                                    dirty = true
                                 }
                             }
                         } finally {
@@ -133,7 +141,7 @@ internal class BrnoTransitFeed(
                             status = TransitConnectionStatus.Reconnecting,
                             errorMessage = error.message ?: error::class.simpleName,
                             pruneStale = true,
-                        )
+                        ),
                     )
                 }
 
@@ -143,12 +151,12 @@ internal class BrnoTransitFeed(
                             status = TransitConnectionStatus.Reconnecting,
                             errorMessage = "Stream connection closed",
                             pruneStale = true,
-                        )
+                        ),
                     )
                 }
 
                 delay(reconnectDelayMillis)
-                reconnectDelayMillis = (reconnectDelayMillis * 2).coerceAtMost(MaxReconnectDelayMillis)
+                reconnectDelayMillis = (reconnectDelayMillis * 2).coerceAtMost(MAX_RECONNECT_DELAY_MILLIS)
             }
         }
 }
@@ -158,8 +166,8 @@ private data class TrackedVehicle(
     val lastSeen: TimeMark,
 )
 
-private const val BrnoTransitWebSocketUrl =
+private const val BRNO_TRANSIT_WEB_SOCKET_URL =
     "wss://gis.brno.cz/geoevent/ws/services/stream_kordis_26/StreamServer/subscribe?outSR=4326"
-private const val PublishIntervalMillis = 500L
-private const val MaxReconnectDelayMillis = 15_000L
+private const val PUBLISH_INTERVAL_MILLIS = 500L
+private const val MAX_RECONNECT_DELAY_MILLIS = 15_000L
 private val VehicleStaleAfter = 45.seconds

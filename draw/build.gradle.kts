@@ -2,11 +2,9 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
-    `maven-publish`
+    alias(libs.plugins.dokka)
+    alias(libs.plugins.mavenPublish)
 }
-
-group = "eu.tilo"
-version = "0.1.0-SNAPSHOT"
 
 kotlin {
     jvm()

@@ -2,7 +2,6 @@ package tilo.compose.core.layers.raster
 
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
-import kotlinx.coroutines.CancellationException
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.net.sharedHttpClient
@@ -22,8 +21,7 @@ data class WMSCapabilities(
     val formats: List<String>,
     val layers: List<WMSLayerCapabilities>,
 ) {
-    fun layer(name: String): WMSLayerCapabilities? =
-        layers.firstOrNull { it.name == name }
+    fun layer(name: String): WMSLayerCapabilities? = layers.firstOrNull { it.name == name }
 
     fun tileGridFor(
         layerName: String,
@@ -37,21 +35,24 @@ data class WMSCapabilities(
         tileSize: Int = 256,
     ): TileGrid {
         require(layerNames.isNotEmpty()) { "At least one WMS layer name is required." }
-        val bounds = layerNames.map { layerName ->
-            val layer = requireNotNull(layer(layerName)) {
-                "WMS layer '$layerName' was not found in GetCapabilities."
-            }
-            requireNotNull(layer.boundingBoxes[projection.id]) {
-                "WMS layer '$layerName' does not expose a ${projection.id} BoundingBox."
-            }
-        }.reduce { combined, next ->
-            BoundingBox.fromExtents(
-                minX = minOf(combined.minX, next.minX),
-                maxX = maxOf(combined.maxX, next.maxX),
-                minY = minOf(combined.minY, next.minY),
-                maxY = maxOf(combined.maxY, next.maxY),
-            )
-        }
+        val bounds =
+            layerNames
+                .map { layerName ->
+                    val layer =
+                        requireNotNull(layer(layerName)) {
+                            "WMS layer '$layerName' was not found in GetCapabilities."
+                        }
+                    requireNotNull(layer.boundingBoxes[projection.id]) {
+                        "WMS layer '$layerName' does not expose a ${projection.id} BoundingBox."
+                    }
+                }.reduce { combined, next ->
+                    BoundingBox.fromExtents(
+                        minX = minOf(combined.minX, next.minX),
+                        maxX = maxOf(combined.maxX, next.maxX),
+                        minY = minOf(combined.minY, next.minY),
+                        maxY = maxOf(combined.maxY, next.maxY),
+                    )
+                }
 
         return TileGrid(
             originX = bounds.minX,
@@ -84,28 +85,29 @@ data class WMSCapabilities(
         overviewPrefetchMargin: Int = 1,
         attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
-    ): WMSTileLayer = createTileLayer(
-        id = id,
-        layerNames = layerName.toWMSLayerNames(),
-        projection = projection,
-        baseUrl = baseUrl,
-        styles = styles,
-        format = format,
-        getMapVersion = getMapVersion,
-        axisOrder = axisOrder,
-        zIndex = zIndex,
-        visible = visible,
-        minZoom = minZoom,
-        maxZoom = maxZoom,
-        tileSize = tileSize,
-        maxVisibleTiles = maxVisibleTiles,
-        prefetchMargin = prefetchMargin,
-        overviewZoomOffset = overviewZoomOffset,
-        maxOverviewTiles = maxOverviewTiles,
-        overviewPrefetchMargin = overviewPrefetchMargin,
-        attributions = attributions,
-        fetchConfig = fetchConfig,
-    )
+    ): WMSTileLayer =
+        createTileLayer(
+            id = id,
+            layerNames = layerName.toWMSLayerNames(),
+            projection = projection,
+            baseUrl = baseUrl,
+            styles = styles,
+            format = format,
+            getMapVersion = getMapVersion,
+            axisOrder = axisOrder,
+            zIndex = zIndex,
+            visible = visible,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
+            tileSize = tileSize,
+            maxVisibleTiles = maxVisibleTiles,
+            prefetchMargin = prefetchMargin,
+            overviewZoomOffset = overviewZoomOffset,
+            maxOverviewTiles = maxOverviewTiles,
+            overviewPrefetchMargin = overviewPrefetchMargin,
+            attributions = attributions,
+            fetchConfig = fetchConfig,
+        )
 
     fun createTileLayer(
         id: String,
@@ -129,9 +131,10 @@ data class WMSCapabilities(
         attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
     ): WMSTileLayer {
-        val resolvedBaseUrl = requireNotNull(baseUrl) {
-            "WMS GetMap URL was not found in GetCapabilities. Pass baseUrl explicitly."
-        }
+        val resolvedBaseUrl =
+            requireNotNull(baseUrl) {
+                "WMS GetMap URL was not found in GetCapabilities. Pass baseUrl explicitly."
+            }
         return WMSTileLayer(
             id = id,
             projection = projection,
@@ -158,14 +161,12 @@ data class WMSCapabilities(
     }
 }
 
-private fun String.toWMSLayerNames(): List<String> =
-    split(',').map(String::trim).filter(String::isNotEmpty)
+private fun String.toWMSLayerNames(): List<String> = split(',').map(String::trim).filter(String::isNotEmpty)
 
 class WMSCapabilitiesLoader(
     private val fetchCapabilities: suspend (String) -> String = ::fetchWMSCapabilitiesXml,
 ) {
-    suspend fun load(url: String): WMSCapabilities =
-        parse(fetchCapabilities(capabilitiesUrl(url)))
+    suspend fun load(url: String): WMSCapabilities = parse(fetchCapabilities(capabilitiesUrl(url)))
 
     fun parse(xml: String): WMSCapabilities {
         val version = capabilitiesVersion(xml) ?: "1.1.1"
@@ -287,11 +288,7 @@ suspend fun createWMSTileLayerFromCapabilities(
 
 private suspend fun fetchWMSCapabilitiesXml(url: String): String {
     val http = sharedHttpClient()
-    return try {
-        http.get(url).bodyAsText()
-    } catch (error: CancellationException) {
-        throw error
-    }
+    return http.get(url).bodyAsText()
 }
 
 private fun capabilitiesUrl(url: String): String {
@@ -302,10 +299,11 @@ private fun capabilitiesUrl(url: String): String {
 }
 
 private fun capabilitiesVersion(xml: String): String? {
-    val rootTag = Regex("""<(WMT_MS_Capabilities|WMS_Capabilities)\b[^>]*>""")
-        .find(xml)
-        ?.value
-        ?: return null
+    val rootTag =
+        Regex("""<(WMT_MS_Capabilities|WMS_Capabilities)\b[^>]*>""")
+            .find(xml)
+            ?.value
+            ?: return null
     return attr(rootTag, "version")
 }
 
@@ -352,8 +350,7 @@ private fun boundingBoxes(
                     BoundingBox.fromExtents(minX = minX, minY = minY, maxX = maxX, maxY = maxY)
                 }
             crs to bounds
-        }
-        .toMap()
+        }.toMap()
 
 private fun onlineResourceHref(block: String): String? {
     val onlineResource = Regex("""<OnlineResource\b[^>]*>""").find(block)?.value ?: return null
@@ -361,26 +358,39 @@ private fun onlineResourceHref(block: String): String? {
     return attributes["xlink:href"] ?: attributes["href"]
 }
 
-private fun tagBlock(xml: String, tag: String): String? =
-    Regex("""<$tag\b[^>]*>[\s\S]*?</$tag>""").find(xml)?.value
+private fun tagBlock(
+    xml: String,
+    tag: String,
+): String? = Regex("""<$tag\b[^>]*>[\s\S]*?</$tag>""").find(xml)?.value
 
-private fun tagTexts(xml: String, tag: String): List<String> =
+private fun tagTexts(
+    xml: String,
+    tag: String,
+): List<String> =
     Regex("""<$tag\b[^>]*>([\s\S]*?)</$tag>""")
         .findAll(xml)
         .map { it.groupValues[1].trim().xmlUnescaped() }
         .filter { it.isNotBlank() }
         .toList()
 
-private fun directTagText(block: String, tag: String): String? =
-    directTagTexts(block, tag).firstOrNull()
+private fun directTagText(
+    block: String,
+    tag: String,
+): String? = directTagTexts(block, tag).firstOrNull()
 
-private fun directTagTexts(block: String, tag: String): List<String> {
-    val content = block.substringAfter('>', missingDelimiterValue = block)
-        .substringBeforeLast("</Layer>", missingDelimiterValue = block)
-    val nestedRanges = parseLayerBlocks(content).map { nested ->
-        val start = content.indexOf(nested)
-        start until (start + nested.length)
-    }
+private fun directTagTexts(
+    block: String,
+    tag: String,
+): List<String> {
+    val content =
+        block
+            .substringAfter('>', missingDelimiterValue = block)
+            .substringBeforeLast("</Layer>", missingDelimiterValue = block)
+    val nestedRanges =
+        parseLayerBlocks(content).map { nested ->
+            val start = content.indexOf(nested)
+            start until (start + nested.length)
+        }
     return Regex("""<$tag\b[^>]*>([\s\S]*?)</$tag>""")
         .findAll(content)
         .filter { match -> nestedRanges.none { range -> match.range.first in range } }
@@ -389,8 +399,10 @@ private fun directTagTexts(block: String, tag: String): List<String> {
         .toList()
 }
 
-private fun attr(xml: String, name: String): String? =
-    attrs(xml.substringBefore('>', missingDelimiterValue = xml))[name]
+private fun attr(
+    xml: String,
+    name: String,
+): String? = attrs(xml.substringBefore('>', missingDelimiterValue = xml))[name]
 
 private fun attrs(tag: String): Map<String, String> {
     val doubleQuoted = Regex("([A-Za-z_:][A-Za-z0-9_:.-]*)\\s*=\\s*\"([^\"]*)\"")

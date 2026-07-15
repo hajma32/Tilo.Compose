@@ -15,11 +15,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 import org.junit.runner.RunWith
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.Feature
@@ -37,10 +32,14 @@ import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 import tilo.compose.render.backend.VectorBitmapSnapshot
 import tilo.compose.render.backend.drawVectorBitmapLayer
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class PlatformRenderingAndroidTest {
-
     /**
      * Verifies the real Android bitmap decoder with valid and invalid encoded data.
      *
@@ -70,12 +69,16 @@ class PlatformRenderingAndroidTest {
         val colors = listOf(RED, GREEN, BLUE, YELLOW)
         val images = colors.map(::solidBitmap)
 
-        val result = renderBitmap {
-            drawTiles(tiles, tileDecoder = { error("predecoded tiles must not decode again") }, map, images)
-        }
+        val result =
+            renderBitmap {
+                drawTiles(tiles, tileDecoder = { error("predecoded tiles must not decode again") }, map, images)
+            }
 
         assertTrue(result.readArgb().all { argb -> argb ushr 24 == 0xFF })
-        assertEquals(colors, listOf(result.argbAt(16, 16), result.argbAt(48, 16), result.argbAt(16, 48), result.argbAt(48, 48)))
+        assertEquals(
+            colors,
+            listOf(result.argbAt(16, 16), result.argbAt(48, 16), result.argbAt(16, 48), result.argbAt(48, 48)),
+        )
     }
 
     /**
@@ -89,9 +92,10 @@ class PlatformRenderingAndroidTest {
         val map = MapState(viewport = Viewport(64, 64))
         val images = listOf(solidBitmap(RED), solidBitmap(GREEN), solidBitmap(BLUE), null)
 
-        val result = renderBitmap {
-            drawTiles(quadrantTiles(), tileDecoder = { null }, map, images)
-        }
+        val result =
+            renderBitmap {
+                drawTiles(quadrantTiles(), tileDecoder = { null }, map, images)
+            }
 
         assertEquals(0xFFE3F2FD.toInt(), result.argbAt(48, 48))
         assertEquals(RED, result.argbAt(16, 16))
@@ -106,24 +110,37 @@ class PlatformRenderingAndroidTest {
     @Test
     fun vectorPointLineAndPolygonHoleProduceExpectedCoverage() {
         val map = MapState(viewport = Viewport(64, 64))
-        val polygon = RenderPolygon(
-            id = "polygon",
-            rings = listOf(
-                ring(4.0, 20.0, 28.0, -20.0),
-                ring(12.0, 8.0, 20.0, -8.0),
-            ),
-            style = PolygonStyle(fill = FillStyle(ColorValue(RED.toUInt().toULong())), casing = null, stroke = null),
-        )
-        val line = RenderLineString(
-            id = "line",
-            points = listOf(Point(-28.0, 20.0), Point(-4.0, 20.0)),
-            style = LineStyle(casing = null, stroke = StrokeStyle(ColorValue(GREEN.toUInt().toULong()), width = 4.0)),
-        )
-        val point = RenderPoint(
-            id = "point",
-            point = Point(-16.0, 0.0),
-            style = PointStyle(size = 10.0, fill = FillStyle(ColorValue(BLUE.toUInt().toULong())), stroke = null),
-        )
+        val polygon =
+            RenderPolygon(
+                id = "polygon",
+                rings =
+                    listOf(
+                        ring(4.0, 20.0, 28.0, -20.0),
+                        ring(12.0, 8.0, 20.0, -8.0),
+                    ),
+                style =
+                    PolygonStyle(
+                        fill = FillStyle(ColorValue(RED.toUInt().toULong())),
+                        casing = null,
+                        stroke = null,
+                    ),
+            )
+        val line =
+            RenderLineString(
+                id = "line",
+                points = listOf(Point(-28.0, 20.0), Point(-4.0, 20.0)),
+                style =
+                    LineStyle(
+                        casing = null,
+                        stroke = StrokeStyle(ColorValue(GREEN.toUInt().toULong()), width = 4.0),
+                    ),
+            )
+        val point =
+            RenderPoint(
+                id = "point",
+                point = Point(-16.0, 0.0),
+                style = PointStyle(size = 10.0, fill = FillStyle(ColorValue(BLUE.toUInt().toULong())), stroke = null),
+            )
 
         val result = renderBitmap { drawFeatureGeometry(listOf(polygon, line, point), map) }
 
@@ -143,15 +160,17 @@ class PlatformRenderingAndroidTest {
     fun selectedAndUnselectedVectorStylesRemainVisuallyDistinct() {
         val red = PointStyle(size = 12.0, fill = FillStyle(ColorValue(RED.toUInt().toULong())), stroke = null)
         val blue = PointStyle(size = 12.0, fill = FillStyle(ColorValue(BLUE.toUInt().toULong())), stroke = null)
-        val commands = CommandBuilder.build(
-            map = MapState(viewport = Viewport(64, 64)),
-            features = listOf(
-                Feature(geometry = Point(-12.0, 0.0), key = "normal", style = blue, selectedStyle = red),
-                Feature(geometry = Point(12.0, 0.0), key = "selected", style = blue, selectedStyle = red),
-            ),
-            layerId = "points",
-            selectedFeatureKeys = setOf("selected"),
-        )
+        val commands =
+            CommandBuilder.build(
+                map = MapState(viewport = Viewport(64, 64)),
+                features =
+                    listOf(
+                        Feature(geometry = Point(-12.0, 0.0), key = "normal", style = blue, selectedStyle = red),
+                        Feature(geometry = Point(12.0, 0.0), key = "selected", style = blue, selectedStyle = red),
+                    ),
+                layerId = "points",
+                selectedFeatureKeys = setOf("selected"),
+            )
 
         val result = renderBitmap { drawFeatureGeometry(commands, MapState(viewport = Viewport(64, 64))) }
 
@@ -168,12 +187,13 @@ class PlatformRenderingAndroidTest {
     @Test
     fun cachedVectorBitmapRemainsCenteredAtFractionalZoom() {
         val source = solidBitmap(MAGENTA, width = 10, height = 10)
-        val layer = VectorBitmapRenderSceneLayer(
-            id = "cached",
-            zIndex = 0,
-            bitmap = source,
-            snapshot = VectorBitmapSnapshot(Point(0.0, 0.0), 0.0, 10, 10, 10, 10),
-        )
+        val layer =
+            VectorBitmapRenderSceneLayer(
+                id = "cached",
+                zIndex = 0,
+                bitmap = source,
+                snapshot = VectorBitmapSnapshot(Point(0.0, 0.0), 0.0, 10, 10, 10, 10),
+            )
         val map = MapState(zoom = 0.5, viewport = Viewport(64, 64))
 
         val result = renderBitmap { drawVectorBitmapLayer(layer, map) }
@@ -192,27 +212,30 @@ class PlatformRenderingAndroidTest {
     fun collidingLabelsRenderOnlySelectedWinner() {
         val density = Density(1f)
         val layoutDirection = LayoutDirection.Ltr
-        val textMeasurer = TextMeasurer(
-            defaultFontFamilyResolver = createFontFamilyResolver(
-                InstrumentationRegistry.getInstrumentation().targetContext,
-            ),
-            defaultDensity = density,
-            defaultLayoutDirection = layoutDirection,
-        )
-        val labels = listOf(
-            RenderLabel(
-                id = "priority",
-                text = "PRIORITY",
-                anchor = Point(0.0, 0.0),
-                labelPriority = 100,
-            ),
-            RenderLabel(
-                id = "selected",
-                text = "SELECTED",
-                anchor = Point(0.0, 0.0),
-                selected = true,
-            ),
-        )
+        val textMeasurer =
+            TextMeasurer(
+                defaultFontFamilyResolver =
+                    createFontFamilyResolver(
+                        InstrumentationRegistry.getInstrumentation().targetContext,
+                    ),
+                defaultDensity = density,
+                defaultLayoutDirection = layoutDirection,
+            )
+        val labels =
+            listOf(
+                RenderLabel(
+                    id = "priority",
+                    text = "PRIORITY",
+                    anchor = Point(0.0, 0.0),
+                    labelPriority = 100,
+                ),
+                RenderLabel(
+                    id = "selected",
+                    text = "SELECTED",
+                    anchor = Point(0.0, 0.0),
+                    selected = true,
+                ),
+            )
         val bitmap = ImageBitmap(64, 64)
         val labelCache = LabelBitmapCache()
         var placed = emptyList<PlacedLabel>()
@@ -222,13 +245,14 @@ class PlatformRenderingAndroidTest {
             canvas = Canvas(bitmap),
             size = Size(64f, 64f),
         ) {
-            placed = LabelLayoutEngine().layout(
-                labels = labels,
-                map = MapState(viewport = Viewport(64, 64)),
-                drawScope = this,
-                textMeasurer = textMeasurer,
-                labelBitmapCache = labelCache,
-            )
+            placed =
+                LabelLayoutEngine().layout(
+                    labels = labels,
+                    map = MapState(viewport = Viewport(64, 64)),
+                    drawScope = this,
+                    textMeasurer = textMeasurer,
+                    labelBitmapCache = labelCache,
+                )
             drawPlacedLabels(
                 labels = placed,
                 offscreenDrawScope = CanvasDrawScope(),
@@ -253,7 +277,11 @@ class PlatformRenderingAndroidTest {
         return bitmap
     }
 
-    private fun solidBitmap(color: Int, width: Int = 1, height: Int = 1): ImageBitmap =
+    private fun solidBitmap(
+        color: Int,
+        width: Int = 1,
+        height: Int = 1,
+    ): ImageBitmap =
         Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }.asImageBitmap()
 
     private fun quadrantTiles(): List<Tile> =
@@ -264,10 +292,19 @@ class PlatformRenderingAndroidTest {
             tile(1, 1, Point(0.0, 0.0), Point(32.0, -32.0)),
         )
 
-    private fun tile(x: Int, y: Int, topLeft: Point, bottomRight: Point): Tile =
-        Tile(TileCoordinate(0, x, y), TileBounds(topLeft, bottomRight), byteArrayOf(1))
+    private fun tile(
+        x: Int,
+        y: Int,
+        topLeft: Point,
+        bottomRight: Point,
+    ): Tile = Tile(TileCoordinate(0, x, y), TileBounds(topLeft, bottomRight), byteArrayOf(1))
 
-    private fun ring(minX: Double, maxY: Double, maxX: Double, minY: Double): List<Point> =
+    private fun ring(
+        minX: Double,
+        maxY: Double,
+        maxX: Double,
+        minY: Double,
+    ): List<Point> =
         listOf(
             Point(minX, maxY),
             Point(maxX, maxY),
@@ -278,7 +315,10 @@ class PlatformRenderingAndroidTest {
 
     private fun ImageBitmap.readArgb(): IntArray = IntArray(width * height).also { pixels -> readPixels(pixels) }
 
-    private fun ImageBitmap.argbAt(x: Int, y: Int): Int = readArgb()[y * width + x]
+    private fun ImageBitmap.argbAt(
+        x: Int,
+        y: Int,
+    ): Int = readArgb()[y * width + x]
 
     private companion object {
         const val RED: Int = -0x10000
@@ -287,13 +327,76 @@ class PlatformRenderingAndroidTest {
         const val YELLOW: Int = -0x100
         const val MAGENTA: Int = -0xFF01
 
-        val onePixelPng = byteArrayOf(
-            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01,
-            0x00, 0x00, 0x00, 0x01, 0x08, 0x04, 0x00, 0x00, 0x00, 0xB5.toByte(), 0x1C, 0x0C, 0x02,
-            0x00, 0x00, 0x00, 0x0B, 0x49, 0x44, 0x41, 0x54, 0x78, 0xDA.toByte(), 0x63, 0x64,
-            0xF8.toByte(), 0x0F, 0x00, 0x01, 0x05, 0x01, 0x01, 0x27, 0x18, 0xE3.toByte(), 0x66,
-            0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE.toByte(), 0x42, 0x60, 0x82.toByte(),
-        )
+        val onePixelPng =
+            byteArrayOf(
+                0x89.toByte(),
+                0x50,
+                0x4E,
+                0x47,
+                0x0D,
+                0x0A,
+                0x1A,
+                0x0A,
+                0x00,
+                0x00,
+                0x00,
+                0x0D,
+                0x49,
+                0x48,
+                0x44,
+                0x52,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x00,
+                0x00,
+                0x01,
+                0x08,
+                0x04,
+                0x00,
+                0x00,
+                0x00,
+                0xB5.toByte(),
+                0x1C,
+                0x0C,
+                0x02,
+                0x00,
+                0x00,
+                0x00,
+                0x0B,
+                0x49,
+                0x44,
+                0x41,
+                0x54,
+                0x78,
+                0xDA.toByte(),
+                0x63,
+                0x64,
+                0xF8.toByte(),
+                0x0F,
+                0x00,
+                0x01,
+                0x05,
+                0x01,
+                0x01,
+                0x27,
+                0x18,
+                0xE3.toByte(),
+                0x66,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x49,
+                0x45,
+                0x4E,
+                0x44,
+                0xAE.toByte(),
+                0x42,
+                0x60,
+                0x82.toByte(),
+            )
     }
 }

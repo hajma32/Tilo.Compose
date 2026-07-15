@@ -1,22 +1,23 @@
 package tilo.compose.core.layers.raster
 
-import kotlin.test.Test
-import kotlin.test.assertContains
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.tile.TileBounds
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileRequest
+import kotlin.test.Test
+import kotlin.test.assertContains
 
 class WMSTileSourceTest {
     private val request =
         TileRequest(
             coordinate = TileCoordinate(z = 0, x = 0, y = 0),
-            bounds = TileBounds(
-                topLeft = Point(-10.0, 50.0),
-                bottomRight = Point(20.0, 30.0),
-            ),
+            bounds =
+                TileBounds(
+                    topLeft = Point(-10.0, 50.0),
+                    bottomRight = Point(20.0, 30.0),
+                ),
         )
 
     /**

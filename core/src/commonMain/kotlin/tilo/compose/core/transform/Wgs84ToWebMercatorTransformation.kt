@@ -1,12 +1,12 @@
 package tilo.compose.core.transform
 
-import kotlin.math.PI
-import kotlin.math.ln
-import kotlin.math.tan
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.Projection
+import kotlin.math.PI
+import kotlin.math.ln
+import kotlin.math.tan
 
 /**
  * Geographic WGS84 lon/lat to WebMercator meters.
@@ -26,12 +26,9 @@ object Wgs84ToWebMercatorTransformation : Transformation<Projection, Projection>
 
         return Point(
             x = EARTH_RADIUS * lonRad,
-            y = EARTH_RADIUS * ln(tan(PI / 4.0 + latRad / 2.0))
+            y = EARTH_RADIUS * ln(tan(PI / 4.0 + latRad / 2.0)),
         )
     }
 
-    override fun targetToSource(point: Point): Point {
-        return WebMercatorToWgs84Transformation.sourceToTarget(point)
-    }
+    override fun targetToSource(point: Point): Point = WebMercatorToWgs84Transformation.sourceToTarget(point)
 }
-

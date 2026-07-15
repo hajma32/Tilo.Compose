@@ -76,6 +76,7 @@ surface as of now.
 - `modifier`
 - `onTapWorld`
 - `onFeatureSelect`
+- `onRenderError`
 - `selectedFeatures`
 - `attributionContent`
 - `scaleBarContent`

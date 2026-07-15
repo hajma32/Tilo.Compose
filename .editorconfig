@@ -11,7 +11,18 @@ indent_style = space
 indent_size = 4
 continuation_indent_size = 4
 max_line_length = 120
+ktlint_code_style = ktlint_official
+ktlint_function_naming_ignore_when_annotated_with = Composable
+# Detekt distinguishes const, design-token, and ordinary properties more accurately.
+ktlint_standard_property-naming = disabled
+
+# Compose Multiplatform's iOS host discovers this conventional UIKit factory.
+[**/MainViewController.kt]
+ktlint_standard_function-naming = disabled
+
+# Generated Compose resource accessors are owned by the compiler plugin.
+[**/build/generated/**/*.kt]
+ktlint_standard = disabled
 
 [*.md]
 trim_trailing_whitespace = false
-

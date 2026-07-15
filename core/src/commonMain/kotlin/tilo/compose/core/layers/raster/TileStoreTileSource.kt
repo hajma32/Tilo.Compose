@@ -41,15 +41,15 @@ class TileStoreTileSource(
         return "$sourceId:${projection.id}:${coordinate.z}:${coordinate.x}:${coordinate.y}"
     }
 
-    override suspend fun readTile(request: TileRequest): ByteArray? =
-        readTile(sourceCoordinate(request))
+    override suspend fun readTile(request: TileRequest): ByteArray? = readTile(sourceCoordinate(request))
 
     private fun sourceCoordinate(request: TileRequest): TileCoordinate {
         val (z, x, y) = request.coordinate
-        val sourceY = when (scheme) {
-            TileRowScheme.XYZ -> y
-            TileRowScheme.TMS -> grid.nTilesY(z) - 1 - y
-        }
+        val sourceY =
+            when (scheme) {
+                TileRowScheme.XYZ -> y
+                TileRowScheme.TMS -> grid.nTilesY(z) - 1 - y
+            }
         return TileCoordinate(z = z, x = x, y = sourceY)
     }
 }

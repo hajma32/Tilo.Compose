@@ -1,7 +1,7 @@
 package tilo.compose.core.layers.raster
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -48,12 +48,12 @@ internal class TileRequestFetcher(
 
     suspend fun fetchTiles(requests: List<TileRequest>): List<Tile> =
         coroutineScope {
-            requests.map { request ->
-                async(config.dispatcher) {
-                    fetchTile(request)
-                }
-            }
-                .awaitAll()
+            requests
+                .map { request ->
+                    async(config.dispatcher) {
+                        fetchTile(request)
+                    }
+                }.awaitAll()
         }
 
     fun close() {
@@ -75,16 +75,17 @@ internal class TileRequestFetcher(
                     existing
                 } else {
                     InFlightRequest().also { created ->
-                        created.deferred = fetchScope.async {
-                            fetchSemaphore.withPermit {
-                                inFlightMutex.withLock {
-                                    created.started = true
-                                }
-                                fetchBytes(request)?.also { bytes ->
-                                    cachePut(key, bytes)
+                        created.deferred =
+                            fetchScope.async {
+                                fetchSemaphore.withPermit {
+                                    inFlightMutex.withLock {
+                                        created.started = true
+                                    }
+                                    fetchBytes(request)?.also { bytes ->
+                                        cachePut(key, bytes)
+                                    }
                                 }
                             }
-                        }
                         created.waiters = 1
                         inFlight[key] = created
                     }
@@ -146,19 +147,18 @@ internal class TileRequestFetcher(
     private suspend fun cachePut(
         key: String,
         bytes: ByteArray,
-    ) =
-        cacheMutex.withLock {
-            if (!cache.containsKey(key)) {
-                accessOrder.addLast(key)
-            } else {
-                accessOrder.remove(key)
-                accessOrder.addLast(key)
-            }
-            cache[key] = bytes
-            while (accessOrder.size > config.maxCacheEntries) {
-                cache.remove(accessOrder.removeFirst())
-            }
+    ) = cacheMutex.withLock {
+        if (!cache.containsKey(key)) {
+            accessOrder.addLast(key)
+        } else {
+            accessOrder.remove(key)
+            accessOrder.addLast(key)
         }
+        cache[key] = bytes
+        while (accessOrder.size > config.maxCacheEntries) {
+            cache.remove(accessOrder.removeFirst())
+        }
+    }
 
     private class InFlightRequest {
         lateinit var deferred: Deferred<ByteArray?>

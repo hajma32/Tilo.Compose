@@ -10,10 +10,8 @@ object AndroidAppContext {
         appContext = context.applicationContext
     }
 
-    fun require(): Context {
-        return checkNotNull(appContext) {
+    fun require(): Context =
+        checkNotNull(appContext) {
             "AndroidAppContext is not initialized. Call AndroidAppContext.init(...) from MainActivity."
         }
-    }
 }
-

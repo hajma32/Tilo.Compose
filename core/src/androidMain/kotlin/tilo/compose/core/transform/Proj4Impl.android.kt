@@ -11,12 +11,17 @@ private val crsFactory = CRSFactory()
 private val transformFactory = CoordinateTransformFactory()
 private val transformCache = ConcurrentHashMap<TransformKey, CoordinateTransform>()
 
-internal actual fun proj4Transform(point: Point, sourceCrs: String, targetCrs: String): Point {
-    val transform = transformCache.computeIfAbsent(TransformKey(sourceCrs, targetCrs)) { key ->
-        val src = crsFactory.createFromName(key.sourceCrs)
-        val tgt = crsFactory.createFromName(key.targetCrs)
-        transformFactory.createTransform(src, tgt)
-    }
+internal actual fun proj4Transform(
+    point: Point,
+    sourceCrs: String,
+    targetCrs: String,
+): Point {
+    val transform =
+        transformCache.computeIfAbsent(TransformKey(sourceCrs, targetCrs)) { key ->
+            val src = crsFactory.createFromName(key.sourceCrs)
+            val tgt = crsFactory.createFromName(key.targetCrs)
+            transformFactory.createTransform(src, tgt)
+        }
     val srcPt = ProjCoordinate(point.x, point.y)
     val dstPt = ProjCoordinate()
     transform.transform(srcPt, dstPt)

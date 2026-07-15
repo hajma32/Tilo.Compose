@@ -51,9 +51,10 @@ fun cachedBitmap(
 internal fun FeatureRenderMode.toVectorRenderStrategy(): VectorRenderStrategy =
     when (this) {
         ImmediateFeatureRenderMode -> VectorRenderStrategy.Immediate
-        is CachedBitmapFeatureRenderMode -> VectorRenderStrategy.CachedBitmap(
-            scale = scale,
-            paddingPx = paddingPx,
-            invalidateOnZoomDelta = invalidateOnZoomDelta,
-        )
+        is CachedBitmapFeatureRenderMode ->
+            VectorRenderStrategy.CachedBitmap(
+                scale = scale,
+                paddingPx = paddingPx,
+                invalidateOnZoomDelta = invalidateOnZoomDelta,
+            )
     }

@@ -47,6 +47,7 @@ kotlin {
             implementation(project(":geocore"))
             implementation(project(":render"))
             implementation(project(":ui"))
+            implementation(project(":zabaged-czech-map"))
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

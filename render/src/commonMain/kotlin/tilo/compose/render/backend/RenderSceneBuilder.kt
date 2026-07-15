@@ -1,15 +1,17 @@
 @file:Suppress("unused")
+@file:OptIn(ExperimentalTiloRenderingApi::class)
 
 package tilo.compose.render.backend
 
 import androidx.compose.ui.graphics.ImageBitmap
+import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.RenderCommand
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.tile.Tile
 
-object RenderSceneBuilder {
+internal object RenderSceneBuilder {
 
     fun build(
         layers: List<Layer>,

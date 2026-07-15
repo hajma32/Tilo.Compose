@@ -409,7 +409,7 @@ Expected benefits:
 
 - Add `TiloMap` as the preferred public composable. Done.
 - Remove the old `Map` composable name instead of deprecating it. Done.
-- Rename core `Map` to `MapState` or introduce a wrapper state type. Started with `MapState` typealias.
+- ✅ Rename core `Map` to `MapState` so the engine state no longer conflicts with the Compose map entrypoint.
 - Remove aliasing needs from examples. Started in `composeApp`.
 
 ### 4. Introduce remembered state APIs

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloApi::class)
+
 package tilo.compose.dsl
 
 import androidx.compose.ui.unit.Dp
@@ -16,7 +18,6 @@ import tilo.compose.core.feature.LabelStyle
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.LineStyle
-import tilo.compose.core.feature.PointIcon
 import tilo.compose.core.feature.PointShape
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.PolygonStyle
@@ -25,54 +26,63 @@ import tilo.compose.core.feature.StrokeStyle
 /**
  * Converts an ARGB long literal, for example `0xFF1E88E5`, to a GeoCore color.
  */
+@ExperimentalTiloApi
 fun argb(value: Long): ColorValue =
     ColorValue((value and 0xFFFFFFFFL).toULong())
 
 /**
  * Builds style for point geometries.
  */
+@ExperimentalTiloApi
 fun pointStyle(block: PointStyleBuilder.() -> Unit = {}): PointStyle =
     PointStyleBuilder().apply(block).build()
 
 /**
  * Builds style for line geometries.
  */
+@ExperimentalTiloApi
 fun lineStyle(block: LineStyleBuilder.() -> Unit = {}): LineStyle =
     LineStyleBuilder().apply(block).build()
 
 /**
  * Builds style for polygon geometries.
  */
+@ExperimentalTiloApi
 fun polygonStyle(block: PolygonStyleBuilder.() -> Unit = {}): PolygonStyle =
     PolygonStyleBuilder().apply(block).build()
 
 /**
  * Builds style for feature labels.
  */
+@ExperimentalTiloApi
 fun labelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
     LabelStyleBuilder().apply(block).build()
 
 /**
  * Small label preset for low-priority local names and dense overlays.
  */
+@ExperimentalTiloApi
 fun smallLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
     LabelStyleBuilder(fontSize = 10.sp, haloWidth = 2.5.dp, offsetY = 10.dp).apply(block).build()
 
 /**
  * Default readable label preset for ordinary feature labels.
  */
+@ExperimentalTiloApi
 fun mediumLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
     LabelStyleBuilder(fontSize = 12.sp, haloWidth = 3.dp, offsetY = 12.dp).apply(block).build()
 
 /**
  * Large label preset for prominent places or important user features.
  */
+@ExperimentalTiloApi
 fun largeLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
     LabelStyleBuilder(fontSize = 15.sp, haloWidth = 3.5.dp, offsetY = 14.dp).apply(block).build()
 
 /**
  * Extra-large label preset for the most important labels in a viewport.
  */
+@ExperimentalTiloApi
 fun extraLargeLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
     LabelStyleBuilder(fontSize = 19.sp, haloWidth = 4.dp, offsetY = 16.dp).apply(block).build()
 
@@ -80,9 +90,12 @@ fun extraLargeLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
  * Builds a layer-level style object with defaults for every vector geometry
  * type and its selected state.
  */
+@ExperimentalTiloApi
 fun featureLayerStyle(block: FeatureLayerStyleBuilder.() -> Unit = {}): FeatureLayerStyle =
     FeatureLayerStyleBuilder().apply(block).build()
 
+@ExperimentalTiloApi
+@TiloDsl
 class FeatureLayerStyleBuilder {
     private var point: PointStyle? = null
     private var line: LineStyle? = null
@@ -149,6 +162,8 @@ class FeatureLayerStyleBuilder {
 /**
  * Style builder used by [labelStyle] and label preset helpers.
  */
+@ExperimentalTiloApi
+@TiloDsl
 class LabelStyleBuilder internal constructor(
     private var color: ColorValue = ColorValue.Black,
     private var fontSize: TextUnit = 12.sp,
@@ -240,10 +255,11 @@ class LabelStyleBuilder internal constructor(
 /**
  * Style builder used by [pointStyle].
  */
+@ExperimentalTiloApi
+@TiloDsl
 class PointStyleBuilder {
     var shape: PointShape = PointShape.Circle
     var size: Dp = 14.dp
-    var icon: PointIcon? = null
 
     private var fill: FillStyle? = FillStyle(color = ColorValue.Blue)
     private var stroke: StrokeStyle? = StrokeStyle(color = ColorValue.White, width = 2.5)
@@ -284,13 +300,14 @@ class PointStyleBuilder {
             size = size.toStyleUnit(),
             fill = fill,
             stroke = stroke,
-            icon = icon,
         )
 }
 
 /**
  * Style builder used by [lineStyle].
  */
+@ExperimentalTiloApi
+@TiloDsl
 class LineStyleBuilder {
     private var casing: StrokeStyle? = StrokeStyle(
         color = ColorValue.White,
@@ -352,6 +369,8 @@ class LineStyleBuilder {
 /**
  * Style builder used by [polygonStyle].
  */
+@ExperimentalTiloApi
+@TiloDsl
 class PolygonStyleBuilder {
     private var fill: FillStyle? = FillStyle(color = argb(0x331E88E5))
     private var casing: StrokeStyle? = StrokeStyle(
@@ -424,6 +443,8 @@ class PolygonStyleBuilder {
 /**
  * Fill options shared by point and polygon styles.
  */
+@ExperimentalTiloApi
+@TiloDsl
 class FillStyleBuilder internal constructor(
     private val color: ColorValue,
     private val opacity: Double,
@@ -487,6 +508,8 @@ class FillStyleBuilder internal constructor(
 /**
  * Stroke options shared by point, line, and polygon styles.
  */
+@ExperimentalTiloApi
+@TiloDsl
 class StrokeStyleBuilder internal constructor(
     private val color: ColorValue,
     private val width: Double,

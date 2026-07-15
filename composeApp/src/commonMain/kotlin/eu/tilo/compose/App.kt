@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,11 +33,9 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -57,12 +56,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.WMSLayerState
 import tilo.compose.dsl.attribution
-import tilo.compose.dsl.cachedBitmap
 import tilo.compose.dsl.extraLargeLabelStyle
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
@@ -78,10 +75,10 @@ import tilo.compose.dsl.smallLabelStyle
 import tilo.compose.dsl.webMercator
 import tilo.compose.dsl.wgs84
 import kotlinx.coroutines.launch
-import eu.tilo.compose.cuzk.ZabagedLayerState
-import eu.tilo.compose.cuzk.rememberZabagedLayerState
+import tilo.compose.zabaged.ZabagedCzechMap
+import tilo.compose.zabaged.rememberZabagedCzechMap
+import tilo.compose.zabaged.zabagedCzechMap
 import eu.tilo.compose.transit.BrnoTransitFeed
-import eu.tilo.compose.transit.TransitConnectionStatus
 import eu.tilo.compose.transit.TransitFeedState
 import eu.tilo.compose.transit.TransitType
 import eu.tilo.compose.transit.TransitVehicle
@@ -89,7 +86,6 @@ import eu.tilo.compose.transit.toTransitFeatures
 import tilo.compose.core.feature.Data
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.LabelFontStyle
-import tilo.compose.core.feature.LabelFontWeight as MapLabelFontWeight
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.PointShape
@@ -107,13 +103,10 @@ import tilo.compose.draw.DrawState
 import tilo.compose.draw.drawLayer
 import tilo.compose.draw.rememberDrawState
 import tilo.compose.ui.DefaultZoomControls
-import tilo.compose.ui.DefaultAttributionOverlay
-import tilo.compose.ui.DefaultMapDebugOverlay
 import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultScaleBarContent
 
 private const val MAP_BACKGROUND_COLOR = 0xFFF2EEE3
-private const val ZABAGED_OVERVIEW_BACKGROUND_COLOR = 0xFFEEF3E2
 private const val CUZK_ORTOFOTO_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer"
 private const val CUZK_ZTM_WMS_URL = "https://ags.cuzk.gov.cz/arcgis1/services/ZTM/MapServer/WMSServer"
 private const val OSM_XYZ_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -144,11 +137,52 @@ private data class PlaceDetails(
 
 private fun animatedZoomControlsContent(): @Composable BoxScope.(MapCameraState) -> Unit =
     { cameraState ->
-        DefaultZoomControls(
-            onZoomBy = { delta -> cameraState.animateZoomBy(delta) },
-        )
-        DefaultMapDebugOverlay(cameraState)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(top = 64.dp),
+        ) {
+            DefaultZoomControls(
+                onZoomBy = { delta -> cameraState.animateZoomBy(delta) },
+            )
+        }
     }
+
+@Composable
+private fun BoxScope.MapSearchBox(
+    onMenuClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .fillMaxWidth()
+            .height(56.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shadowElevation = 8.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(
+                onClick = onMenuClick,
+                modifier = Modifier.size(56.dp),
+            ) {
+                HamburgerIcon()
+            }
+            Text(
+                text = "Kam jedete?",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -168,15 +202,6 @@ fun App() {
         layerName = "0",
         projection = sjtsk(),
         format = "image/png",
-        attribution = attribution("ČÚZK Základní mapa, EPSG:5514"),
-    )
-    val ztmOverviewLayer = rememberWMSLayer(
-        id = "cuzk-ztm-zabaged-overview",
-        capabilitiesUrl = CUZK_ZTM_WMS_URL,
-        layerName = "0",
-        projection = sjtsk(),
-        format = "image/png",
-        maxZoom = 9.999,
         attribution = attribution("ČÚZK Základní mapa, EPSG:5514"),
     )
     val mercatorPlaceFeatures = remember { buildMercatorPlaceFeatures() }
@@ -244,14 +269,11 @@ fun App() {
             .withTransformation(WebMercatorToWgs84Transformation),
         projection = webMercator(),
     )
-    val zabagedEnabled = selectedDemo == MapDemo.Sjtks && (
-        selectedBasemap == BasemapOption.CuzkZabaged || DemoLayerOption.Zabaged in selectedLayers
-    )
-    val zabagedState = rememberZabagedLayerState(
+    val zabagedMap = rememberZabagedCzechMap(
         cameraState = sjtskCameraState,
         basemapEnabled = selectedDemo == MapDemo.Sjtks &&
             selectedBasemap == BasemapOption.CuzkZabaged,
-        overlayEnabled = selectedDemo == MapDemo.Sjtks &&
+        transportOverlayEnabled = selectedDemo == MapDemo.Sjtks &&
             DemoLayerOption.Zabaged in selectedLayers,
     )
 
@@ -341,70 +363,46 @@ fun App() {
                 }
             }
         ) {
-            Scaffold(
-                topBar = {
-                    Surface(shadowElevation = 4.dp) {
-                        TopAppBar(
-                            title = { Text("Tilo.Compose") },
-                            navigationIcon = {
-                                IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
-                                    HamburgerIcon()
-                                }
-                            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(MAP_BACKGROUND_COLOR))
+            ) {
+                when (selectedDemo) {
+                    MapDemo.Sjtks -> {
+                        SjtksShowcaseMap(
+                            cameraState = sjtskCameraState,
+                            selectedBasemap = selectedBasemap,
+                            ortofotoLayer = ortofotoLayer,
+                            ztmLayer = ztmLayer,
+                            selectedLayers = selectedLayers,
+                            zabagedMap = zabagedMap,
+                            transitFeatures = transitFeatures,
+                            selectedTransitFeatures = selectedTransitFeatures,
+                            onTransitSelect = { vehicle ->
+                                selectedTransitVehicleId = vehicle?.id
+                            },
+                            savedDrawingFeatures = savedDrawingFeatures,
+                            drawState = drawState,
+                        )
+                        selectedTransitVehicle?.takeUnless { drawState.isDrawing }?.let { vehicle ->
+                            TransitVehicleCard(
+                                vehicle = vehicle,
+                                onClose = { selectedTransitVehicleId = null },
+                            )
+                        }
+                    }
+                    MapDemo.WebMercatorXyz -> {
+                        WebMercatorXyzExampleMap(
+                            cameraState = mercatorCameraState,
+                            places = mercatorPlaceFeatures,
+                            pragueDetails = pragueDetailFeatures,
                         )
                     }
                 }
-            ) { innerPadding ->
-                Box(
-                    modifier = Modifier
-                        .padding(innerPadding)
-                        .fillMaxSize()
-                        .background(Color(MAP_BACKGROUND_COLOR))
-                ) {
-                    when (selectedDemo) {
-                        MapDemo.Sjtks -> {
-                            SjtksShowcaseMap(
-                                cameraState = sjtskCameraState,
-                                selectedBasemap = selectedBasemap,
-                                ortofotoLayer = ortofotoLayer,
-                                ztmLayer = ztmLayer,
-                                ztmOverviewLayer = ztmOverviewLayer,
-                                selectedLayers = selectedLayers,
-                                zabagedState = zabagedState,
-                                transitFeatures = transitFeatures,
-                                selectedTransitFeatures = selectedTransitFeatures,
-                                onTransitSelect = { vehicle ->
-                                    selectedTransitVehicleId = vehicle?.id
-                                },
-                                savedDrawingFeatures = savedDrawingFeatures,
-                                drawState = drawState,
-                            )
-                            DrawingControls(state = drawState)
-                            if (DemoLayerOption.LiveTransit in selectedLayers) {
-                                TransitStatusBadge(transitState)
-                            }
-                            if (zabagedEnabled && sjtskCameraState.zoom >= 10.0) {
-                                ZabagedStatusBadge(
-                                    state = zabagedState,
-                                    belowTransitBadge = DemoLayerOption.LiveTransit in selectedLayers,
-                                )
-                            }
-                            selectedTransitVehicle?.takeUnless { drawState.isDrawing }?.let { vehicle ->
-                                TransitVehicleCard(
-                                    vehicle = vehicle,
-                                    onClose = { selectedTransitVehicleId = null },
-                                )
-                            }
-                        }
-                        MapDemo.WebMercatorXyz -> {
-                            WebMercatorXyzExampleMap(
-                                cameraState = mercatorCameraState,
-                                places = mercatorPlaceFeatures,
-                                pragueDetails = pragueDetailFeatures,
-                            )
-                        }
-                    }
-                }
+                MapSearchBox(
+                    onMenuClick = { coroutineScope.launch { drawerState.open() } },
+                )
             }
         }
     }
@@ -416,22 +414,15 @@ private fun SjtksShowcaseMap(
     selectedBasemap: BasemapOption,
     ortofotoLayer: WMSLayerState,
     ztmLayer: WMSLayerState,
-    ztmOverviewLayer: WMSLayerState,
     selectedLayers: Set<DemoLayerOption>,
-    zabagedState: ZabagedLayerState,
+    zabagedMap: ZabagedCzechMap,
     transitFeatures: List<Feature>,
     selectedTransitFeatures: Set<FeatureSelectionRef>,
     onTransitSelect: (TransitVehicle?) -> Unit,
     savedDrawingFeatures: List<Feature>,
     drawState: DrawState,
 ) {
-    val backgroundColor = if (
-        selectedBasemap == BasemapOption.CuzkZabaged && cameraState.zoom in 10.0..<12.0
-    ) {
-        ZABAGED_OVERVIEW_BACKGROUND_COLOR
-    } else {
-        MAP_BACKGROUND_COLOR
-    }
+    val backgroundColor = zabagedMap.backgroundColor(cameraState.zoom, MAP_BACKGROUND_COLOR)
     TiloMap(
         cameraState = cameraState,
         modifier = Modifier
@@ -446,144 +437,24 @@ private fun SjtksShowcaseMap(
             )
         },
         selectedFeatures = selectedTransitFeatures,
-        attributionContent = { attributions ->
-            val transitAttributions = if (DemoLayerOption.LiveTransit in selectedLayers) {
-                listOf(
-                    attribution(
-                        label = "KORDIS / data.brno.cz",
-                        url = "https://data.brno.cz/items/e8aa121910df41bb9a28e4ca34a263c7",
-                    )
-                )
-            } else {
-                emptyList()
-            }
-            val zabagedAttributions = if (
-                cameraState.zoom >= 10.0 &&
-                selectedBasemap == BasemapOption.CuzkZabaged ||
-                cameraState.zoom >= 10.0 && DemoLayerOption.Zabaged in selectedLayers
-            ) {
-                listOf(
-                    attribution(
-                        label = "ČÚZK ZABAGED®, CC BY 4.0",
-                        url = "https://ags.cuzk.gov.cz/opendata/",
-                    )
-                )
-            } else {
-                emptyList()
-            }
-            DefaultAttributionOverlay(attributions + zabagedAttributions + transitAttributions)
-        },
+        attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = animatedZoomControlsContent(),
         layers = {
             when (selectedBasemap) {
                 BasemapOption.CuzkOrtofoto -> wmsTileLayer(ortofotoLayer)
-                BasemapOption.CuzkZabaged -> {
-                    wmsTileLayer(ztmOverviewLayer)
-                    featureLayer(
-                        id = "zabaged-pastel-land",
-                        features = zabagedState.landFeatures,
-                    ) {
-                        zIndex = 0
-                        projection = sjtsk()
-                        minZoom = 10.0
-                        renderMode = cachedBitmap(
-                            scale = 1.0,
-                            paddingPx = 192,
-                            invalidateOnZoomDelta = 0.3,
-                        )
-                    }
-                    featureLayer(
-                        id = "zabaged-pastel-buildings",
-                        features = zabagedState.buildingFeatures,
-                    ) {
-                        zIndex = 0
-                        projection = sjtsk()
-                        minZoom = 14.0
-                        renderMode = cachedBitmap(
-                            scale = 1.0,
-                            paddingPx = 128,
-                            invalidateOnZoomDelta = 0.3,
-                        )
-                    }
-                }
+                BasemapOption.CuzkZabaged -> Unit
                 BasemapOption.CuzkZtm -> wmsTileLayer(ztmLayer)
             }
-            if (DemoLayerOption.Zabaged in selectedLayers) {
-                featureLayer("zabaged-boundaries", zabagedState.boundaries) {
-                    zIndex = 1
-                    projection = sjtsk()
-                    minZoom = 10.0
-                    style = featureLayerStyle {
-                        line {
-                            stroke(0xFFFFD600, width = 2.dp, opacity = 0.48)
-                        }
-                    }
-                }
-                featureLayer("zabaged-roads", zabagedState.roads) {
-                    zIndex = 2
-                    projection = sjtsk()
-                    minZoom = 10.0
-                    style = featureLayerStyle {
-                        line {
-                            casing(0xFF475569, width = 4.dp)
-                            stroke(0xFFFFFFFF, width = 2.5.dp)
-                        }
-                        label(0xFFFFFFFF) {
-                            fontSize(11.sp)
-                            fontWeight(MapLabelFontWeight.Bold)
-                            noHalo()
-                            background(
-                                color = 0xFFBE123C,
-                                cornerRadius = 0.dp,
-                                paddingHorizontal = 5.dp,
-                                paddingVertical = 2.dp,
-                            )
-                            offsetY(0.dp)
-                        }
-                    }
-                }
-                featureLayer("zabaged-streets", zabagedState.streets) {
-                    zIndex = 3
-                    projection = sjtsk()
-                    minZoom = 10.0
-                    style = featureLayerStyle {
-                        line {
-                            casing(0xFF64748B, width = 2.8.dp)
-                            stroke(0xFFFFFFFF, width = 1.6.dp)
-                        }
-                        label(0xFF111827) {
-                            fontSize(9.sp)
-                            fontWeight(MapLabelFontWeight.Medium)
-                            halo(0xFFFFFFFF, width = 2.5.dp)
-                            offsetY(1.dp)
-                        }
-                    }
-                }
-                featureLayer("zabaged-municipalities", zabagedState.municipalities) {
-                    zIndex = 4
-                    projection = sjtsk()
-                    minZoom = 10.0
-                    style = featureLayerStyle {
-                        point {
-                            shape = PointShape.Circle
-                            size = 0.dp
-                            fill(0x00000000)
-                            stroke(0x00000000, width = 0.dp)
-                        }
-                        label(0xFF111827) {
-                            fontSize(11.sp)
-                            fontWeight(MapLabelFontWeight.SemiBold)
-                            halo(0xFFFFFFFF, width = 3.dp)
-                            offsetY(0.dp)
-                        }
-                    }
-                }
-            }
+            zabagedCzechMap(zabagedMap)
             if (DemoLayerOption.LiveTransit in selectedLayers) {
                 featureLayer(LiveTransitLayerId, transitFeatures) {
                     zIndex = 5
                     projection = wgs84()
+                    attribution = attribution(
+                        label = "KORDIS / data.brno.cz",
+                        url = "https://data.brno.cz/items/e8aa121910df41bb9a28e4ca34a263c7",
+                    )
                 }
             }
             featureLayer("saved-drawings", savedDrawingFeatures) {
@@ -756,68 +627,6 @@ private fun BoxScope.WebMercatorXyzExampleMap(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun BoxScope.TransitStatusBadge(state: TransitFeedState) {
-    val text = when (state.status) {
-        TransitConnectionStatus.Idle -> "Transit off"
-        TransitConnectionStatus.Connecting -> "Connecting to KORDIS…"
-        TransitConnectionStatus.Live -> "KORDIS live · ${state.vehicles.size} vehicles"
-        TransitConnectionStatus.Reconnecting -> "Reconnecting · ${state.vehicles.size} vehicles"
-    }
-    val color = when (state.status) {
-        TransitConnectionStatus.Live -> Color(0xFF166534)
-        TransitConnectionStatus.Reconnecting -> Color(0xFF9A3412)
-        TransitConnectionStatus.Idle, TransitConnectionStatus.Connecting -> Color(0xFF334155)
-    }
-    Surface(
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .padding(top = 12.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = color.copy(alpha = 0.92f),
-        contentColor = Color.White,
-        shadowElevation = 4.dp,
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelMedium,
-        )
-    }
-}
-
-@Composable
-private fun BoxScope.ZabagedStatusBadge(
-    state: ZabagedLayerState,
-    belowTransitBadge: Boolean,
-) {
-    val error = state.errorMessage
-    if (!state.isLoading && error == null) return
-
-    val text = when {
-        error != null -> "ZABAGED: $error"
-        state.featureCount > 0 -> "Updating ZABAGED… · ${state.featureCount} features"
-        else -> "Loading ZABAGED…"
-    }
-    Surface(
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .padding(top = if (belowTransitBadge) 56.dp else 12.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = Color(if (error == null) 0xFF334155 else 0xFF991B1B).copy(alpha = 0.92f),
-        contentColor = Color.White,
-        shadowElevation = 4.dp,
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 

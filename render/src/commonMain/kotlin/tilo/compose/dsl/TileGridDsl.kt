@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloApi::class)
+
 package tilo.compose.dsl
 
 import tilo.compose.core.tile.TileGrid
@@ -5,6 +7,7 @@ import tilo.compose.core.tile.TileGrid
 /**
  * Standard Web Mercator tile grid used by most public XYZ tile services.
  */
+@ExperimentalTiloApi
 fun webMercatorTileGrid(): TileGrid = TileGrid.WebMercator
 
 /**
@@ -14,6 +17,7 @@ fun webMercatorTileGrid(): TileGrid = TileGrid.WebMercator
  * database uses stable z/x/y addressing but does not follow Web Mercator
  * extents.
  */
+@ExperimentalTiloApi
 fun tileGrid(
     originX: Double,
     originY: Double,

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render
 
 import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
@@ -21,7 +23,7 @@ internal class VectorBitmapRenderer(
     suspend fun render(
         layer: VectorLayer,
         commands: List<RenderCommand>,
-        map: tilo.compose.core.map.Map,
+        map: tilo.compose.core.map.MapState,
         strategy: VectorRenderStrategy.CachedBitmap,
         density: Density,
         layoutDirection: LayoutDirection,
@@ -37,7 +39,7 @@ internal class VectorBitmapRenderer(
             val bitmap = ImageBitmap(bitmapWidth, bitmapHeight)
             val canvas = GraphicsCanvas(bitmap)
             val drawScope = CanvasDrawScope()
-            val bitmapMap = tilo.compose.core.map.Map(
+            val bitmapMap = tilo.compose.core.map.MapState(
                 center = map.center,
                 zoom = map.zoom,
                 projection = map.projection,

@@ -2,7 +2,7 @@ package tilo.compose.core.layers.raster
 
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.TileGrid
@@ -48,36 +48,36 @@ open class RasterTileLayer(
             fetchBytes = source::readTile,
         )
 
-    override suspend fun loadTiles(map: Map): List<Tile> {
+    override suspend fun loadTiles(map: MapState): List<Tile> {
         validateProjection(map)
         return fetcher.fetchTiles(requestPlan(map).visible)
     }
 
-    override suspend fun loadOverviewTiles(map: Map): List<Tile> {
+    override suspend fun loadOverviewTiles(map: MapState): List<Tile> {
         validateProjection(map)
         if (overviewZoomOffset <= 0 || maxOverviewTiles <= 0) return emptyList()
         return fetcher.fetchTiles(overviewRequestPlan(map).visible)
     }
 
-    override suspend fun prefetchOverviewTiles(map: Map) {
+    override suspend fun prefetchOverviewTiles(map: MapState) {
         validateProjection(map)
         if (overviewZoomOffset <= 0 || maxOverviewTiles <= 0 || overviewPrefetchMargin <= 0) return
         fetcher.fetchTiles(overviewRequestPlan(map, prefetchMargin = overviewPrefetchMargin).prefetch)
     }
 
-    override fun planTiles(map: Map): List<Tile> {
+    override fun planTiles(map: MapState): List<Tile> {
         validateProjection(map)
         return requestPlan(map).visible.map { request ->
             Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = null)
         }
     }
 
-    override suspend fun prefetchTiles(map: Map) {
+    override suspend fun prefetchTiles(map: MapState) {
         validateProjection(map)
         fetcher.fetchTiles(requestPlan(map).prefetch)
     }
 
-    private fun requestPlan(map: Map): TileRequestPlan {
+    private fun requestPlan(map: MapState): TileRequestPlan {
         val preferredZoom = grid.zoomForViewport(map.zoom, map.viewport, projection)
         return requestPlan(
             map = map,
@@ -88,7 +88,7 @@ open class RasterTileLayer(
     }
 
     private fun overviewRequestPlan(
-        map: Map,
+        map: MapState,
         prefetchMargin: Int = 0,
     ): TileRequestPlan {
         val preferredZoom =
@@ -103,7 +103,7 @@ open class RasterTileLayer(
     }
 
     private fun requestPlan(
-        map: Map,
+        map: MapState,
         preferredZoom: Int,
         maxVisibleTiles: Int,
         prefetchMargin: Int,

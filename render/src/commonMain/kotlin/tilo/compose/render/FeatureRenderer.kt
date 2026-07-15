@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
@@ -16,7 +18,7 @@ import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.PointShape
 import tilo.compose.core.feature.StrokeStyle
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -30,7 +32,7 @@ import kotlin.math.sqrt
  */
 internal fun DrawScope.drawFeatureGeometry(
     commands: List<RenderCommand>,
-    map: Map,
+    map: MapState,
 ) {
     commands.forEach { command ->
         when (command) {
@@ -42,12 +44,11 @@ internal fun DrawScope.drawFeatureGeometry(
     }
 }
 
-private fun DrawScope.drawPoint(command: RenderPoint, map: Map) {
+private fun DrawScope.drawPoint(command: RenderPoint, map: MapState) {
     val screenPoint = map.worldToScreen(command.point)
     val center = Offset(screenPoint.x.toFloat(), screenPoint.y.toFloat())
     val size = styleUnitToPx(command.style.size).coerceAtLeast(1f)
 
-    // TODO: render command.style.icon once icon sources and caching are part of the public API.
     command.style.fill?.let { fill ->
         drawPointFill(shape = command.style.shape, center = center, size = size, fill = fill)
     }
@@ -56,7 +57,7 @@ private fun DrawScope.drawPoint(command: RenderPoint, map: Map) {
     }
 }
 
-private fun DrawScope.drawLineString(command: RenderLineString, map: Map) {
+private fun DrawScope.drawLineString(command: RenderLineString, map: MapState) {
     if (command.points.size < 2) return
     val path = command.points.toOpenPath(map)
     command.style.casing?.let { casing ->
@@ -73,7 +74,7 @@ private fun DrawScope.drawLineString(command: RenderLineString, map: Map) {
     )
 }
 
-private fun DrawScope.drawPolygon(command: RenderPolygon, map: Map) {
+private fun DrawScope.drawPolygon(command: RenderPolygon, map: MapState) {
     val path = command.rings.toPath(map)
     if (path.isEmpty) return
 
@@ -165,7 +166,7 @@ private fun pointPath(shape: PointShape, center: Offset, size: Float): Path? {
     }
 }
 
-private fun List<tilo.compose.core.geometry.Point>.toOpenPath(map: Map): Path {
+private fun List<tilo.compose.core.geometry.Point>.toOpenPath(map: MapState): Path {
     val path = Path()
     val first = map.worldToScreen(first())
     path.moveTo(first.x.toFloat(), first.y.toFloat())
@@ -176,7 +177,7 @@ private fun List<tilo.compose.core.geometry.Point>.toOpenPath(map: Map): Path {
     return path
 }
 
-private fun List<List<tilo.compose.core.geometry.Point>>.toPath(map: Map): Path {
+private fun List<List<tilo.compose.core.geometry.Point>>.toPath(map: MapState): Path {
     val path = Path().apply {
         fillType = PathFillType.EvenOdd
     }
@@ -277,7 +278,7 @@ private fun DrawScope.toPathEffect(dash: DashPattern?): PathEffect? {
     return PathEffect.dashPathEffect(validIntervals.toFloatArray(), styleUnitToPx(dash.phase))
 }
 
-private fun List<List<tilo.compose.core.geometry.Point>>.screenBounds(map: Map): ScreenBounds {
+private fun List<List<tilo.compose.core.geometry.Point>>.screenBounds(map: MapState): ScreenBounds {
     var left = Float.POSITIVE_INFINITY
     var top = Float.POSITIVE_INFINITY
     var right = Float.NEGATIVE_INFINITY

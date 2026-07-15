@@ -5,4 +5,4 @@ import io.ktor.client.HttpClient
 /**
  * Platform-specific shared HttpClient singleton.
  */
-expect fun sharedHttpClient(): HttpClient
+internal expect fun sharedHttpClient(): HttpClient

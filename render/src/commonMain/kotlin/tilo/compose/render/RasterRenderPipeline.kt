@@ -7,7 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.tile.Tile
-import tilo.compose.core.map.Map as MapState
+import tilo.compose.core.map.MapState
 
 internal data class RasterFrame(
     val tilesByLayer: Map<String, List<Tile>>,

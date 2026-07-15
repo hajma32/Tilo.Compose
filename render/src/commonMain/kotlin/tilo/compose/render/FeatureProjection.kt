@@ -8,7 +8,7 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import tilo.compose.core.projection.Projection
 
 /**
@@ -18,7 +18,7 @@ import tilo.compose.core.projection.Projection
 internal fun transformFeaturesToMapProjection(
     features: List<Feature>,
     featuresSourceProjection: Projection?,
-    map: Map
+    map: MapState
 ): List<Feature> {
     val source = featuresSourceProjection ?: return features
     if (source === map.projection) return features
@@ -32,7 +32,7 @@ internal fun transformFeaturesToMapProjection(
 
 private fun transformGeometry(
     geometry: Geometry,
-    map: Map,
+    map: MapState,
     source: Projection
 ): Geometry {
     fun tp(p: Point) = map.transformSourceToTarget(p, source, map.projection)

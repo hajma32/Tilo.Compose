@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import tilo.compose.core.tile.Tile
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -25,7 +25,7 @@ private const val TILE_PLACEHOLDER_BORDER_WIDTH_PX = 1f
 internal fun DrawScope.drawTiles(
     tiles: List<Tile>,
     tileDecoder: (ByteArray) -> ImageBitmap?,
-    map: Map,
+    map: MapState,
     decodedImages: List<ImageBitmap?>? = null
 ) {
     val tileImages = tiles.mapIndexed { idx, tile ->
@@ -42,7 +42,7 @@ internal fun DrawScope.drawTiles(
 private fun DrawScope.drawTile(
     tile: Tile,
     image: ImageBitmap?,
-    map: Map,
+    map: MapState,
 ) {
     val rect = tile.screenRect(map)
 
@@ -57,7 +57,7 @@ private fun DrawScope.drawTile(
     }
 }
 
-private fun Tile.screenRect(map: Map): TileScreenRect {
+private fun Tile.screenRect(map: MapState): TileScreenRect {
     val topLeft = map.worldToScreen(bounds.topLeft)
     val bottomRight = map.worldToScreen(bounds.bottomRight)
 

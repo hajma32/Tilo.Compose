@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
@@ -25,6 +27,7 @@ import kotlin.math.ceil
 
 private const val DEFAULT_LABEL_CACHE_SIZE = 2_048
 
+@ExperimentalTiloRenderingApi
 class LabelBitmapCache(
     private val maxEntries: Int = DEFAULT_LABEL_CACHE_SIZE,
 ) {

@@ -1,6 +1,7 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render
 
-import tilo.compose.core.feature.BaseStyle
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.feature.Feature
@@ -20,20 +21,20 @@ import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 import tilo.compose.core.geometry.bounds
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.hypot
 
 /**
- * Builds a flat list of [RenderCommand]s visible in the current [Map] view.
+ * Builds a flat list of [RenderCommand]s visible in the current [MapState] view.
  *
- * Positioning is done exclusively via [Map.worldToScreen] — no CRS knowledge here.
+ * Positioning is done exclusively via [MapState.worldToScreen] — no CRS knowledge here.
  */
-object CommandBuilder {
+internal object CommandBuilder {
 
     internal fun build(
-        map: Map,
+        map: MapState,
         features: List<Feature>,
         layerId: String? = null,
         selectedFeatureKeys: Set<String> = emptySet(),
@@ -72,7 +73,7 @@ object CommandBuilder {
         }
     }
 
-    private fun visibleBounds(map: Map): BoundingBox {
+    private fun visibleBounds(map: MapState): BoundingBox {
         val topLeft = map.screenToWorld(Point(0.0, 0.0))
         val bottomRight = map.screenToWorld(Point(map.viewport.width.toDouble(), map.viewport.height.toDouble()))
 
@@ -84,17 +85,17 @@ object CommandBuilder {
         val padX = (maxX - minX) * 0.1
         val padY = (maxY - minY) * 0.1
 
-        return BoundingBox(
-            topLeft = Point(minX - padX, maxY + padY),
-            topRight = Point(maxX + padX, maxY + padY),
-            bottomLeft = Point(minX - padX, minY - padY),
-            bottomRight = Point(maxX + padX, minY - padY)
+        return BoundingBox.fromExtents(
+            minX = minX - padX,
+            maxX = maxX + padX,
+            minY = minY - padY,
+            maxY = maxY + padY,
         )
     }
 
     private fun geometryToCommands(
         baseId: String,
-        map: Map,
+        map: MapState,
         geometry: Geometry,
         style: GeometryStyle?
     ): List<RenderCommand> {
@@ -135,7 +136,7 @@ object CommandBuilder {
         }
     }
 
-    private fun labelPlacement(geometry: Geometry, map: Map): LabelPlacement? =
+    private fun labelPlacement(geometry: Geometry, map: MapState): LabelPlacement? =
         when (geometry) {
             is LineString -> lineLabelPlacement(geometry.points, map)
             is MultiLineString -> geometry.lines
@@ -162,7 +163,7 @@ object CommandBuilder {
         )
     }
 
-    private fun lineLabelPlacement(points: List<Point>, map: Map): LabelPlacement? {
+    private fun lineLabelPlacement(points: List<Point>, map: MapState): LabelPlacement? {
         if (points.isEmpty()) return null
         if (points.size == 1) return LabelPlacement(anchor = points.first(), rotationDegrees = 0.0, followsLine = false)
 
@@ -204,7 +205,7 @@ object CommandBuilder {
         )
     }
 
-    private fun LineString.screenLength(map: Map): Double =
+    private fun LineString.screenLength(map: MapState): Double =
         points.zipWithNext().sumOf { (start, end) ->
             val startScreen = map.worldToScreen(start)
             val endScreen = map.worldToScreen(end)
@@ -276,7 +277,6 @@ private fun Geometry.defaultSelectedStyle(baseStyle: GeometryStyle?): GeometrySt
             size = maxOf((baseStyle as? PointStyle)?.size ?: PointStyle().size, 22.0),
             fill = (baseStyle as? PointStyle)?.fill ?: FillStyle(color = ColorValue(0xFFFFD54Fu)),
             stroke = StrokeStyle(color = ColorValue(0xFF111827u), width = 4.0),
-            icon = (baseStyle as? PointStyle)?.icon,
         )
         is LineString, is MultiLineString -> LineStyle(
             stroke = StrokeStyle(
@@ -299,44 +299,18 @@ private fun Geometry.defaultSelectedStyle(baseStyle: GeometryStyle?): GeometrySt
 private fun GeometryStyle?.toPointStyle(): PointStyle =
     when (this) {
         is PointStyle -> this
-        is BaseStyle -> PointStyle(
-            fill = fillColor?.let { FillStyle(color = it.toColorValue()) },
-            stroke = strokeColor?.let {
-                StrokeStyle(
-                    color = it.toColorValue(),
-                    width = strokeWidth ?: 2.0,
-                )
-            },
-        )
         else -> PointStyle()
     }
 
 private fun GeometryStyle?.toLineStyle(): LineStyle =
     when (this) {
         is LineStyle -> this
-        is BaseStyle -> LineStyle(
-            casing = null,
-            stroke = StrokeStyle(
-                color = strokeColor?.toColorValue() ?: ColorValue.Blue,
-                width = strokeWidth ?: 2.0,
-            )
-        )
         else -> LineStyle()
     }
 
 private fun GeometryStyle?.toPolygonStyle(): PolygonStyle =
     when (this) {
         is PolygonStyle -> this
-        is BaseStyle -> PolygonStyle(
-            fill = fillColor?.let { FillStyle(color = it.toColorValue()) },
-            casing = null,
-            stroke = strokeColor?.let {
-                StrokeStyle(
-                    color = it.toColorValue(),
-                    width = strokeWidth ?: 1.5,
-                )
-            },
-        )
         else -> PolygonStyle()
     }
 
@@ -345,9 +319,5 @@ private fun GeometryStyle?.labelColor(): ColorValue =
         is PointStyle -> stroke?.color ?: fill?.color ?: ColorValue.Black
         is LineStyle -> stroke.color
         is PolygonStyle -> stroke?.color ?: fill?.color ?: ColorValue.Black
-        is BaseStyle -> strokeColor?.toColorValue() ?: fillColor?.toColorValue() ?: ColorValue.Black
         else -> ColorValue.Black
     }
-
-private fun Long.toColorValue(): ColorValue =
-    ColorValue((this and 0xFFFFFFFFL).toULong())

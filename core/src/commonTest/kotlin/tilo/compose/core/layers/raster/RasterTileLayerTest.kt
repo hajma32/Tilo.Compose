@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import tilo.compose.core.geometry.Point
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg5514Projection
@@ -48,7 +48,7 @@ class RasterTileLayerTest {
             )
         val layer = RasterTileLayer(id = "offline", source = source)
         val map =
-            Map(
+            MapState(
                 center = Point(0.0, 0.0),
                 zoom = 0.0,
                 viewport = Viewport(width = 256, height = 256),

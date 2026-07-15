@@ -37,4 +37,4 @@ private val sharedClient: HttpClient by lazy {
     }
 }
 
-actual fun sharedHttpClient(): HttpClient = sharedClient
+internal actual fun sharedHttpClient(): HttpClient = sharedClient

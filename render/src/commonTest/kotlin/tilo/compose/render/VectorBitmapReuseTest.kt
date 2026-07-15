@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render
 
 import kotlin.test.Test
@@ -8,7 +10,7 @@ import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.render.backend.VectorBitmapSnapshot
 
@@ -54,7 +56,7 @@ class VectorBitmapReuseTest {
         assertEquals(first.cacheKey(), rebuilt.cacheKey())
     }
 
-    private fun testMap() = Map(
+    private fun testMap() = MapState(
         center = Point(0.0, 0.0),
         zoom = 10.0,
         viewport = Viewport(width = 1_000, height = 800),

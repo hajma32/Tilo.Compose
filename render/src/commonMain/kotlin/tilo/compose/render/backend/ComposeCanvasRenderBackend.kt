@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render.backend
 
 import androidx.compose.foundation.Canvas
@@ -10,16 +12,18 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.LabelBitmapCache
 import tilo.compose.render.LabelLayoutEngine
 import tilo.compose.render.RenderLabel
 import tilo.compose.render.drawFeatureGeometry
 import tilo.compose.render.drawPlacedLabels
 import tilo.compose.render.drawTiles
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
+@ExperimentalTiloRenderingApi
 object ComposeCanvasRenderBackend : RenderBackend {
     override val id: String = "compose-canvas"
     private val labelLayoutEngine = LabelLayoutEngine()
@@ -28,7 +32,7 @@ object ComposeCanvasRenderBackend : RenderBackend {
     override fun Content(
         modifier: Modifier,
         scene: RenderScene,
-        map: Map,
+        map: MapState,
         tileDecoder: ((ByteArray) -> ImageBitmap?)?,
         offscreenLabelDrawScope: CanvasDrawScope,
         textMeasurer: TextMeasurer,
@@ -50,7 +54,7 @@ object ComposeCanvasRenderBackend : RenderBackend {
 
 internal fun DrawScope.drawRenderScene(
     scene: RenderScene,
-    map: Map,
+    map: MapState,
     tileDecoder: ((ByteArray) -> ImageBitmap?)?,
     labelLayoutEngine: LabelLayoutEngine = LabelLayoutEngine(),
     offscreenLabelDrawScope: CanvasDrawScope,
@@ -105,7 +109,7 @@ internal fun DrawScope.drawRenderScene(
 
 private fun DrawScope.drawVectorBitmapLayer(
     layer: VectorBitmapRenderSceneLayer,
-    map: Map,
+    map: MapState,
 ) {
     val anchor = map.worldToScreen(layer.snapshot.center)
     val scale = 2.0.pow(map.zoom - layer.snapshot.zoom).toFloat()

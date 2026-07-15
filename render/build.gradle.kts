@@ -13,11 +13,11 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(project(":core"))
-                implementation(project(":geocore"))
-                implementation(libs.compose.runtime)
-                implementation(libs.compose.foundation)
-                implementation(libs.compose.ui)
+                api(project(":core"))
+                api(project(":geocore"))
+                api(libs.compose.runtime)
+                api(libs.compose.foundation)
+                api(libs.compose.ui)
             }
         }
         val commonTest by getting {

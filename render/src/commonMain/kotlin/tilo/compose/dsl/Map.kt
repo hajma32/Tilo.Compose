@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloApi::class, ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.dsl
 
 import androidx.compose.animation.core.AnimationSpec
@@ -30,7 +32,6 @@ import tilo.compose.core.layers.raster.TileRowScheme
 import tilo.compose.core.layers.raster.TileStoreTileSource
 import tilo.compose.core.layers.raster.XYZTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
-import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.map.MapCameraController
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
@@ -43,11 +44,8 @@ import tilo.compose.core.scale.ScaleBar
 import tilo.compose.core.scale.ScaleBarCalculator
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
+import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.MapRenderer
-import tilo.compose.render.backend.ComposeCanvasRenderBackend
-import tilo.compose.render.backend.RenderBackend
-
-typealias FeatureRenderMode = VectorRenderStrategy
 
 /**
  * Immutable camera snapshot suitable for viewport-dependent data loading.
@@ -55,6 +53,7 @@ typealias FeatureRenderMode = VectorRenderStrategy
  * [bounds] and [resolution] use the map projection's coordinate units. A snapshot is not ready
  * until the map has received a non-empty viewport from layout.
  */
+@ExperimentalTiloApi
 data class MapViewportSnapshot(
     val bounds: BoundingBox,
     val zoom: Double,
@@ -72,6 +71,7 @@ data class MapViewportSnapshot(
  * Create it with [rememberMapCameraState] and pass the same instance to the map
  * across recompositions. Coordinates are expressed in [projection].
  */
+@ExperimentalTiloApi
 class MapCameraState internal constructor(
     internal val mapState: MapState,
 ) : MapCameraController {
@@ -285,6 +285,8 @@ class MapCameraState internal constructor(
  * Prefer high-level methods such as [wmsTileLayer], [featureLayer], and
  * [rasterLayer]. Use [layer] or unary `+` when integrating a custom layer.
  */
+@ExperimentalTiloApi
+@TiloDsl
 class MapLayerBuilder : LayerSink {
     private val items = mutableListOf<Layer>()
 
@@ -446,8 +448,10 @@ class MapLayerBuilder : LayerSink {
         minZoom: Double? = null,
         maxZoom: Double? = null,
         projection: Projection? = null,
-        renderMode: FeatureRenderMode = VectorRenderStrategy.Immediate,
+        renderMode: FeatureRenderMode = immediate(),
         style: FeatureLayerStyle = FeatureLayerStyle(),
+        attribution: Attribution? = null,
+        attributions: List<Attribution> = emptyList(),
     ) {
         layer(
             FeatureLayer(
@@ -457,8 +461,9 @@ class MapLayerBuilder : LayerSink {
                 minZoom = minZoom,
                 maxZoom = maxZoom,
                 projection = projection,
+                attributions = attributions.withSingle(attribution),
                 features = features,
-                renderStrategy = renderMode,
+                renderStrategy = renderMode.toVectorRenderStrategy(),
                 style = style,
             )
         )
@@ -480,6 +485,8 @@ class MapLayerBuilder : LayerSink {
             projection = options.projection,
             renderMode = options.renderMode,
             style = options.style,
+            attribution = options.attribution,
+            attributions = options.attributions,
         )
     }
 
@@ -489,41 +496,25 @@ class MapLayerBuilder : LayerSink {
 /**
  * Options for a vector layer declared with [MapLayerBuilder.featureLayer].
  */
+@ExperimentalTiloApi
+@TiloDsl
 class FeatureLayerOptions {
     var zIndex: Int = 0
     var visible: Boolean = true
     var minZoom: Double? = null
     var maxZoom: Double? = null
     var projection: Projection? = null
-    var renderMode: FeatureRenderMode = VectorRenderStrategy.Immediate
+    var renderMode: FeatureRenderMode = immediate()
     var style: FeatureLayerStyle = FeatureLayerStyle()
+    var attribution: Attribution? = null
+    var attributions: List<Attribution> = emptyList()
 }
-
-/**
- * Draw vector features directly every frame.
- */
-fun immediate(): FeatureRenderMode = VectorRenderStrategy.Immediate
-
-/**
- * Render vector features into an offscreen bitmap and reuse it while panning.
- *
- * This is useful for heavier, mostly static feature layers.
- */
-fun cachedBitmap(
-    scale: Double = 1.0,
-    paddingPx: Int = 128,
-    invalidateOnZoomDelta: Double = 0.35,
-): FeatureRenderMode =
-    VectorRenderStrategy.CachedBitmap(
-        scale = scale,
-        paddingPx = paddingPx,
-        invalidateOnZoomDelta = invalidateOnZoomDelta,
-    )
 
 /**
  * Remembers camera state for [TiloMap].
  */
 @Composable
+@ExperimentalTiloApi
 fun rememberMapCameraState(
     center: Point = Point(0.0, 0.0),
     zoom: Double = 0.0,
@@ -547,10 +538,10 @@ fun rememberMapCameraState(
  * Declare raster, vector, drawing, and custom layers in [layers].
  */
 @Composable
-fun TiloMap(
+@ExperimentalTiloApi
+Oprfun TiloMap(
     cameraState: MapCameraState,
     modifier: Modifier = Modifier,
-    backend: RenderBackend = ComposeCanvasRenderBackend,
     onTapWorld: ((Point) -> Unit)? = null,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
@@ -567,7 +558,6 @@ fun TiloMap(
         MapRendererLayer(
             cameraState = cameraState,
             layers = builtLayers,
-            backend = backend,
             onTapWorld = onTapWorld,
             onFeatureSelect = onFeatureSelect,
             selectedFeatures = selectedFeatures,
@@ -609,7 +599,6 @@ private fun BoxScope.AttributionOverlay(
 private fun MapRendererLayer(
     cameraState: MapCameraState,
     layers: List<Layer>,
-    backend: RenderBackend,
     onTapWorld: ((Point) -> Unit)?,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
     selectedFeatures: Set<FeatureSelectionRef>,
@@ -620,7 +609,6 @@ private fun MapRendererLayer(
         map = cameraState.mapState,
         layers = layers,
         modifier = Modifier.fillMaxSize(),
-        backend = backend,
         onTapWorld = onTapWorld,
         onFeatureSelect = onFeatureSelect,
         selectedFeatures = selectedFeatures,

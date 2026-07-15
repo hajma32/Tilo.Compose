@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloApi::class)
+
 package tilo.compose.dsl
 
 import androidx.compose.runtime.Composable
@@ -16,6 +18,7 @@ import tilo.compose.core.projection.Projection
 /**
  * State holder for a WMS tile layer loaded from GetCapabilities.
  */
+@ExperimentalTiloApi
 class WMSLayerState internal constructor() {
     internal var layer: WMSTileLayer? by mutableStateOf(null)
         internal set
@@ -33,6 +36,7 @@ class WMSLayerState internal constructor() {
  * Pass the returned state to `wmsTileLayer(state)` inside [TiloMap].
  */
 @Composable
+@ExperimentalTiloApi
 fun rememberWMSLayer(
     id: String,
     capabilitiesUrl: String,
@@ -137,6 +141,7 @@ fun rememberWMSLayer(
  * Layer order is preserved in the comma-separated WMS `LAYERS` parameter.
  */
 @Composable
+@ExperimentalTiloApi
 fun rememberWMSLayer(
     id: String,
     capabilitiesUrl: String,

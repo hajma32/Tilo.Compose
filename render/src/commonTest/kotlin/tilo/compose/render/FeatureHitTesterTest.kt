@@ -6,7 +6,7 @@ import kotlin.test.assertTrue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.vector.FeatureLayer
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
@@ -103,8 +103,8 @@ class FeatureHitTesterTest {
         assertTrue(selections.isEmpty())
     }
 
-    private fun mercatorMap(center: Point): Map =
-        Map(
+    private fun mercatorMap(center: Point): MapState =
+        MapState(
             center = center,
             zoom = 11.5,
             projection = Epsg3857Projection,

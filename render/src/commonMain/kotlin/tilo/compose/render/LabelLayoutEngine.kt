@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
@@ -7,7 +9,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -28,7 +30,7 @@ internal class LabelLayoutEngine(
 ) {
     fun layout(
         labels: List<RenderLabel>,
-        map: Map,
+        map: MapState,
         drawScope: DrawScope,
         textMeasurer: TextMeasurer,
         labelBitmapCache: LabelBitmapCache,
@@ -72,7 +74,7 @@ internal class LabelLayoutEngine(
 
     private fun RenderLabel.toCandidate(
         order: Int,
-        map: Map,
+        map: MapState,
         drawScope: DrawScope,
         textMeasurer: TextMeasurer,
         labelBitmapCache: LabelBitmapCache,

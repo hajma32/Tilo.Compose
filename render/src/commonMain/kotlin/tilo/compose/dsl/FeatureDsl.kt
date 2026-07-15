@@ -1,6 +1,7 @@
+@file:OptIn(ExperimentalTiloApi::class)
+
 package tilo.compose.dsl
 
-import tilo.compose.core.feature.Callout
 import tilo.compose.core.feature.Data
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.GeometryStyle
@@ -17,12 +18,15 @@ import tilo.compose.core.geometry.Polygon
  * Builds a list of vector features with stable keys and optional style/label
  * metadata.
  */
+@ExperimentalTiloApi
 fun features(block: FeatureListBuilder.() -> Unit): List<Feature> =
     FeatureListBuilder().apply(block).build()
 
 /**
  * Builder used by [features].
  */
+@ExperimentalTiloApi
+@TiloDsl
 class FeatureListBuilder {
     private val items = mutableListOf<Feature>()
 
@@ -44,7 +48,6 @@ class FeatureListBuilder {
             labelPriority = options.labelPriority,
             labelStyle = options.labelStyle,
             selectedLabelStyle = options.selectedLabelStyle,
-            callout = options.callout,
             data = options.data,
         )
     }
@@ -146,6 +149,8 @@ class FeatureListBuilder {
 /**
  * Optional metadata applied to a feature created in [features].
  */
+@ExperimentalTiloApi
+@TiloDsl
 class FeatureOptions {
     /**
      * Text rendered near the feature geometry.
@@ -161,7 +166,6 @@ class FeatureOptions {
     var selectedStyle: GeometryStyle? = null
     var labelStyle: LabelStyle? = null
     var selectedLabelStyle: LabelStyle? = null
-    var callout: Callout? = null
     var data: Data? = null
 
     /**

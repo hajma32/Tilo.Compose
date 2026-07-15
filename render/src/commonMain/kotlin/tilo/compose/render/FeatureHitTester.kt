@@ -2,7 +2,7 @@ package tilo.compose.render
 
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.layers.vector.VectorLayer
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import tilo.compose.core.selection.FeatureHitTestFeature
 import tilo.compose.core.selection.FeatureHitTestLayer
 import tilo.compose.core.selection.FeatureHitTester as CoreFeatureHitTester
@@ -11,7 +11,7 @@ import tilo.compose.core.geometry.Point
 
 internal class FeatureHitTester {
     fun hitTest(
-        map: Map,
+        map: MapState,
         layers: List<VectorLayer>,
         screenPoint: Point,
     ): List<FeatureSelection> {
@@ -41,6 +41,6 @@ internal class FeatureHitTester {
         )
     }
 
-    private fun Feature.geometryInMapProjection(layer: VectorLayer, map: Map) =
+    private fun Feature.geometryInMapProjection(layer: VectorLayer, map: MapState) =
         transformFeaturesToMapProjection(listOf(this), layer.projection, map).first().geometry
 }

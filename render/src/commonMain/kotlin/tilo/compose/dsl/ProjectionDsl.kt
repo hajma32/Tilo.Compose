@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloApi::class)
+
 package tilo.compose.dsl
 
 import tilo.compose.core.projection.Epsg3857Projection
@@ -9,24 +11,29 @@ import tilo.compose.core.projection.Projection
 /**
  * WGS 84 longitude/latitude coordinates, EPSG:4326.
  */
+@ExperimentalTiloApi
 fun wgs84(): Projection = Epsg4326Projection
 
 /**
  * Web Mercator projected coordinates, EPSG:3857.
  */
+@ExperimentalTiloApi
 fun webMercator(): Projection = Epsg3857Projection
 
 /**
  * S-JTSK / Krovak East North, EPSG:5514.
  */
+@ExperimentalTiloApi
 fun sjtsk(): Projection = Epsg5514Projection
 
 /**
  * Explicit alias for [sjtsk].
  */
+@ExperimentalTiloApi
 fun epsg5514(): Projection = Epsg5514Projection
 
 /**
  * Identity cartesian coordinate space.
  */
+@ExperimentalTiloApi
 fun identityProjection(): Projection = IdentityProjection

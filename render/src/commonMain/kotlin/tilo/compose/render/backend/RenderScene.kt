@@ -1,17 +1,21 @@
 @file:Suppress("unused")
+@file:OptIn(ExperimentalTiloRenderingApi::class)
 
 package tilo.compose.render.backend
 
 import androidx.compose.ui.graphics.ImageBitmap
+import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.RenderCommand
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.tile.Tile
 
+@ExperimentalTiloRenderingApi
 sealed interface RenderSceneLayer {
     val id: String
     val zIndex: Int
 }
 
+@ExperimentalTiloRenderingApi
 data class RasterRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
@@ -19,12 +23,14 @@ data class RasterRenderSceneLayer(
     val decodedImages: List<ImageBitmap?>? = null
 ) : RenderSceneLayer
 
+@ExperimentalTiloRenderingApi
 class VectorRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
     val commands: List<RenderCommand>
 ) : RenderSceneLayer
 
+@ExperimentalTiloRenderingApi
 data class VectorBitmapRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
@@ -32,6 +38,7 @@ data class VectorBitmapRenderSceneLayer(
     val snapshot: VectorBitmapSnapshot,
 ) : RenderSceneLayer
 
+@ExperimentalTiloRenderingApi
 data class VectorBitmapSnapshot(
     val center: Point,
     val zoom: Double,
@@ -41,6 +48,7 @@ data class VectorBitmapSnapshot(
     val displayHeight: Int,
 )
 
+@ExperimentalTiloRenderingApi
 data class RenderScene(
     val layers: List<RenderSceneLayer>
 ) {

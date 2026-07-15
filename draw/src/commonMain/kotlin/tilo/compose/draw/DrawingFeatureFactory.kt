@@ -5,7 +5,7 @@ import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
 
-class DrawingFeatureFactory(
+internal class DrawingFeatureFactory(
     private val style: DrawStyle = DefaultDrawStyle(),
 ) {
     fun draftFeatures(mode: DrawMode, points: List<Point>): List<Feature> =

@@ -9,9 +9,9 @@ import androidx.compose.runtime.setValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
 
-class DrawState(
+class DrawState internal constructor(
     initialMode: DrawMode = DrawMode.Point,
-    private val featureFactory: DrawingFeatureFactory = DrawingFeatureFactory(),
+    private val featureFactory: DrawingFeatureFactory,
     private val onSave: (Feature) -> Unit = {},
     private val onChange: (DrawState) -> Unit = {},
 ) {

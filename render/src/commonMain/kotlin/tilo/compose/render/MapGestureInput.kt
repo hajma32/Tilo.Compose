@@ -21,7 +21,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import tilo.compose.core.geometry.Point
-import tilo.compose.core.map.Map
+import tilo.compose.core.map.MapState
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
@@ -33,7 +33,7 @@ import kotlin.math.ln
  */
 @Composable
 internal fun Modifier.mapGestureInput(
-    map: Map,
+    map: MapState,
     onChanged: () -> Unit
 ): Modifier {
     val currentMap = rememberUpdatedState(map)
@@ -156,7 +156,7 @@ internal fun Modifier.mapGestureInput(
 
 @Composable
 internal fun Modifier.mapTapInput(
-    map: Map,
+    map: MapState,
     onTap: ((screenPoint: Point, worldPoint: Point) -> Unit)?,
     onChanged: () -> Unit,
 ): Modifier {
@@ -212,7 +212,7 @@ private const val DoubleTapZoomDurationNanos = 420_000_000L
 
 private suspend fun animateInertialPan(
     initialVelocity: Offset,
-    map: Map,
+    map: MapState,
     onChanged: () -> Unit,
 ) {
     var velocity = initialVelocity * initialVelocity.boostMultiplier()
@@ -237,7 +237,7 @@ private suspend fun animateInertialPan(
 
 private suspend fun animateDoubleTapZoom(
     focus: Point,
-    map: Map,
+    map: MapState,
     onChanged: () -> Unit,
 ) {
     val targetZoom = (map.zoom + DoubleTapZoomDelta).coerceIn(map.config.minZoom, map.config.maxZoom)
@@ -262,7 +262,7 @@ private suspend fun animateDoubleTapZoom(
 private suspend fun animateInertialZoom(
     initialVelocity: Double,
     focus: Point?,
-    map: Map,
+    map: MapState,
     onChanged: () -> Unit,
 ) {
     var velocity = initialVelocity * initialVelocity.zoomBoostMultiplier()

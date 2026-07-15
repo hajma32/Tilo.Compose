@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render
 
 import androidx.compose.runtime.Composable
@@ -39,12 +41,13 @@ import tilo.compose.core.map.Viewport
 import tilo.compose.core.selection.FeatureSelection
 import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.Tile
-import tilo.compose.core.map.Map as MapState
+import tilo.compose.core.map.MapState
 
 /**
  * Compose-first map renderer that builds a backend-agnostic [RenderScene].
  */
 @Composable
+@ExperimentalTiloRenderingApi
 fun MapRenderer(
     map: MapState,
     layers: List<Layer>,

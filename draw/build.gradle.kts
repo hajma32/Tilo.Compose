@@ -16,8 +16,8 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(project(":geocore"))
-                implementation(libs.compose.runtime)
+                api(project(":geocore"))
+                api(libs.compose.runtime)
             }
         }
         val commonTest by getting {

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.render
 
 import androidx.compose.ui.unit.Density
@@ -10,7 +12,7 @@ import kotlinx.coroutines.withContext
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.selection.FeatureSelectionRef
-import tilo.compose.core.map.Map as MapState
+import tilo.compose.core.map.MapState
 import kotlin.math.abs
 import kotlin.math.pow
 

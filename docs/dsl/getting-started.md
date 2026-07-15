@@ -9,28 +9,27 @@ val cameraState = rememberMapCameraState(
     projection = sjtsk(),
 )
 
-val ortofoto = rememberWMSLayer(
-    id = "cuzk-ortofoto",
-    capabilitiesUrl = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer",
-    layerName = "0",
-    projection = sjtsk(),
-    format = "image/jpeg",
-)
-
 TiloMap(
     cameraState = cameraState,
     attributionContent = defaultAttributionContent(),
     scaleBarContent = defaultScaleBarContent(),
     cameraControlsContent = defaultZoomControlsContent(),
 ) {
-    wmsTileLayer(ortofoto)
+    wmsTileLayer(
+        id = "cuzk-ortofoto",
+        capabilitiesUrl = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer",
+        layerName = "0",
+        projection = sjtsk(),
+        format = "image/jpeg",
+    )
 }
 ```
 
 The important pieces are:
 
 - `rememberMapCameraState(...)` owns the visible map position and projection.
-- `rememberWMSLayer(...)` loads WMS capabilities and creates a tile layer state.
+- `wmsTileLayer(...)` declares a WMS source; the map loads its capabilities and owns its runtime.
+- `rememberRasterLayerState()` optionally exposes loading, readiness, recoverable tile errors, and retry.
 - `TiloMap { ... }` declares the visible layers.
 - Optional UI slots add attribution, scale bar, and zoom controls without making
   them mandatory.

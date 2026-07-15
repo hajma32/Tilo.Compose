@@ -88,14 +88,13 @@ surface as of now.
 
 Inside `TiloMap { ... }`:
 
-- `wmsTileLayer(state)`
+- `wmsTileLayer(...)`
 - `xyzTileLayer(...)`
 - `tileStoreLayer(...)`
 - `featureLayer(id, features, ...)`
 - `featureLayer(id, features) { ... }`
 - `rasterLayer(layer)`
 - `tileLayer(layer)`
-- `tileLayer(state)`
 - `layer(layer)`
 - `+layer`
 
@@ -113,9 +112,8 @@ Render modes:
 
 ### Raster Helpers
 
-- `rememberWMSLayer(...)`
-- `WMSLayerState.isLoading`
-- `WMSLayerState.error`
+- `rememberRasterLayerState()`
+- `RasterLayerStatus`
 - `webMercatorTileGrid()`
 - `tileGrid(...)`
 - `attribution(label, url)`

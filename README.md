@@ -47,14 +47,6 @@ fun MapScreen() {
             .withTransformation(Epsg5514ToWgs84Transformation),
     )
 
-    val ortofoto = rememberWMSLayer(
-        id = "cuzk-ortofoto",
-        capabilitiesUrl = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer",
-        layerName = "0",
-        projection = sjtsk(),
-        format = "image/jpeg",
-    )
-
     val places = remember {
         features {
             point("brno", brno) {
@@ -72,7 +64,13 @@ fun MapScreen() {
         cameraState = cameraState,
         modifier = Modifier.fillMaxSize(),
     ) {
-        wmsTileLayer(ortofoto)
+        wmsTileLayer(
+            id = "cuzk-ortofoto",
+            capabilitiesUrl = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer",
+            layerName = "0",
+            projection = sjtsk(),
+            format = "image/jpeg",
+        )
 
         featureLayer("places", places) {
             projection = wgs84()
@@ -91,7 +89,7 @@ default UI overlays, drawing, tile grids, and projections.
 | Area | Status | v1 Target |
 | --- | --- | --- |
 | Compose-first map API | ✅ Done | `TiloMap`, `rememberMapCameraState`, the layer DSL, projection helpers, and public samples use the intended API. |
-| Raster WMS | ✅ Done | Capabilities loading, loading/error state, axis-order handling, multiple WMS sublayers, and same-CRS rendering are implemented. |
+| Raster WMS | ✅ Done | Declarative capabilities loading, error reporting, axis-order handling, multiple WMS sublayers, and same-CRS rendering are implemented. |
 | Raster XYZ | ✅ Done | `osmLayer(...)` provides the minimal OSM setup and `xyzTileLayer(...)` supports configurable XYZ/TMS grids and projections. |
 | Custom tile stores | ✅ Done | `tileStoreLayer(...)` supports app-owned z/x/y tile bytes with explicit projection and tile grid. |
 | Raster lifecycle | ✅ Done | Managed DSL runtimes survive recomposition and close on retirement/disposal; directly constructed raster layers are caller-owned `AutoCloseable` values and advanced DSL paths only borrow them. |
@@ -108,7 +106,7 @@ default UI overlays, drawing, tile grids, and projections.
 | Vector performance | 🟡 Partial | Immediate and cached-bitmap render modes exist; v1 still needs batching by style/geometry and stronger diagnostics. |
 | Camera control | 🟡 Partial | Programmatic and animated pan/zoom, default zoom UI, and `fitBounds` exist; rotation/bearing remains future work. |
 | Layer controls | 🟡 Partial | Ordering, visibility, min/max zoom, source identity, and attribution are implemented; layer opacity and grouping remain open. |
-| Loading and errors | 🟡 Partial | Remembered WMS exposes loading/errors and `TiloMap` reports unexpected render failures; per-layer tile failures, retry, offline state, and structured diagnostics remain. |
+| Loading and errors | 🟡 Partial | WMS, XYZ/OSM, and tile-store declarations share observable initialization state, recoverable tile errors, and explicit retry; offline state and richer diagnostics remain. |
 | Performance tooling | 🟡 Partial | The opt-in debug overlay reports zoom, FPS, frame times, and skipped frames; tile/cache/feature/label counters remain. |
 | Testing strategy | 🟡 Partial | Unit tests, critical rendering contracts, quality gates, and a coordinate-only publication consumer exist; CI still needs emulator pixel tests, iOS simulator tests, publication verification, and screenshots/goldens. |
 | Documentation | 🟡 Partial | DSL guides and the public API audit exist; public KDoc coverage, experimental marker rendering, cross-module Dokka links, and a published API site remain. |

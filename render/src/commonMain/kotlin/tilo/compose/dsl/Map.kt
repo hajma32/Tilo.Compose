@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,9 @@ import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.raster.TileRowScheme
 import tilo.compose.core.layers.raster.TileStoreTileSource
+import tilo.compose.core.layers.raster.WMSAxisOrder
+import tilo.compose.core.layers.raster.WMSCapabilities
+import tilo.compose.core.layers.raster.WMSCapabilitiesLoader
 import tilo.compose.core.layers.raster.XYZTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.map.MapCameraController
@@ -209,10 +213,7 @@ class MapCameraState internal constructor(
         zoomBy(-step)
     }
 
-    /**
-     * Changes zoom by [delta] levels. Pass [focus] in screen pixels to zoom
-     * around a particular point; omit it for centered UI controls.
-     */
+    /** Changes zoom by [delta] levels around the current viewport center. */
     fun zoomBy(delta: Double) {
         zoomBy(delta = delta, focus = null)
     }
@@ -310,16 +311,24 @@ class MapCameraState internal constructor(
 @TiloDsl
 class MapLayerBuilder private constructor(
     private val rasterLayerStore: RasterLayerStore?,
+    private val loadWMSCapabilities: suspend (String) -> WMSCapabilities,
 ) : LayerSink {
-    private val items = mutableListOf<Layer>()
+    private val items = mutableListOf<MapLayerItem>()
     private val layerIds = mutableSetOf<String>()
     internal val managedRasterKeys = mutableSetOf<ManagedRasterLayerKey>()
     internal val managedRasterUpdates = mutableMapOf<ManagedRasterLayerKey, RasterLayerUpdate>()
 
-    constructor() : this(rasterLayerStore = null)
+    constructor() : this(rasterLayerStore = null, loadWMSCapabilities = DEFAULT_WMS_CAPABILITIES_LOADER)
 
     internal companion object {
-        fun managed(rasterLayerStore: RasterLayerStore): MapLayerBuilder = MapLayerBuilder(rasterLayerStore)
+        private val DEFAULT_WMS_CAPABILITIES_LOADER: suspend (String) -> WMSCapabilities = { url ->
+            WMSCapabilitiesLoader().load(url)
+        }
+
+        fun managed(
+            rasterLayerStore: RasterLayerStore,
+            loadWMSCapabilities: suspend (String) -> WMSCapabilities = DEFAULT_WMS_CAPABILITIES_LOADER,
+        ): MapLayerBuilder = MapLayerBuilder(rasterLayerStore, loadWMSCapabilities)
     }
 
     /**
@@ -332,7 +341,7 @@ class MapLayerBuilder private constructor(
         require(layerIds.add(layer.id)) {
             "Duplicate layer id '${layer.id}'. Layer IDs must be unique within one TiloMap."
         }
-        items += layer
+        items += MapLayerItem.LayerValue(layer)
     }
 
     /**
@@ -356,16 +365,154 @@ class MapLayerBuilder private constructor(
     }
 
     /**
-     * Adds a WMS layer created by [rememberWMSLayer].
+     * Adds a WMS raster layer discovered through GetCapabilities.
      *
-     * The remembered state owns and closes its raster runtime.
-     *
-     * The layer is skipped while capabilities are still loading or if loading
-     * failed. Inspect [WMSLayerState.isLoading] and [WMSLayerState.error] for UI
-     * feedback.
+     * The map loads capabilities asynchronously, owns the resulting raster
+     * runtime, and closes it when the declaration leaves composition. The layer
+     * is skipped until loading succeeds. [onError] receives capabilities and
+     * tile transport failures without cancelling healthy tiles. Pass [state]
+     * to observe initialization, distinguish tile errors, and trigger retry.
      */
-    fun wmsTileLayer(state: WMSLayerState) {
-        rasterLayer(state.layer)
+    fun wmsTileLayer(
+        id: String,
+        capabilitiesUrl: String,
+        layerName: String,
+        projection: Projection,
+        styles: String = "",
+        format: String? = null,
+        getMapVersion: String = "1.1.1",
+        axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
+        zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
+        tileSize: Int = 256,
+        maxVisibleTiles: Int = 9,
+        prefetchMargin: Int = 1,
+        overviewZoomOffset: Int = 2,
+        maxOverviewTiles: Int = 4,
+        overviewPrefetchMargin: Int = 1,
+        attribution: Attribution? = null,
+        attributions: List<Attribution> = emptyList(),
+        state: RasterLayerState? = null,
+        onError: ((Throwable) -> Unit)? = null,
+    ) {
+        require(layerIds.add(id)) {
+            "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
+        }
+        val resolvedAttributions = attributions.withSingle(attribution)
+        val key =
+            ManagedWMSLayerKey(
+                layerId = id,
+                configuration =
+                    WMSRasterConfiguration(
+                        capabilitiesUrl = capabilitiesUrl,
+                        layerName = layerName,
+                        projectionId = projection.id,
+                        projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
+                        styles = styles,
+                        format = format,
+                        getMapVersion = getMapVersion,
+                        axisOrder = axisOrder,
+                        tileSize = tileSize,
+                        maxVisibleTiles = maxVisibleTiles,
+                        prefetchMargin = prefetchMargin,
+                        overviewZoomOffset = overviewZoomOffset,
+                        maxOverviewTiles = maxOverviewTiles,
+                        overviewPrefetchMargin = overviewPrefetchMargin,
+                        retryKey = state?.retryKey ?: 0,
+                    ),
+            )
+        items +=
+            MapLayerItem.ManagedWMS(
+                ManagedWMSLayerDeclaration(
+                    key = key,
+                    id = id,
+                    zIndex = zIndex,
+                    visible = visible,
+                    minZoom = minZoom,
+                    maxZoom = maxZoom,
+                    attributions = resolvedAttributions,
+                    state = state,
+                    onError = onError,
+                    create = { reportError ->
+                        val capabilities = loadWMSCapabilities(capabilitiesUrl)
+                        capabilities.createTileLayer(
+                            id = id,
+                            layerName = layerName,
+                            projection = projection,
+                            styles = styles,
+                            format = format ?: capabilities.formats.firstOrNull() ?: "image/png",
+                            getMapVersion = getMapVersion,
+                            axisOrder = axisOrder,
+                            zIndex = 0,
+                            visible = true,
+                            minZoom = null,
+                            maxZoom = null,
+                            tileSize = tileSize,
+                            maxVisibleTiles = maxVisibleTiles,
+                            prefetchMargin = prefetchMargin,
+                            overviewZoomOffset = overviewZoomOffset,
+                            maxOverviewTiles = maxOverviewTiles,
+                            overviewPrefetchMargin = overviewPrefetchMargin,
+                            attributions = emptyList(),
+                            onError = reportError,
+                        )
+                    },
+                ),
+            )
+    }
+
+    /** Adds several WMS sublayers as one composited GetMap tile layer. */
+    fun wmsTileLayer(
+        id: String,
+        capabilitiesUrl: String,
+        layerNames: List<String>,
+        projection: Projection,
+        styles: String = "",
+        format: String? = null,
+        getMapVersion: String = "1.1.1",
+        axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
+        zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
+        tileSize: Int = 256,
+        maxVisibleTiles: Int = 9,
+        prefetchMargin: Int = 1,
+        overviewZoomOffset: Int = 2,
+        maxOverviewTiles: Int = 4,
+        overviewPrefetchMargin: Int = 1,
+        attribution: Attribution? = null,
+        attributions: List<Attribution> = emptyList(),
+        state: RasterLayerState? = null,
+        onError: ((Throwable) -> Unit)? = null,
+    ) {
+        require(layerNames.isNotEmpty()) { "At least one WMS layer name is required." }
+        wmsTileLayer(
+            id = id,
+            capabilitiesUrl = capabilitiesUrl,
+            layerName = layerNames.joinToString(","),
+            projection = projection,
+            styles = styles,
+            format = format,
+            getMapVersion = getMapVersion,
+            axisOrder = axisOrder,
+            zIndex = zIndex,
+            visible = visible,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
+            tileSize = tileSize,
+            maxVisibleTiles = maxVisibleTiles,
+            prefetchMargin = prefetchMargin,
+            overviewZoomOffset = overviewZoomOffset,
+            maxOverviewTiles = maxOverviewTiles,
+            overviewPrefetchMargin = overviewPrefetchMargin,
+            attribution = attribution,
+            attributions = attributions,
+            state = state,
+            onError = onError,
+        )
     }
 
     /**
@@ -374,6 +521,7 @@ class MapLayerBuilder private constructor(
      * This is a convenience preset for [xyzTileLayer] with the public OSM tile
      * URL and required contributor attribution. Applications remain responsible
      * for following the OpenStreetMap tile usage policy.
+     * [state] uses the same observable lifecycle and retry contract as WMS.
      * [onError] receives tile transport failures without cancelling healthy tiles.
      */
     fun osmLayer(
@@ -382,6 +530,7 @@ class MapLayerBuilder private constructor(
         visible: Boolean = true,
         minZoom: Double? = null,
         maxZoom: Double? = null,
+        state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
     ) {
         xyzTileLayer(
@@ -393,6 +542,7 @@ class MapLayerBuilder private constructor(
             maxZoom = maxZoom,
             projection = Epsg3857Projection,
             attribution = OPEN_STREET_MAP_ATTRIBUTION,
+            state = state,
             onError = onError,
         )
     }
@@ -402,6 +552,7 @@ class MapLayerBuilder private constructor(
      *
      * Web Mercator is the default because that is what public XYZ slippy-map
      * services normally use. Pass [projection] and [grid] for custom grids.
+     * [state] observes readiness, recoverable tile errors, and explicit retry.
      * [onError] receives source failures without cancelling healthy tiles.
      */
     fun xyzTileLayer(
@@ -421,6 +572,7 @@ class MapLayerBuilder private constructor(
         overviewPrefetchMargin: Int = 1,
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
+        state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
     ) {
         val resolvedAttributions = attributions.withSingle(attribution)
@@ -443,10 +595,11 @@ class MapLayerBuilder private constructor(
                     overviewZoomOffset = overviewZoomOffset,
                     maxOverviewTiles = maxOverviewTiles,
                     overviewPrefetchMargin = overviewPrefetchMargin,
+                    retryKey = state?.retryKey ?: 0,
                 ),
-            update = RasterLayerUpdate.ErrorHandler(onError),
+            update = RasterLayerUpdate.Source(state, onError),
         ) {
-            val errorHandler = MutableRasterErrorHandler(onError)
+            val diagnostics = MutableRasterLayerDiagnostics(state, onError)
             StoredRasterLayer(
                 layer =
                     XYZTileLayer(
@@ -465,13 +618,15 @@ class MapLayerBuilder private constructor(
                         maxOverviewTiles = maxOverviewTiles,
                         overviewPrefetchMargin = overviewPrefetchMargin,
                         attributions = resolvedAttributions,
-                        onError = errorHandler::report,
+                        onError = diagnostics::tileFailed,
                     ),
                 update = { update ->
-                    if (update is RasterLayerUpdate.ErrorHandler) {
-                        errorHandler.delegate = update.onError
+                    if (update is RasterLayerUpdate.Source) {
+                        diagnostics.update(update.state, update.onError)
+                        diagnostics.ready()
                     }
                 },
+                retire = diagnostics::retire,
             )
         }
     }
@@ -484,6 +639,7 @@ class MapLayerBuilder private constructor(
      * WebMercator, S-JTSK/Krovak, or any custom [projection] + [grid] pair.
      * [sourceId] is the stable identity of the stored content; change it when
      * switching databases or revisions that must not share cached tiles.
+     * [state] observes readiness, recoverable reader errors, and explicit retry.
      * [onError] receives reader failures without cancelling healthy tiles.
      */
     fun tileStoreLayer(
@@ -504,6 +660,7 @@ class MapLayerBuilder private constructor(
         overviewPrefetchMargin: Int = 1,
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
+        state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
     ) {
         val resolvedAttributions = attributions.withSingle(attribution)
@@ -526,11 +683,12 @@ class MapLayerBuilder private constructor(
                     overviewZoomOffset = overviewZoomOffset,
                     maxOverviewTiles = maxOverviewTiles,
                     overviewPrefetchMargin = overviewPrefetchMargin,
+                    retryKey = state?.retryKey ?: 0,
                 ),
-            update = RasterLayerUpdate.TileStore(readTile, onError),
+            update = RasterLayerUpdate.TileStore(readTile, state, onError),
         ) {
             val reader = MutableTileReader(readTile)
-            val errorHandler = MutableRasterErrorHandler(onError)
+            val diagnostics = MutableRasterLayerDiagnostics(state, onError)
             StoredRasterLayer(
                 layer =
                     RasterTileLayer(
@@ -553,14 +711,16 @@ class MapLayerBuilder private constructor(
                         maxOverviewTiles = maxOverviewTiles,
                         overviewPrefetchMargin = overviewPrefetchMargin,
                         attributions = resolvedAttributions,
-                        onError = errorHandler::report,
+                        onError = diagnostics::tileFailed,
                     ),
                 update = { update ->
                     if (update is RasterLayerUpdate.TileStore) {
                         reader.delegate = update.readTile
-                        errorHandler.delegate = update.onError
+                        diagnostics.update(update.state, update.onError)
+                        diagnostics.ready()
                     }
                 },
+                retire = diagnostics::retire,
             )
         }
     }
@@ -571,14 +731,6 @@ class MapLayerBuilder private constructor(
      */
     fun tileLayer(layer: TileLayer?) {
         rasterLayer(layer)
-    }
-
-    /**
-     * Advanced alias for adding a WMS layer state.
-     * The remembered state retains ownership of its raster runtime.
-     */
-    fun tileLayer(state: WMSLayerState) {
-        wmsTileLayer(state)
     }
 
     /**
@@ -638,7 +790,16 @@ class MapLayerBuilder private constructor(
         )
     }
 
-    internal fun build(): List<Layer> = items.toList()
+    internal val managedWMSDeclarations: List<ManagedWMSLayerDeclaration>
+        get() = items.mapNotNull { (it as? MapLayerItem.ManagedWMS)?.declaration }
+
+    internal fun build(resolvedWMSLayers: Map<ManagedWMSLayerKey, TileLayer?> = emptyMap()): List<Layer> =
+        items.mapNotNull { item ->
+            when (item) {
+                is MapLayerItem.LayerValue -> item.layer
+                is MapLayerItem.ManagedWMS -> resolvedWMSLayers[item.declaration.key]
+            }
+        }
 
     private fun managedRasterLayer(
         id: String,
@@ -672,8 +833,18 @@ class MapLayerBuilder private constructor(
                     attributions = attributions,
                 )
             }
-        items += layer
+        items += MapLayerItem.LayerValue(layer)
     }
+}
+
+private sealed interface MapLayerItem {
+    class LayerValue(
+        val layer: Layer,
+    ) : MapLayerItem
+
+    class ManagedWMS(
+        val declaration: ManagedWMSLayerDeclaration,
+    ) : MapLayerItem
 }
 
 private data class XyzRasterConfiguration(
@@ -687,6 +858,7 @@ private data class XyzRasterConfiguration(
     val overviewZoomOffset: Int,
     val maxOverviewTiles: Int,
     val overviewPrefetchMargin: Int,
+    val retryKey: Int,
 )
 
 private data class TileStoreRasterConfiguration(
@@ -700,6 +872,25 @@ private data class TileStoreRasterConfiguration(
     val overviewZoomOffset: Int,
     val maxOverviewTiles: Int,
     val overviewPrefetchMargin: Int,
+    val retryKey: Int,
+)
+
+private data class WMSRasterConfiguration(
+    val capabilitiesUrl: String,
+    val layerName: String,
+    val projectionId: String,
+    val projectionWorldUnitsPerMapUnit: Double,
+    val styles: String,
+    val format: String?,
+    val getMapVersion: String,
+    val axisOrder: WMSAxisOrder,
+    val tileSize: Int,
+    val maxVisibleTiles: Int,
+    val prefetchMargin: Int,
+    val overviewZoomOffset: Int,
+    val maxOverviewTiles: Int,
+    val overviewPrefetchMargin: Int,
+    val retryKey: Int,
 )
 
 private class MutableTileReader(
@@ -815,7 +1006,15 @@ internal fun rememberManagedMapLayers(layers: MapLayerBuilder.() -> Unit): List<
     val rasterLayerStore = remember { RasterLayerStore() }
     val layerBuilder = MapLayerBuilder.managed(rasterLayerStore)
     layerBuilder.layers()
-    val builtLayers = layerBuilder.build()
+    val resolvedWMSLayers =
+        buildMap {
+            layerBuilder.managedWMSDeclarations.forEach { declaration ->
+                key(declaration.key) {
+                    put(declaration.key, rememberManagedWMSLayer(declaration))
+                }
+            }
+        }
+    val builtLayers = layerBuilder.build(resolvedWMSLayers)
     val activeRasterKeys = layerBuilder.managedRasterKeys.toSet()
     val activeRasterUpdates = layerBuilder.managedRasterUpdates.toMap()
     SideEffect {

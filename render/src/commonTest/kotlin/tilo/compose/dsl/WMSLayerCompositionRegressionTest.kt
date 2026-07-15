@@ -1,17 +1,16 @@
-@file:OptIn(ExperimentalTiloApi::class)
+@file:OptIn(ExperimentalTiloApi::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 
 package tilo.compose.dsl
 
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.ControlledComposition
 import androidx.compose.runtime.Recomposer
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.raster.RasterTileLayer
@@ -26,47 +25,112 @@ import tilo.compose.core.tile.TileRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-/** Regression coverage for ownership of WMS raster runtimes held by Compose state. */
+/** Regression coverage for WMS runtimes owned by the declarative map DSL. */
 class WMSLayerCompositionRegressionTest {
-    /**
-     * Verifies that presentation-only recomposition preserves the WMS runtime and tile cache.
-     *
-     * Input: one loaded tile, followed by visibility and unrelated-state recompositions.
-     * Expected: presentation changes, while the source is read exactly once for the cached tile.
-     */
     @Test
-    fun presentationRecompositionKeepsWMSRuntimeAndItsTileCache() {
+    fun capabilitiesFailureReachesLayerErrorCallback() =
+        runTest {
+            val expected = IllegalStateException("offline")
+            val state = RasterLayerState()
+            var reported: Throwable? = null
+            val composition =
+                withWMSComposition {
+                    rememberManagedWMSLayer(
+                        declaration(
+                            key = ManagedWMSLayerKey("wms", "failing-source"),
+                            state = state,
+                            onError = { reported = it },
+                            create = { throw expected },
+                        ),
+                    )
+                }
+
+            runCurrent()
+            assertSame(expected, reported)
+            assertEquals(RasterLayerStatus.Failed(expected), state.status)
+            composition.close()
+        }
+
+    @Test
+    fun retryAfterCapabilitiesFailureCreatesFreshRuntime() =
+        runTest {
+            val state = RasterLayerState()
+            val expected = IllegalStateException("temporary DNS failure")
+            val replacement = rasterRuntime { byteArrayOf(7) }
+            var attempts = 0
+            var currentLayer: TileLayer? = null
+
+            withWMSComposition {
+                currentLayer =
+                    rememberManagedWMSLayer(
+                        declaration(
+                            key = ManagedWMSLayerKey("wms", "source-${state.retryKey}"),
+                            state = state,
+                            create = {
+                                attempts += 1
+                                if (attempts == 1) throw expected
+                                replacement
+                            },
+                        ),
+                    )
+            }.use { composition ->
+                runCurrent()
+                assertEquals(RasterLayerStatus.Failed(expected), state.status)
+
+                state.retry()
+                composition.recompose()
+                runCurrent()
+                composition.recompose()
+
+                assertEquals(2, attempts)
+                assertEquals(RasterLayerStatus.Ready, state.status)
+                assertEquals(
+                    7,
+                    requireNotNull(currentLayer)
+                        .loadTiles(singleTileMap)
+                        .single()
+                        .bytes
+                        ?.single(),
+                )
+            }
+        }
+
+    @Test
+    fun presentationRecompositionKeepsWMSRuntimeAndTileCache() =
         runTest {
             val visible = mutableStateOf(true)
-            val unrelated = mutableIntStateOf(0)
             var currentLayer: TileLayer? = null
+            var createCount = 0
             var tileReadCount = 0
             val runtime =
                 rasterRuntime {
                     tileReadCount += 1
                     byteArrayOf(1)
                 }
+            val key = ManagedWMSLayerKey("wms", "stable-source")
+            val state = RasterLayerState()
 
             withWMSComposition {
-                val state = rememberWMSLayerRuntimeState()
-                val currentVisible = visible.value
-                val currentUnrelated = unrelated.intValue
-                SideEffect {
-                    state.updatePresentation(
-                        id = "wms",
-                        zIndex = currentUnrelated,
-                        visible = currentVisible,
-                        minZoom = null,
-                        maxZoom = null,
-                        attributions = emptyList(),
+                currentLayer =
+                    rememberManagedWMSLayer(
+                        declaration(
+                            key = key,
+                            visible = visible.value,
+                            state = state,
+                            create = {
+                                createCount += 1
+                                runtime
+                            },
+                        ),
                     )
-                    state.replaceRuntime(runtime)
-                    currentLayer = state.layer
-                }
             }.use { composition ->
+                runCurrent()
+                composition.recompose()
                 val firstLayer = requireNotNull(currentLayer)
+                assertEquals(RasterLayerStatus.Ready, state.status)
                 firstLayer.loadTiles(singleTileMap)
 
                 visible.value = false
@@ -74,58 +138,60 @@ class WMSLayerCompositionRegressionTest {
                 val hiddenLayer = requireNotNull(currentLayer)
                 assertNotSame(firstLayer, hiddenLayer)
                 assertEquals(false, hiddenLayer.visible)
+                hiddenLayer.loadTiles(singleTileMap)
 
-                unrelated.intValue += 1
-                composition.recompose()
-                requireNotNull(currentLayer).loadTiles(singleTileMap)
-
-                assertEquals(1, tileReadCount, "Presentation changes must not repeat WMS network I/O")
+                assertEquals(1, createCount)
+                assertEquals(1, tileReadCount, "Presentation changes must preserve the WMS tile cache")
             }
         }
-    }
 
-    /**
-     * Verifies that replacing the WMS source retires its previous runtime immediately.
-     *
-     * Input: a blocked request on runtime `first`, then a committed switch to runtime `second`.
-     * Expected: the first request is cancelled and the replacement returns byte `2`.
-     */
     @Test
-    fun replacingWMSRuntimeCancelsOldInFlightRequest() {
+    fun changingSourceCancelsCapabilitiesLoadAndCreatesReplacement() =
         runTest {
-            val requestStarted = CompletableDeferred<Unit>()
-            val requestCancelled = CompletableDeferred<Unit>()
-            val firstRuntime =
-                rasterRuntime {
-                    requestStarted.complete(Unit)
-                    try {
-                        awaitCancellation()
-                    } finally {
-                        requestCancelled.complete(Unit)
-                    }
-                }
+            val firstStarted = CompletableDeferred<Unit>()
+            val firstCancelled = CompletableDeferred<Unit>()
+            val useSecond = mutableStateOf(false)
+            val state = RasterLayerState()
             val secondRuntime = rasterRuntime { byteArrayOf(2) }
-            val selectedRuntime = mutableStateOf(firstRuntime)
             var currentLayer: TileLayer? = null
 
             withWMSComposition {
-                val state = rememberWMSLayerRuntimeState()
-                val runtime = selectedRuntime.value
-                SideEffect {
-                    state.updatePresentation("wms", 0, true, null, null, emptyList())
-                    state.replaceRuntime(runtime)
-                    currentLayer = state.layer
-                }
+                val second = useSecond.value
+                currentLayer =
+                    rememberManagedWMSLayer(
+                        if (second) {
+                            declaration(
+                                key = ManagedWMSLayerKey("wms", "second"),
+                                state = state,
+                                create = { secondRuntime },
+                            )
+                        } else {
+                            declaration(
+                                key = ManagedWMSLayerKey("wms", "first"),
+                                state = state,
+                                create = {
+                                    firstStarted.complete(Unit)
+                                    try {
+                                        awaitCancellation()
+                                    } finally {
+                                        firstCancelled.complete(Unit)
+                                    }
+                                },
+                            )
+                        },
+                    )
             }.use { composition ->
-                val firstRequest = async { requireNotNull(currentLayer).loadTiles(singleTileMap) }
-                requestStarted.await()
+                runCurrent()
+                firstStarted.await()
+                assertEquals(RasterLayerStatus.Loading, state.status)
 
-                selectedRuntime.value = secondRuntime
+                useSecond.value = true
                 composition.recompose()
-                requestCancelled.await()
-                firstRequest.join()
+                runCurrent()
+                firstCancelled.await()
+                composition.recompose()
+                assertEquals(RasterLayerStatus.Ready, state.status)
 
-                assertTrue(firstRequest.isCancelled)
                 assertEquals(
                     2,
                     requireNotNull(currentLayer)
@@ -136,16 +202,43 @@ class WMSLayerCompositionRegressionTest {
                 )
             }
         }
-    }
 
-    /**
-     * Verifies that disposing remembered WMS state closes its active raster runtime.
-     *
-     * Input: a composition containing a WMS state with one blocked tile request, then disposal.
-     * Expected: disposal cancels the request so no network work survives the composition.
-     */
     @Test
-    fun disposingWMSCompositionCancelsCurrentInFlightRequest() {
+    fun replacingStateDuringCapabilitiesLoadPublishesLoadingToNewState() =
+        runTest {
+            val firstState = RasterLayerState()
+            val secondState = RasterLayerState()
+            val selectedState = mutableStateOf(firstState)
+            val loadingStarted = CompletableDeferred<Unit>()
+            val composition =
+                withWMSComposition {
+                    rememberManagedWMSLayer(
+                        declaration(
+                            key = ManagedWMSLayerKey("wms", "stable-source"),
+                            state = selectedState.value,
+                            create = {
+                                loadingStarted.complete(Unit)
+                                awaitCancellation()
+                            },
+                        ),
+                    )
+                }
+
+            runCurrent()
+            loadingStarted.await()
+            assertEquals(RasterLayerStatus.Loading, firstState.status)
+
+            selectedState.value = secondState
+            composition.recompose()
+
+            assertEquals(RasterLayerStatus.Idle, firstState.status)
+            assertEquals(RasterLayerStatus.Loading, secondState.status)
+            composition.close()
+            assertEquals(RasterLayerStatus.Idle, secondState.status)
+        }
+
+    @Test
+    fun disposingCompositionClosesLoadedWMSRuntime() =
         runTest {
             val requestStarted = CompletableDeferred<Unit>()
             val requestCancelled = CompletableDeferred<Unit>()
@@ -161,23 +254,45 @@ class WMSLayerCompositionRegressionTest {
             var currentLayer: TileLayer? = null
             val composition =
                 withWMSComposition {
-                    val state = rememberWMSLayerRuntimeState()
-                    SideEffect {
-                        state.updatePresentation("wms", 0, true, null, null, emptyList())
-                        state.replaceRuntime(runtime)
-                        currentLayer = state.layer
-                    }
+                    currentLayer =
+                        rememberManagedWMSLayer(
+                            declaration(
+                                key = ManagedWMSLayerKey("wms", "source"),
+                                create = { runtime },
+                            ),
+                        )
                 }
 
+            runCurrent()
+            composition.recompose()
             val request = async { requireNotNull(currentLayer).loadTiles(singleTileMap) }
             requestStarted.await()
             composition.close()
             requestCancelled.await()
             request.join()
 
-            assertTrue(request.isCancelled, "Disposed WMS state must not retain background I/O")
+            assertTrue(request.isCancelled, "Disposed WMS declarations must not retain tile I/O")
         }
-    }
+
+    private fun declaration(
+        key: ManagedWMSLayerKey,
+        visible: Boolean = true,
+        state: RasterLayerState? = null,
+        onError: ((Throwable) -> Unit)? = null,
+        create: suspend ((Throwable) -> Unit) -> RasterTileLayer,
+    ): ManagedWMSLayerDeclaration =
+        ManagedWMSLayerDeclaration(
+            key = key,
+            id = "wms",
+            zIndex = 0,
+            visible = visible,
+            minZoom = null,
+            maxZoom = null,
+            attributions = emptyList(),
+            state = state,
+            onError = onError,
+            create = create,
+        )
 
     private fun rasterRuntime(readTile: suspend (TileRequest) -> ByteArray?): RasterTileLayer =
         RasterTileLayer(
@@ -238,11 +353,6 @@ class WMSLayerCompositionRegressionTest {
             instance: Unit,
         ) = Unit
 
-        override fun remove(
-            index: Int,
-            count: Int,
-        ) = Unit
-
         override fun move(
             from: Int,
             to: Int,
@@ -250,24 +360,29 @@ class WMSLayerCompositionRegressionTest {
         ) = Unit
 
         override fun onClear() = Unit
+
+        override fun remove(
+            index: Int,
+            count: Int,
+        ) = Unit
     }
 
     private companion object {
         val singleTileGrid =
             TileGrid(
-                originX = -128.0,
-                originY = 128.0,
-                worldWidth = 256.0,
+                tileSize = 1,
+                originX = 0.0,
+                originY = 1.0,
+                worldWidth = 1.0,
                 nTilesX0 = 1,
                 nTilesY0 = 1,
             )
-
         val singleTileMap =
             MapState(
-                center = Point(0.0, 0.0),
+                center = Point(0.5, 0.5),
                 zoom = 0.0,
-                viewport = Viewport(width = 256, height = 256),
                 projection = IdentityProjection,
+                viewport = Viewport(width = 1, height = 1),
             )
     }
 }

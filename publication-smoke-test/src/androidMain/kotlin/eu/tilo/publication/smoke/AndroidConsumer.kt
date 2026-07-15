@@ -12,6 +12,7 @@ import tilo.compose.core.transform.Epsg5514ToWgs84Transformation
 import tilo.compose.draw.DrawState
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.rememberMapCameraState
+import tilo.compose.dsl.rememberRasterLayerState
 import tilo.compose.dsl.webMercator
 import tilo.compose.render.RenderPoint
 import tilo.compose.ui.MapDebugMetrics
@@ -35,11 +36,12 @@ fun PublishedOsmMap() {
             initialZoom = 2.0,
             projection = webMercator(),
         )
+    val osmState = rememberRasterLayerState()
 
     TiloMap(
         cameraState = camera,
         modifier = Modifier.fillMaxSize(),
     ) {
-        osmLayer()
+        osmLayer(state = osmState)
     }
 }

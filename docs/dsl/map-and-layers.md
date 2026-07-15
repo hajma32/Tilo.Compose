@@ -13,7 +13,12 @@ TiloMap(
     scaleBarContent = defaultScaleBarContent(),
     cameraControlsContent = defaultZoomControlsContent(),
 ) {
-    wmsTileLayer(ortofoto)
+    wmsTileLayer(
+        id = "ortofoto",
+        capabilitiesUrl = ortofotoCapabilitiesUrl,
+        layerName = "0",
+        projection = sjtsk(),
+    )
 
     featureLayer("places", places) {
         projection = wgs84()
@@ -102,18 +107,49 @@ featureLayer("building-labels", buildings) {
 ```
 
 Use the same `visible`, `minZoom`, and `maxZoom` arguments with
-`xyzTileLayer(...)`, `tileStoreLayer(...)`, and `rememberWMSLayer(...)`.
+`xyzTileLayer(...)`, `tileStoreLayer(...)`, and `wmsTileLayer(...)`.
 
 Changing WMS visibility or its zoom limits reuses the already loaded
 GetCapabilities response.
 
+## Raster Layer State
+
+WMS, XYZ/OSM, and tile-store declarations accept the same optional state:
+
+```kotlin
+val basemapState = rememberRasterLayerState()
+
+TiloMap(cameraState) {
+    xyzTileLayer(
+        id = "basemap",
+        urlTemplate = tileUrl,
+        state = basemapState,
+    )
+}
+```
+
+`status` describes initialization. XYZ and tile stores become `Ready` when
+their runtime is committed; WMS passes through `Loading` while GetCapabilities
+is running. Initialization failures use `Failed(error)`. Individual tile
+failures do not disable a ready layer and are exposed as `lastTileError`.
+
+Calling `retry()` recreates the owned runtime. It repeats WMS capabilities
+loading and makes XYZ or tile-store requests start with a fresh cache. The
+state is optional when the application does not need UI feedback or retry.
+
 ## Raster Layers
 
-Use `wmsTileLayer(state)` for WMS layers created by `rememberWMSLayer`:
+Use `wmsTileLayer(...)` to load capabilities and declare WMS in one step:
 
 ```kotlin
 TiloMap(cameraState) {
-    wmsTileLayer(ortofoto)
+    wmsTileLayer(
+        id = "ortofoto",
+        capabilitiesUrl = ortofotoCapabilitiesUrl,
+        layerName = "0",
+        projection = sjtsk(),
+        onError = { error -> reportMapError(error) },
+    )
 }
 ```
 
@@ -143,6 +179,8 @@ Useful `xyzTileLayer` options:
 - `prefetchMargin`
 - `attribution`
 - `attributions`
+- `state`
+- `onError`
 
 Use `tileStoreLayer(...)` for local or app-owned tile stores. The tile reader is
 provided by the application so platform-specific SQLite access and custom
@@ -173,8 +211,7 @@ must match the map projection.
 helper will be added when Tilo.Compose ships a bundled MBTiles reader.
 
 Advanced code can add pre-built raster layers with `rasterLayer(layer)`.
-`tileLayer(layer)` and `tileLayer(wmsState)` are aliases for raster layer
-integration.
+`tileLayer(layer)` is an alias for pre-built raster layer integration.
 
 ## Feature Layers
 

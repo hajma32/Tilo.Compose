@@ -9,9 +9,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import tilo.compose.dsl.ExperimentalTiloApi
+import tilo.compose.dsl.RasterLayerStatus
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.attribution
-import tilo.compose.dsl.rememberWMSLayer
+import tilo.compose.dsl.rememberRasterLayerState
 import tilo.compose.dsl.sjtsk
 import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
@@ -20,15 +21,7 @@ import tilo.compose.ui.defaultScaleBarContent
 @Composable
 internal fun BoxScope.NonMercatorSample() {
     val camera = rememberSjtskCamera()
-    val ortofoto =
-        rememberWMSLayer(
-            id = "cuzk-ortofoto-5514",
-            capabilitiesUrl = CUZK_ORTHOPHOTO_URL,
-            layerName = "0",
-            projection = sjtsk(),
-            format = "image/jpeg",
-            attribution = attribution("ČÚZK Ortofoto · EPSG:5514"),
-        )
+    val wmsState = rememberRasterLayerState()
 
     TiloMap(
         cameraState = camera,
@@ -36,7 +29,17 @@ internal fun BoxScope.NonMercatorSample() {
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = { DefaultZoomControls(it) },
-        layers = { wmsTileLayer(ortofoto) },
+        layers = {
+            wmsTileLayer(
+                id = "cuzk-ortofoto-5514",
+                capabilitiesUrl = CUZK_ORTHOPHOTO_URL,
+                layerName = "0",
+                projection = sjtsk(),
+                format = "image/jpeg",
+                attribution = attribution("ČÚZK Ortofoto · EPSG:5514"),
+                state = wmsState,
+            )
+        },
     )
 
     SampleInfoCard(
@@ -45,10 +48,11 @@ internal fun BoxScope.NonMercatorSample() {
         code = "projection = sjtsk() // EPSG:5514",
     )
     MapPill(
-        when {
-            ortofoto.isLoading -> "Reading ČÚZK WMS capabilities…"
-            ortofoto.error != null -> "ČÚZK WMS is unavailable"
-            else -> "Live ČÚZK ortofoto · EPSG:5514"
+        when (wmsState.status) {
+            RasterLayerStatus.Idle -> "Preparing ČÚZK WMS…"
+            RasterLayerStatus.Loading -> "Reading ČÚZK WMS capabilities…"
+            RasterLayerStatus.Ready -> "Live ČÚZK ortofoto · EPSG:5514"
+            is RasterLayerStatus.Failed -> "ČÚZK WMS is unavailable"
         },
     )
 }

@@ -99,9 +99,9 @@ fun MapScreen() {
 }
 ```
 
-See [DSL documentation](docs/dsl/README.md) for the current public API shape,
-including map layers, raster sources, features, styles, labels, selection,
-default UI overlays, drawing, tile grids, and projections.
+See the [web API reference](https://tilomaps.eu/reference.html) for the current
+public API shape, including map layers, raster sources, features, styles,
+labels, selection, default UI overlays, drawing, tile grids, and projections.
 
 ## Roadmap to v1
 
@@ -128,7 +128,7 @@ default UI overlays, drawing, tile grids, and projections.
 | Loading and errors | 🟡 Partial | WMS, XYZ/OSM, and tile-store declarations share observable initialization state, recoverable tile errors, and explicit retry; offline state and richer diagnostics remain. |
 | Performance tooling | 🟡 Partial | The opt-in debug overlay reports zoom, FPS, frame times, and skipped frames; tile/cache/feature/label counters remain. |
 | Testing strategy | 🟡 Partial | Unit tests, critical rendering contracts, quality gates, and a coordinate-only publication consumer exist; CI still needs emulator pixel tests, iOS simulator tests, publication verification, and screenshots/goldens. |
-| Documentation | 🟡 Partial | DSL guides and the public API audit exist; public KDoc coverage, experimental marker rendering, cross-module Dokka links, and a published API site remain. |
+| Documentation | 🟡 Partial | The web Learn guide and API reference are published; public KDoc coverage, experimental marker rendering, and cross-module Dokka links remain. |
 | API stability and adoption | 🟡 Partial | Renderer internals and experimental boundaries are established; supported coordinates and alpha compatibility expectations still need documentation. |
 | Publication | 🟡 Partial | Six Maven artifacts share verified `eu.tilomaps` coordinates, metadata, sources/docs artifacts, signing support, and a consumer smoke test; release CI and the Central publishing workflow remain. |
 | iOS validation | 🟡 Partial | Device/simulator targets compile for the shipped KMP modules; runtime simulator testing and CI coverage remain. |

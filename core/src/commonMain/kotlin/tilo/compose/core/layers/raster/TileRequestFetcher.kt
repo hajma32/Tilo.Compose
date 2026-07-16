@@ -72,6 +72,11 @@ internal class TileRequestFetcher(
 
         val inFlightRequest =
             inFlightMutex.withLock {
+                // Another request may have populated the cache after the optimistic lookup
+                // above but before this coroutine acquired the in-flight lock.
+                cacheGet(key)?.let { bytes ->
+                    return Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = bytes)
+                }
                 val existing = inFlight[key]?.takeUnless { it.deferred.isCancelled }
                 if (existing != null) {
                     existing.waiters += 1

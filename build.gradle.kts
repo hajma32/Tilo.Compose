@@ -85,10 +85,6 @@ subprojects {
         pluginManager.withPlugin("com.vanniktech.maven.publish") {
             extensions.configure<MavenPublishBaseExtension> {
                 coordinates(tiloGroup, publishedModule.artifactId, tiloVersion)
-                publishToMavenCentral()
-                if (providers.gradleProperty("signAllPublications").orNull.toBoolean()) {
-                    signAllPublications()
-                }
                 pom {
                     name.set(publishedModule.displayName)
                     description.set(publishedModule.description)

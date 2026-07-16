@@ -1,0 +1,3 @@
+# PROJ is a prebuilt third-party dependency. Keep its headers available for
+# Kotlin/Native cinterop, but exclude them from GitHub language statistics.
+core/src/nativeInterop/proj/PROJ.xcframework/** linguist-vendored

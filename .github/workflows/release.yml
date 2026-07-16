@@ -1,0 +1,112 @@
+name: Release to Maven Central
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version already declared as tilo.version in gradle.properties
+        required: true
+        type: string
+
+concurrency:
+  group: maven-central-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Verify and upload Maven Central deployment
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: maven-central
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate release version and commit
+        id: release
+        shell: bash
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          configured_version="$(sed -n 's/^tilo.version=//p' gradle.properties)"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            requested_version="${GITHUB_REF_NAME#v}"
+          else
+            requested_version="$MANUAL_VERSION"
+          fi
+
+          if [[ -z "$configured_version" || "$requested_version" != "$configured_version" ]]; then
+            echo "Requested version '$requested_version' does not match tilo.version '$configured_version'." >&2
+            exit 1
+          fi
+
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "Release commit must be contained in origin/main." >&2
+            exit 1
+          }
+
+          git diff --exit-code
+          git submodule status --recursive
+          echo "version=$configured_version" >> "$GITHUB_OUTPUT"
+
+      - name: Run release verification
+        run: |
+          ./gradlew --no-daemon qualityCheck \
+            :draw:jvmTest \
+            :geocore:jvmTest \
+            :spatial-index:jvmTest \
+            :core:testDebugUnitTest \
+            :render:testDebugUnitTest
+
+      - name: Verify generated Maven publications
+        env:
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon --no-configuration-cache \
+            -PsignAllPublications=true \
+            clean verifyMavenPublication
+
+      - name: Upload signed deployment to Maven Central
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon --no-configuration-cache \
+            -PsignAllPublications=true \
+            :spatial-index:publishToMavenCentral \
+            :geocore:publishToMavenCentral \
+            :core:publishToMavenCentral \
+            :render:publishToMavenCentral \
+            :ui:publishToMavenCentral \
+            :draw:publishToMavenCentral
+
+      - name: Record deployment handoff
+        run: |
+          echo "### Maven Central deployment uploaded" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: \`${{ steps.release.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Review validation and publish the deployment manually in the Central Portal." >> "$GITHUB_STEP_SUMMARY"

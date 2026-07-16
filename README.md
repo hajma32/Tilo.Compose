@@ -31,6 +31,25 @@ drawing, and live ČÚZK ortofoto rendered directly in S-JTSK (`EPSG:5514`).
   </tr>
 </table>
 
+## Installation
+
+```kotlin
+repositories {
+    google()
+    mavenCentral()
+}
+
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation("eu.tilomaps:tilo-compose:0.1.0-alpha01")
+            // Optional drawing plugin:
+            implementation("eu.tilomaps:tilo-compose-draw:0.1.0-alpha01")
+        }
+    }
+}
+```
+
 ## Quick Example
 
 ```kotlin

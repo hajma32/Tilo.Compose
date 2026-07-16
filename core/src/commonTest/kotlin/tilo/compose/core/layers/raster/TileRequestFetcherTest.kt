@@ -87,7 +87,8 @@ class TileRequestFetcherTest {
                     fetcher.fetchTiles(listOf(request(1)))
                 }
 
-            assertSame(expectedError, actualError)
+            // JVM coroutine stack-trace recovery may copy the throwable instance.
+            assertEquals(expectedError.message, actualError.message)
             assertTrue(reportedErrors.isEmpty())
         }
 

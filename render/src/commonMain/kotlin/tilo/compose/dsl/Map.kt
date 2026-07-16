@@ -372,6 +372,7 @@ class MapLayerBuilder private constructor(
      * is skipped until loading succeeds. [onError] receives capabilities and
      * tile transport failures without cancelling healthy tiles. Pass [state]
      * to observe initialization, distinguish tile errors, and trigger retry.
+     * Prefetching and coarse overview loading are opt-in.
      */
     fun wmsTileLayer(
         id: String,
@@ -388,10 +389,10 @@ class MapLayerBuilder private constructor(
         maxZoom: Double? = null,
         tileSize: Int = 256,
         maxVisibleTiles: Int = 9,
-        prefetchMargin: Int = 1,
-        overviewZoomOffset: Int = 2,
+        prefetchMargin: Int = 0,
+        overviewZoomOffset: Int = 0,
         maxOverviewTiles: Int = 4,
-        overviewPrefetchMargin: Int = 1,
+        overviewPrefetchMargin: Int = 0,
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
@@ -479,10 +480,10 @@ class MapLayerBuilder private constructor(
         maxZoom: Double? = null,
         tileSize: Int = 256,
         maxVisibleTiles: Int = 9,
-        prefetchMargin: Int = 1,
-        overviewZoomOffset: Int = 2,
+        prefetchMargin: Int = 0,
+        overviewZoomOffset: Int = 0,
         maxOverviewTiles: Int = 4,
-        overviewPrefetchMargin: Int = 1,
+        overviewPrefetchMargin: Int = 0,
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
@@ -519,8 +520,9 @@ class MapLayerBuilder private constructor(
      * Adds the standard OpenStreetMap Web Mercator basemap.
      *
      * This is a convenience preset for [xyzTileLayer] with the public OSM tile
-     * URL and required contributor attribution. Applications remain responsible
-     * for following the OpenStreetMap tile usage policy.
+     * URL and required contributor attribution. Prefetching and coarse overview
+     * loading are explicitly disabled to respect the OpenStreetMap tile usage
+     * policy. Applications remain responsible for following the rest of it.
      * [state] uses the same observable lifecycle and retry contract as WMS.
      * [onError] receives tile transport failures without cancelling healthy tiles.
      */
@@ -541,6 +543,10 @@ class MapLayerBuilder private constructor(
             minZoom = minZoom,
             maxZoom = maxZoom,
             projection = Epsg3857Projection,
+            prefetchMargin = 0,
+            overviewZoomOffset = 0,
+            maxOverviewTiles = 0,
+            overviewPrefetchMargin = 0,
             attribution = OPEN_STREET_MAP_ATTRIBUTION,
             state = state,
             onError = onError,
@@ -552,6 +558,7 @@ class MapLayerBuilder private constructor(
      *
      * Web Mercator is the default because that is what public XYZ slippy-map
      * services normally use. Pass [projection] and [grid] for custom grids.
+     * Prefetching and coarse overview loading are opt-in.
      * [state] observes readiness, recoverable tile errors, and explicit retry.
      * [onError] receives source failures without cancelling healthy tiles.
      */
@@ -566,10 +573,10 @@ class MapLayerBuilder private constructor(
         grid: TileGrid = TileGrid.defaultFor(projection),
         tms: Boolean = false,
         maxVisibleTiles: Int = 9,
-        prefetchMargin: Int = 1,
-        overviewZoomOffset: Int = 2,
+        prefetchMargin: Int = 0,
+        overviewZoomOffset: Int = 0,
         maxOverviewTiles: Int = 4,
-        overviewPrefetchMargin: Int = 1,
+        overviewPrefetchMargin: Int = 0,
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
@@ -639,6 +646,7 @@ class MapLayerBuilder private constructor(
      * WebMercator, S-JTSK/Krovak, or any custom [projection] + [grid] pair.
      * [sourceId] is the stable identity of the stored content; change it when
      * switching databases or revisions that must not share cached tiles.
+     * Prefetching and coarse overview loading are opt-in.
      * [state] observes readiness, recoverable reader errors, and explicit retry.
      * [onError] receives reader failures without cancelling healthy tiles.
      */
@@ -654,10 +662,10 @@ class MapLayerBuilder private constructor(
         scheme: TileRowScheme = TileRowScheme.TMS,
         sourceId: String = id,
         maxVisibleTiles: Int = 9,
-        prefetchMargin: Int = 1,
-        overviewZoomOffset: Int = 2,
+        prefetchMargin: Int = 0,
+        overviewZoomOffset: Int = 0,
         maxOverviewTiles: Int = 4,
-        overviewPrefetchMargin: Int = 1,
+        overviewPrefetchMargin: Int = 0,
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
@@ -847,7 +855,7 @@ private sealed interface MapLayerItem {
     ) : MapLayerItem
 }
 
-private data class XyzRasterConfiguration(
+internal data class XyzRasterConfiguration(
     val projectionId: String,
     val projectionWorldUnitsPerMapUnit: Double,
     val grid: TileGrid,
@@ -861,7 +869,7 @@ private data class XyzRasterConfiguration(
     val retryKey: Int,
 )
 
-private data class TileStoreRasterConfiguration(
+internal data class TileStoreRasterConfiguration(
     val projectionId: String,
     val projectionWorldUnitsPerMapUnit: Double,
     val grid: TileGrid,
@@ -875,7 +883,7 @@ private data class TileStoreRasterConfiguration(
     val retryKey: Int,
 )
 
-private data class WMSRasterConfiguration(
+internal data class WMSRasterConfiguration(
     val capabilitiesUrl: String,
     val layerName: String,
     val projectionId: String,

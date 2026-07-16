@@ -2,6 +2,8 @@ import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import io.gitlab.arturbosch.detekt.Detekt
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.tasks.bundling.Jar
+import org.gradle.api.tasks.bundling.Zip
 import org.jlleitschuh.gradle.ktlint.KtlintExtension
 import java.util.Properties
 
@@ -119,6 +121,18 @@ subprojects {
                     name = "TiloTest"
                     url = testRepository.get().asFile.toURI()
                 }
+            }
+        }
+
+        tasks.withType<Jar>().configureEach {
+            from(rootProject.layout.projectDirectory.file("LICENSE")) {
+                into("META-INF")
+            }
+        }
+
+        tasks.withType<Zip>().matching { it.name.endsWith("Aar") || it.name.endsWith("Klib") }.configureEach {
+            from(rootProject.layout.projectDirectory.file("LICENSE")) {
+                into(if (name.endsWith("Klib")) "default/resources/META-INF" else "META-INF")
             }
         }
     }

@@ -12,6 +12,7 @@ import tilo.compose.core.tile.TileGrid
  * `"https://tile.openstreetmap.org/{z}/{x}/{y}.png"`.
  *
  * For TMS row addressing set [tms] = true.
+ * Prefetching and coarse overview loading are opt-in.
  * The caller owns directly constructed instances and must close them after use.
  */
 class XYZTileLayer(
@@ -25,10 +26,10 @@ class XYZTileLayer(
     minZoom: Double? = null,
     maxZoom: Double? = null,
     maxVisibleTiles: Int = 9,
-    prefetchMargin: Int = 1,
-    overviewZoomOffset: Int = 2,
+    prefetchMargin: Int = 0,
+    overviewZoomOffset: Int = 0,
     maxOverviewTiles: Int = 4,
-    overviewPrefetchMargin: Int = 1,
+    overviewPrefetchMargin: Int = 0,
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,

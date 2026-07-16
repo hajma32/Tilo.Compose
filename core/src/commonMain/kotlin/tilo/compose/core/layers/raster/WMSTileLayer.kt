@@ -14,6 +14,7 @@ import tilo.compose.core.tile.TileGrid
  * [crs] is the WMS SRS/CRS value, e.g. "EPSG:5514".
  * WMS 1.3.0 uses `CRS` and honors [axisOrder]; older versions use `SRS` and
  * x/y BBOX order.
+ * Prefetching and coarse overview loading are opt-in.
  * The caller owns directly constructed instances and must close them after use.
  */
 class WMSTileLayer(
@@ -32,10 +33,10 @@ class WMSTileLayer(
     minZoom: Double? = null,
     maxZoom: Double? = null,
     maxVisibleTiles: Int = 9,
-    prefetchMargin: Int = 1,
-    overviewZoomOffset: Int = 2,
+    prefetchMargin: Int = 0,
+    overviewZoomOffset: Int = 0,
     maxOverviewTiles: Int = 4,
-    overviewPrefetchMargin: Int = 1,
+    overviewPrefetchMargin: Int = 0,
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,

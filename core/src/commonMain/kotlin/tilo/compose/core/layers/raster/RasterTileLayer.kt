@@ -19,6 +19,8 @@ import tilo.compose.core.tile.TileRequestPlan
  * when no map uses it anymore. Passing it to a map layer builder only borrows
  * the layer; it does not transfer ownership. High-level map DSL functions that
  * construct raster layers manage their own instances.
+ * Nearby-tile prefetching and coarse overview loading are disabled by default;
+ * callers must opt in through the corresponding margin and zoom-offset options.
  * [onError] is invoked once for each source request that throws; cancellation
  * still propagates normally and an unavailable (`null`) tile is not an error.
  */
@@ -30,10 +32,10 @@ open class RasterTileLayer(
     override val minZoom: Double? = null,
     override val maxZoom: Double? = null,
     private val maxVisibleTiles: Int = 9,
-    private val prefetchMargin: Int = 1,
-    private val overviewZoomOffset: Int = 2,
+    private val prefetchMargin: Int = 0,
+    private val overviewZoomOffset: Int = 0,
     private val maxOverviewTiles: Int = 4,
-    private val overviewPrefetchMargin: Int = 1,
+    private val overviewPrefetchMargin: Int = 0,
     override val attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,

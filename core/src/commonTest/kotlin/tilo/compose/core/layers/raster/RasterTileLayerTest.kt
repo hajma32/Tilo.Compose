@@ -15,8 +15,70 @@ import tilo.compose.core.tile.TileRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class RasterTileLayerTest {
+    /**
+     * Verifies that speculative network work requires an explicit layer configuration.
+     *
+     * Input: a default raster layer and calls to all overview and prefetch entry points.
+     * Expected: no source request is made and no overview tile is returned.
+     */
+    @Test
+    fun prefetchAndOverviewLoadingAreDisabledByDefault() =
+        runTest {
+            val requests = mutableListOf<TileCoordinate>()
+            val layer = RasterTileLayer(id = "network", source = trackingSource(requests))
+            try {
+                val map = webMercatorMap()
+
+                val overview = layer.loadOverviewTiles(map)
+                layer.prefetchTiles(map)
+                layer.prefetchOverviewTiles(map)
+
+                assertTrue(overview.isEmpty())
+                assertTrue(requests.isEmpty())
+            } finally {
+                layer.close()
+            }
+        }
+
+    /**
+     * Verifies that applications can still opt in to each speculative loading feature.
+     *
+     * Input: a raster layer with non-zero prefetch margins and overview zoom offset.
+     * Expected: overview loading and both prefetch entry points request source tiles.
+     */
+    @Test
+    fun prefetchAndOverviewLoadingCanBeEnabledExplicitly() =
+        runTest {
+            val requests = mutableListOf<TileCoordinate>()
+            val layer =
+                RasterTileLayer(
+                    id = "network",
+                    source = trackingSource(requests),
+                    prefetchMargin = 1,
+                    overviewZoomOffset = 1,
+                    overviewPrefetchMargin = 1,
+                )
+            try {
+                val map = webMercatorMap()
+
+                assertTrue(layer.loadOverviewTiles(map).isNotEmpty())
+                assertTrue(requests.isNotEmpty())
+
+                requests.clear()
+                layer.prefetchTiles(map)
+                assertTrue(requests.isNotEmpty())
+
+                requests.clear()
+                layer.prefetchOverviewTiles(map)
+                assertTrue(requests.isNotEmpty())
+            } finally {
+                layer.close()
+            }
+        }
+
     /**
      * Verifies the full plan-to-fetch contract for two consumers of one viewport.
      *
@@ -133,4 +195,25 @@ class RasterTileLayerTest {
             layer.planTiles(map)
         }
     }
+
+    private fun trackingSource(requests: MutableList<TileCoordinate>): RasterTileSource =
+        object : RasterTileSource {
+            override val projection = Epsg3857Projection
+            override val grid = TileGrid.WebMercator
+
+            override fun cacheKey(request: TileRequest): String = request.coordinate.toString()
+
+            override suspend fun readTile(request: TileRequest): ByteArray {
+                requests += request.coordinate
+                return byteArrayOf(1)
+            }
+        }
+
+    private fun webMercatorMap(): MapState =
+        MapState(
+            center = Point(-15_000_000.0, 15_000_000.0),
+            zoom = 2.0,
+            viewport = Viewport(width = 256, height = 256),
+            projection = Epsg3857Projection,
+        )
 }

@@ -432,6 +432,79 @@ class MapLayerBuilderTest {
     }
 
     /**
+     * Verifies that every high-level tile declaration defaults to visible requests only.
+     *
+     * Input: XYZ, tile-store, and WMS declarations without speculative-loading options.
+     * Expected: nearby and overview prefetch margins and the overview offset are all zero.
+     */
+    @Test
+    fun tileLayerDslDefaultsSpeculativeLoadingToDisabled() {
+        val store = RasterLayerStore()
+        try {
+            val xyzBuilder = MapLayerBuilder.managed(store)
+            xyzBuilder.xyzTileLayer(id = "xyz", urlTemplate = "https://example.test/{z}/{x}/{y}.png")
+            val xyz = xyzBuilder.managedRasterKeys.single().configuration as XyzRasterConfiguration
+
+            val tileStoreBuilder = MapLayerBuilder.managed(store)
+            tileStoreBuilder.tileStoreLayer(
+                id = "store",
+                projection = IdentityProjection,
+                grid = TileGrid(),
+                readTile = { byteArrayOf(1) },
+            )
+            val tileStore =
+                tileStoreBuilder.managedRasterKeys.single().configuration as TileStoreRasterConfiguration
+
+            val wmsBuilder = MapLayerBuilder.managed(store)
+            wmsBuilder.wmsTileLayer(
+                id = "wms",
+                capabilitiesUrl = "https://example.test/wms",
+                layerName = "base",
+                projection = IdentityProjection,
+            )
+            val wms =
+                wmsBuilder.managedWMSDeclarations
+                    .single()
+                    .key.configuration as WMSRasterConfiguration
+
+            listOf(
+                Triple(xyz.prefetchMargin, xyz.overviewZoomOffset, xyz.overviewPrefetchMargin),
+                Triple(tileStore.prefetchMargin, tileStore.overviewZoomOffset, tileStore.overviewPrefetchMargin),
+                Triple(wms.prefetchMargin, wms.overviewZoomOffset, wms.overviewPrefetchMargin),
+            ).forEach { defaults ->
+                assertEquals(Triple(0, 0, 0), defaults)
+            }
+        } finally {
+            store.close()
+        }
+    }
+
+    /**
+     * Verifies that the OSM preset pins the public-service-safe loading policy.
+     *
+     * Input: a managed `osmLayer()` declaration.
+     * Expected: all speculative loading limits are explicitly disabled in its configuration.
+     */
+    @Test
+    fun osmLayerExplicitlyDisablesSpeculativeLoading() {
+        val store = RasterLayerStore()
+        try {
+            val builder = MapLayerBuilder.managed(store)
+            builder.osmLayer()
+
+            val configuration =
+                builder.managedRasterKeys.single().configuration as XyzRasterConfiguration
+
+            assertEquals(0, configuration.prefetchMargin)
+            assertEquals(0, configuration.overviewZoomOffset)
+            assertEquals(0, configuration.maxOverviewTiles)
+            assertEquals(0, configuration.overviewPrefetchMargin)
+        } finally {
+            store.close()
+        }
+    }
+
+    /**
      * Verifies global layer-ID uniqueness across different DSL layer types.
      *
      * Input: an XYZ layer and a feature layer both named `base`.

@@ -78,6 +78,7 @@ jobs:
             :geocore:jvmTest \
             :spatial-index:jvmTest \
             :core:testDebugUnitTest \
+            :core:iosSimulatorArm64Test \
             :render:testDebugUnitTest
 
       - name: Verify generated Maven publications

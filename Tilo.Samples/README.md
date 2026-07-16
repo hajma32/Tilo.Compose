@@ -19,3 +19,8 @@ Run the Android app with:
 ```shell
 ./gradlew :tilo-samples:installDebug
 ```
+
+Run the iOS app by opening `iosApp/iosApp.xcodeproj` in Xcode and selecting the
+`iosApp` scheme and an Apple Silicon iOS simulator. Xcode builds the shared
+`TiloSamples` framework automatically. A development team is only needed when
+running on a physical device.

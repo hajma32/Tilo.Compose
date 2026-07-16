@@ -13,6 +13,20 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_11)
         }
     }
+    iosArm64 {
+        binaries.framework {
+            baseName = "TiloSamples"
+            isStatic = true
+            binaryOption("bundleId", "eu.tilomaps.samples.shared")
+        }
+    }
+    iosSimulatorArm64 {
+        binaries.framework {
+            baseName = "TiloSamples"
+            isStatic = true
+            binaryOption("bundleId", "eu.tilomaps.samples.shared")
+        }
+    }
 
     sourceSets {
         androidMain.dependencies {

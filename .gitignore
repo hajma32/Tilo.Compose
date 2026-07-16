@@ -10,6 +10,17 @@ local.properties
 captures
 .externalNativeBuild
 .cxx
+
+# Local PROJ iOS source/build caches. Keep the distributable
+# core/src/nativeInterop/proj/PROJ.xcframework (including Headers) tracked.
+/.proj-ios-build/
+/core/src/nativeInterop/proj/downloads/
+/core/src/nativeInterop/proj/tools/
+/core/src/nativeInterop/proj/proj-*/
+/core/src/nativeInterop/proj/build-*/
+/core/src/nativeInterop/proj/install-*/
+/core/src/nativeInterop/proj/*.tar.gz
+
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/

@@ -1,0 +1,4 @@
+headers = proj.h
+headerFilter = proj.h proj_constants.h
+package = tilo.compose.core.proj
+linkerOpts = -lsqlite3 -lc++

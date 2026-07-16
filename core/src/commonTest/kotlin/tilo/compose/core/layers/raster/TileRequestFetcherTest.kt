@@ -64,6 +64,34 @@ class TileRequestFetcherTest {
         }
 
     /**
+     * Verifies that fatal errors are not mistaken for an unavailable network tile.
+     *
+     * Input: a source that throws an [AssertionError].
+     * Expected: the error reaches the caller and is not sent to the recoverable-error callback.
+     */
+    @Test
+    fun fatalSourceErrorIsPropagated() =
+        runTest {
+            val expectedError = AssertionError("fatal source failure")
+            val reportedErrors = mutableListOf<Throwable>()
+            val fetcher =
+                TileRequestFetcher(
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                    onError = reportedErrors::add,
+                    cacheKey = { request -> request.coordinate.toString() },
+                    fetchBytes = { throw expectedError },
+                )
+
+            val actualError =
+                assertFailsWith<AssertionError> {
+                    fetcher.fetchTiles(listOf(request(1)))
+                }
+
+            assertSame(expectedError, actualError)
+            assertTrue(reportedErrors.isEmpty())
+        }
+
+    /**
      * Verifies that a successful tile is reused from the in-memory cache.
      *
      * Input: two sequential requests with the same cache key and a source returning byte `7`.

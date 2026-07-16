@@ -121,7 +121,7 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 | Selection | ✅ Done | `onFeatureSelect`, multi-hit selection results, selected feature refs, and selected styles are available. |
 | Attribution | ✅ Done | Layers carry attribution metadata and the UI module provides a clickable default attribution overlay. |
 | Default map UI | ✅ Done | Scale bar, attribution overlay, and zoom controls are available as optional content helpers. |
-| CRS transformations | 🟡 Partial | Keep transform contracts injectable and document how apps provide licensed or project-specific transform implementations. |
+| CRS transformations | ✅ Done | Android uses Proj4J; iOS bundles PROJ 9.8.1 with its database and basic resources embedded in the native library. |
 | Vector performance | 🟡 Partial | Immediate and cached-bitmap render modes exist; v1 still needs batching by style/geometry and stronger diagnostics. |
 | Camera control | 🟡 Partial | Programmatic and animated pan/zoom, default zoom UI, and `fitBounds` exist; rotation/bearing remains future work. |
 | Layer controls | 🟡 Partial | Ordering, visibility, min/max zoom, source identity, and attribution are implemented; layer opacity and grouping remain open. |
@@ -131,7 +131,7 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 | Documentation | 🟡 Partial | The web Learn guide and API reference are published; public KDoc coverage, experimental marker rendering, and cross-module Dokka links remain. |
 | API stability and adoption | 🟡 Partial | Renderer internals and experimental boundaries are established; supported coordinates and alpha compatibility expectations still need documentation. |
 | Publication | 🟡 Partial | Six Maven artifacts share verified `eu.tilomaps` coordinates, metadata, sources/docs artifacts, signing support, and a consumer smoke test; release CI and the Central publishing workflow remain. |
-| iOS validation | 🟡 Partial | Device/simulator targets compile for the shipped KMP modules; runtime simulator testing and CI coverage remain. |
+| iOS validation | 🟡 Partial | Device/simulator targets compile and native PROJ transformations have runtime simulator tests; automated iOS CI coverage remains. |
 | Raster MBTiles | ⬜ Planned | Add dedicated `mbTilesLayer(...)` with SQLite access, metadata resolution, TMS/XYZ row schemes, Web Mercator defaults, and S-JTSK/Krovak grids. |
 | Editing plugin | ⬜ Planned | Build edit as a plugin on top of selection: vertex handles, move/insert/delete, save/cancel, and history. |
 | Event routing | ⬜ Planned | Define gesture priority between overlays, draw, edit, selection, and default pan/zoom/rotate interactions. |
@@ -144,3 +144,8 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 MIT License. See [LICENSE](LICENSE).
 
 GeoCore and SpatialIndex are also MIT licensed in their own repositories.
+The Android `core` artifact uses Proj4J and `proj4j-epsg`; the iOS artifact
+bundles [PROJ](https://proj.org/). Both platform distributions include their
+applicable software licenses and the full
+[EPSG Dataset Terms of Use](https://epsg.org/terms-of-use.html). See
+[third-party notices](THIRD_PARTY_NOTICES.md).

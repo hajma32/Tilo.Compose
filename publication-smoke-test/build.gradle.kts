@@ -10,6 +10,12 @@ val tiloVersion = providers.gradleProperty("tilo.version").orElse("0.1.0-alpha01
 kotlin {
     androidTarget()
     jvm()
+    iosSimulatorArm64 {
+        binaries.framework {
+            baseName = "TiloPublicationSmoke"
+            isStatic = true
+        }
+    }
 
     sourceSets {
         val androidMain by getting {
@@ -21,6 +27,12 @@ kotlin {
         val jvmMain by getting {
             dependencies {
                 implementation("eu.tilomaps:tilo-compose-draw:${tiloVersion.get()}")
+            }
+        }
+        val iosSimulatorArm64Main by getting {
+            dependencies {
+                implementation("org.jetbrains.compose.runtime:runtime:1.10.0")
+                implementation("eu.tilomaps:tilo-compose-core:${tiloVersion.get()}")
             }
         }
     }

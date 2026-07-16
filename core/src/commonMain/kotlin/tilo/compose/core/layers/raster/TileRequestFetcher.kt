@@ -124,12 +124,15 @@ internal class TileRequestFetcher(
         }
     }
 
+    // The source callback is an exception boundary: report recoverable failures, but never
+    // convert coroutine cancellation or fatal Errors into an unavailable tile.
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun readBytes(request: TileRequest): ByteArray? =
         try {
             fetchBytes(request)
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             onError?.invoke(error)
             null
         }

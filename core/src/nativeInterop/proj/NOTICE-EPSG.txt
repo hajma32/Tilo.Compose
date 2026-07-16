@@ -1,0 +1,13 @@
+EPSG Dataset notice
+===================
+
+The embedded PROJ database contains data derived from the EPSG Dataset.
+The EPSG Dataset is owned and maintained by the International Association
+of Oil & Gas Producers (IOGP).
+
+Use of the EPSG Dataset is subject to the EPSG Dataset Terms of Use:
+https://epsg.org/terms-of-use.html
+
+Recipients of this product should review those terms. Tilo is an independent
+value-added product and is not endorsed by, affiliated with, or maintained by
+IOGP or the EPSG Geodetic Parameter Dataset.

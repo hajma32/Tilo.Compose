@@ -206,6 +206,7 @@ tasks.register<Exec>("verifyMavenPublication") {
         "clean",
         "compileDebugKotlinAndroid",
         "compileKotlinJvm",
+        "linkDebugFrameworkIosSimulatorArm64",
     )
     environment("ANDROID_HOME", androidSdkDirectory.get())
 }

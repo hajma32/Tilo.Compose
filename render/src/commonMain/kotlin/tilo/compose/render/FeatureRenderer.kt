@@ -3,6 +3,8 @@
 package tilo.compose.render
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathFillType
@@ -11,6 +13,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.painter.Painter
 import tilo.compose.core.feature.DashPattern
 import tilo.compose.core.feature.FillPattern
 import tilo.compose.core.feature.FillStyle
@@ -33,10 +37,11 @@ import kotlin.math.sqrt
 internal fun DrawScope.drawFeatureGeometry(
     commands: List<RenderCommand>,
     map: MapState,
+    pointIconPainters: Map<String, Painter> = emptyMap(),
 ) {
     commands.forEach { command ->
         when (command) {
-            is RenderPoint -> drawPoint(command, map)
+            is RenderPoint -> drawPoint(command, map, pointIconPainters)
             is RenderLineString -> drawLineString(command, map)
             is RenderPolygon -> drawPolygon(command, map)
             is RenderLabel -> Unit
@@ -47,6 +52,7 @@ internal fun DrawScope.drawFeatureGeometry(
 private fun DrawScope.drawPoint(
     command: RenderPoint,
     map: MapState,
+    pointIconPainters: Map<String, Painter>,
 ) {
     val screenPoint = map.worldToScreen(command.point)
     val center = Offset(screenPoint.x.toFloat(), screenPoint.y.toFloat())
@@ -57,6 +63,22 @@ private fun DrawScope.drawPoint(
     }
     command.style.stroke?.let { stroke ->
         drawPointStroke(shape = command.style.shape, center = center, size = size, stroke = stroke)
+    }
+    command.style.icon?.let { icon ->
+        val painter =
+            checkNotNull(pointIconPainters[icon.id]) {
+                "Point icon '${icon.id}' is not registered on the feature layer"
+            }
+        val iconSize = styleUnitToPx(icon.size).coerceAtLeast(1f)
+        translate(left = center.x - iconSize / 2f, top = center.y - iconSize / 2f) {
+            with(painter) {
+                draw(
+                    size = Size(iconSize, iconSize),
+                    alpha = icon.opacity.toFloat(),
+                    colorFilter = icon.tint?.let { ColorFilter.tint(it.toColor()) },
+                )
+            }
+        }
     }
 }
 

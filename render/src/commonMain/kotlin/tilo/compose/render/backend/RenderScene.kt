@@ -4,6 +4,7 @@
 package tilo.compose.render.backend
 
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.painter.Painter
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.tile.Tile
 import tilo.compose.render.ExperimentalTiloRenderingApi
@@ -28,6 +29,7 @@ class VectorRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
     val commands: List<RenderCommand>,
+    val pointIconPainters: Map<String, Painter> = emptyMap(),
 ) : RenderSceneLayer
 
 @ExperimentalTiloRenderingApi

@@ -14,7 +14,11 @@ import tilo.compose.ui.defaultScaleBarContent
 
 @Composable
 internal fun BoxScope.OpenStreetMapSample() {
-    val camera = rememberWebMercatorCamera(zoom = 12.0)
+    val camera =
+        rememberWebMercatorCamera(
+            zoom = 12.0,
+            cameraBounds = webMercatorBounds(west = 14.2, south = 49.95, east = 14.7, north = 50.2),
+        )
 
     TiloMap(
         cameraState = camera,
@@ -27,7 +31,7 @@ internal fun BoxScope.OpenStreetMapSample() {
 
     SampleInfoCard(
         sample = Sample.OpenStreetMap,
-        body = "One camera, one XYZ layer. Pan, pinch and zoom — the smallest useful Tilo map.",
-        code = "xyzTileLayer(\"osm\", url)",
+        body = "One XYZ layer with bounded panning and a safe zoom range.",
+        code = "MapConfig(minZoom, maxZoom, cameraBounds = area)",
     )
 }

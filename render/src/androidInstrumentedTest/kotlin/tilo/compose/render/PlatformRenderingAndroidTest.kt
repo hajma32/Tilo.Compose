@@ -5,10 +5,12 @@ package tilo.compose.render
 import android.graphics.Bitmap
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
@@ -20,6 +22,7 @@ import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FillStyle
 import tilo.compose.core.feature.LineStyle
+import tilo.compose.core.feature.PointIconStyle
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.PolygonStyle
 import tilo.compose.core.feature.StrokeStyle
@@ -40,6 +43,33 @@ import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class PlatformRenderingAndroidTest {
+    @Test
+    fun registeredPointIconRendersAtPointCenter() {
+        val command =
+            RenderPoint(
+                id = "icon",
+                point = Point(0.0, 0.0),
+                style =
+                    PointStyle(
+                        fill = null,
+                        stroke = null,
+                        icon = PointIconStyle(id = "stop", size = 20.0),
+                    ),
+            )
+
+        val result =
+            renderBitmap {
+                drawFeatureGeometry(
+                    commands = listOf(command),
+                    map = MapState(viewport = Viewport(64, 64)),
+                    pointIconPainters = mapOf("stop" to ColorPainter(Color.Red)),
+                )
+            }
+
+        assertEquals(RED, result.argbAt(32, 32))
+        assertEquals(0, result.argbAt(20, 20))
+    }
+
     /**
      * Verifies the real Android bitmap decoder with valid and invalid encoded data.
      *

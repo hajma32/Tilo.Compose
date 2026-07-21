@@ -2,7 +2,12 @@
 
 package tilo.compose.dsl
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import kotlinx.coroutines.test.runTest
+import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.PointIconStyle
+import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
@@ -18,6 +23,7 @@ import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
+import tilo.compose.render.PointIconPainterLayer
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -26,6 +32,55 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 class MapLayerBuilderTest {
+    @Test
+    fun featureLayerRegistersPointIconsById() {
+        val painter = ColorPainter(Color.Red)
+        val builder = MapLayerBuilder()
+
+        builder.featureLayer(id = "places", features = emptyList()) {
+            pointIcon("stop", painter)
+        }
+
+        val layer = builder.build().single() as PointIconPainterLayer
+        assertEquals(painter, layer.pointIconPainters["stop"])
+    }
+
+    @Test
+    fun duplicatePointIconIdsAreRejected() {
+        val builder = MapLayerBuilder()
+
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                builder.featureLayer(id = "places", features = emptyList()) {
+                    pointIcon("stop", ColorPainter(Color.Red))
+                    pointIcon("stop", ColorPainter(Color.Blue))
+                }
+            }
+
+        assertContains(error.message.orEmpty(), "Point icon id 'stop' is already registered")
+    }
+
+    @Test
+    fun unregisteredPointIconReferencesAreRejected() {
+        val builder = MapLayerBuilder()
+        val features =
+            listOf(
+                Feature(
+                    key = "stop",
+                    geometry = Point(0.0, 0.0),
+                    style = PointStyle(icon = PointIconStyle("missing")),
+                ),
+            )
+
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                builder.featureLayer(id = "places", features = features) {}
+            }
+
+        assertContains(error.message.orEmpty(), "unregistered point icon IDs: missing")
+        assertContains(error.message.orEmpty(), "pointIcon(id, painter)")
+    }
+
     @Test
     fun publicWMSBuilderLoadsCapabilitiesAndResolvesMultipleLayers() =
         runTest {

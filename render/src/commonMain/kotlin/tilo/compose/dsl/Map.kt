@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import tilo.compose.core.feature.Feature
@@ -761,18 +762,25 @@ class MapLayerBuilder private constructor(
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
     ) {
+        validatePointIconReferences(
+            layerId = id,
+            features = features,
+            layerStyle = style,
+            registeredIconIds = emptySet(),
+        )
         layer(
-            FeatureLayer(
-                id = id,
-                zIndex = zIndex,
-                visible = visible,
-                minZoom = minZoom,
-                maxZoom = maxZoom,
-                projection = projection,
-                attributions = attributions.withSingle(attribution),
-                features = features,
-                renderStrategy = renderMode.toVectorRenderStrategy(),
-                style = style,
+            createFeatureLayer(
+                id,
+                features,
+                zIndex,
+                visible,
+                minZoom,
+                maxZoom,
+                projection,
+                renderMode,
+                style,
+                attribution,
+                attributions,
             ),
         )
     }
@@ -783,20 +791,60 @@ class MapLayerBuilder private constructor(
         block: FeatureLayerOptions.() -> Unit,
     ) {
         val options = FeatureLayerOptions().apply(block)
-        featureLayer(
-            id = id,
+        validatePointIconReferences(
+            layerId = id,
             features = features,
-            zIndex = options.zIndex,
-            visible = options.visible,
-            minZoom = options.minZoom,
-            maxZoom = options.maxZoom,
-            projection = options.projection,
-            renderMode = options.renderMode,
-            style = options.style,
-            attribution = options.attribution,
-            attributions = options.attributions,
+            layerStyle = options.style,
+            registeredIconIds = options.pointIconPainters.keys,
+        )
+        val featureLayer =
+            createFeatureLayer(
+                id,
+                features,
+                options.zIndex,
+                options.visible,
+                options.minZoom,
+                options.maxZoom,
+                options.projection,
+                options.renderMode,
+                options.style,
+                options.attribution,
+                options.attributions,
+            )
+        layer(
+            if (options.pointIconPainters.isEmpty()) {
+                featureLayer
+            } else {
+                IconFeatureLayer(featureLayer, options.pointIconPainters.toMap())
+            },
         )
     }
+
+    private fun createFeatureLayer(
+        id: String,
+        features: List<Feature>,
+        zIndex: Int,
+        visible: Boolean,
+        minZoom: Double?,
+        maxZoom: Double?,
+        projection: Projection?,
+        renderMode: FeatureRenderMode,
+        style: FeatureLayerStyle,
+        attribution: Attribution?,
+        attributions: List<Attribution>,
+    ): FeatureLayer =
+        FeatureLayer(
+            id = id,
+            zIndex = zIndex,
+            visible = visible,
+            minZoom = minZoom,
+            maxZoom = maxZoom,
+            projection = projection,
+            attributions = attributions.withSingle(attribution),
+            features = features,
+            renderStrategy = renderMode.toVectorRenderStrategy(),
+            style = style,
+        )
 
     internal val managedWMSDeclarations: List<ManagedWMSLayerDeclaration>
         get() = items.mapNotNull { (it as? MapLayerItem.ManagedWMS)?.declaration }
@@ -913,6 +961,8 @@ private class MutableTileReader(
 @ExperimentalTiloApi
 @TiloDsl
 class FeatureLayerOptions {
+    internal val pointIconPainters = linkedMapOf<String, Painter>()
+
     var zIndex: Int = 0
     var visible: Boolean = true
     var minZoom: Double? = null
@@ -922,6 +972,20 @@ class FeatureLayerOptions {
     var style: FeatureLayerStyle = FeatureLayerStyle()
     var attribution: Attribution? = null
     var attributions: List<Attribution> = emptyList()
+
+    /**
+     * Registers a bitmap or vector [Painter] for use by point styles in this layer.
+     *
+     * The [id] must be unique within the layer. Reference it with
+     * [PointStyleBuilder.icon].
+     */
+    fun pointIcon(
+        id: String,
+        painter: Painter,
+    ) {
+        require(id.isNotBlank()) { "Point icon id must not be blank" }
+        require(pointIconPainters.put(id, painter) == null) { "Point icon id '$id' is already registered" }
+    }
 }
 
 /**

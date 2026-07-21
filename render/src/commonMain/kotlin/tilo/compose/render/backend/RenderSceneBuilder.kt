@@ -9,6 +9,7 @@ import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.tile.Tile
 import tilo.compose.render.ExperimentalTiloRenderingApi
+import tilo.compose.render.PointIconPainterLayer
 import tilo.compose.render.RenderCommand
 
 internal object RenderSceneBuilder {
@@ -49,6 +50,10 @@ internal object RenderSceneBuilder {
                                         id = layer.id,
                                         zIndex = layer.zIndex,
                                         commands = commands,
+                                        pointIconPainters =
+                                            (layer as? PointIconPainterLayer)
+                                                ?.pointIconPainters
+                                                .orEmpty(),
                                     ),
                                 )
                             }

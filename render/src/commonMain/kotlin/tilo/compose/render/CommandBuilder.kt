@@ -98,7 +98,10 @@ internal object CommandBuilder {
         style: GeometryStyle?,
     ): List<RenderCommand> {
         val pointStyle = style.toPointStyle()
-        val hidePoints = pointStyle.fill?.color == ColorValue.Transparent && pointStyle.stroke == null
+        val hidePoints =
+            pointStyle.icon == null &&
+                pointStyle.fill?.color == ColorValue.Transparent &&
+                pointStyle.stroke == null
         return when (geometry) {
             is Point ->
                 if (hidePoints) {

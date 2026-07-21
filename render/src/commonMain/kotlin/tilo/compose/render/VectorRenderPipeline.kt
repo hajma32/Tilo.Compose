@@ -28,6 +28,7 @@ internal data class VectorLayerCacheKey(
     val sourceVersion: Long,
     val renderStrategy: VectorRenderStrategy,
     val styleHash: Int,
+    val pointIconsHash: Int,
     val selectedFeatureKeys: Set<String>,
 )
 
@@ -129,6 +130,7 @@ internal fun VectorLayer.cacheKey(selectedFeatureKeys: Set<String> = emptySet())
         sourceVersion = source.version,
         renderStrategy = renderStrategy,
         styleHash = style.hashCode(),
+        pointIconsHash = (this as? PointIconPainterLayer)?.pointIconPainters.orEmpty().hashCode(),
         selectedFeatureKeys = selectedFeatureKeys,
     )
 

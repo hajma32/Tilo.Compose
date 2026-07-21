@@ -6,6 +6,7 @@ import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.feature.FillStyle
+import tilo.compose.core.feature.PointIconStyle
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.MultiLineString
@@ -18,6 +19,24 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class CommandBuilderTest {
+    @Test
+    fun iconOnlyPointProducesRenderCommand() {
+        val icon = PointIconStyle(id = "stop", size = 24.0)
+        val feature =
+            Feature(
+                key = "icon",
+                geometry = Point(0.0, 0.0),
+                style = PointStyle(fill = null, stroke = null, icon = icon),
+            )
+
+        val command =
+            assertIs<RenderPoint>(
+                CommandBuilder.build(testMap(width = 100, height = 100), listOf(feature)).single(),
+            )
+
+        assertEquals(icon, command.style.icon)
+    }
+
     /**
      * Verifies command generation for every supported geometry family.
      *

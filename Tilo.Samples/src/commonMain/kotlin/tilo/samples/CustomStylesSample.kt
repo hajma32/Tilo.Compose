@@ -8,10 +8,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import org.jetbrains.compose.resources.painterResource
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
-import tilo.compose.core.feature.PointShape
 import tilo.compose.core.geometry.Point
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.TiloMap
@@ -25,11 +25,16 @@ import tilo.compose.dsl.wgs84
 import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultScaleBarContent
+import tilocompose.tilo_samples.generated.resources.Res
+import tilocompose.tilo_samples.generated.resources.sample_stop_bitmap
+import tilocompose.tilo_samples.generated.resources.sample_stop_vector
 
 @Composable
 internal fun BoxScope.CustomStylesSample() {
     val camera = rememberWebMercatorCamera(center = Point(14.426, 50.079), zoom = 13.2)
     val features = remember { customStyleFeatures() }
+    val vectorStopIcon = painterResource(Res.drawable.sample_stop_vector)
+    val bitmapStopIcon = painterResource(Res.drawable.sample_stop_bitmap)
 
     TiloMap(
         cameraState = camera,
@@ -42,6 +47,8 @@ internal fun BoxScope.CustomStylesSample() {
             featureLayer("custom-styles", features) {
                 zIndex = 3
                 projection = wgs84()
+                pointIcon("vector-stop", vectorStopIcon)
+                pointIcon("bitmap-stop", bitmapStopIcon)
             }
         },
     )
@@ -50,8 +57,8 @@ internal fun BoxScope.CustomStylesSample() {
         sample = Sample.CustomStyles,
         body =
             "Styles can live on a layer or on an individual feature. " +
-                "This route, park and stops each own their look.",
-        code = "style = polygonStyle { fill(...) }",
+                "The stops use XML vector and bitmap icons through the same lightweight API.",
+        code = "pointIcon(\"stop\", painterResource(...))",
     )
 }
 
@@ -117,15 +124,18 @@ private fun customStyleFeatures(): List<Feature> =
             Triple("stop-a", "A", Point(14.407, 50.085)),
             Triple("stop-b", "B", Point(14.429, 50.080)),
             Triple("stop-c", "C", Point(14.454, 50.088)),
-        ).forEach { (key, labelText, location) ->
+        ).forEachIndexed { index, (key, labelText, location) ->
             point(key, location) {
                 label = labelText
                 style =
                     pointStyle {
-                        shape = PointShape.Square
-                        size = 18.dp
-                        fill(0xFF17201C)
-                        stroke(0xFFFFFFFF, width = 3.dp)
+                        noFill()
+                        noStroke()
+                        icon(
+                            id = if (index == 1) "bitmap-stop" else "vector-stop",
+                            size = 32.dp,
+                            tint = if (index == 2) 0xFF2F6FEB else null,
+                        )
                     }
                 labelStyle =
                     smallLabelStyle {

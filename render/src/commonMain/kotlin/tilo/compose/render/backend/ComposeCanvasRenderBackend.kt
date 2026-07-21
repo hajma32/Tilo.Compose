@@ -79,6 +79,7 @@ internal fun DrawScope.drawRenderScene(
                 drawFeatureGeometry(
                     commands = layer.commands,
                     map = map,
+                    pointIconPainters = layer.pointIconPainters,
                 )
                 layer.commands.forEach { command ->
                     if (command is RenderLabel) {

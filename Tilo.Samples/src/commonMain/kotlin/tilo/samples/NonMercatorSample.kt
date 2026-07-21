@@ -59,9 +59,9 @@ internal fun BoxScope.NonMercatorSample() {
     SampleInfoCard(
         sample = Sample.NonMercator,
         body =
-            "The map and WMS grid run directly in S‑JTSK. The Prague marker starts in WGS84 " +
-                "and is transformed to EPSG:5514 before rendering.",
-        code = "Wgs84ToEpsg5514Transformation.sourceToTarget(prague)",
+            "The map and WMS grid run directly in S‑JTSK. The camera stays within Czechia " +
+                "between zoom levels 9 and 16.",
+        code = "MapConfig(minZoom = 9.0, maxZoom = 16.0, cameraBounds = czechia)",
     )
     MapPill(
         when (wmsState.status) {

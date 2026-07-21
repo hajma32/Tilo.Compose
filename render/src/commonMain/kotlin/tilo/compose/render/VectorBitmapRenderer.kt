@@ -50,19 +50,7 @@ internal class VectorBitmapRenderer(
             val bitmap = ImageBitmap(bitmapWidth, bitmapHeight)
             val canvas = GraphicsCanvas(bitmap)
             val drawScope = CanvasDrawScope()
-            val bitmapMap =
-                tilo.compose.core.map.MapState(
-                    center = map.center,
-                    zoom = map.zoom,
-                    projection = map.projection,
-                    config = map.config,
-                    viewport =
-                        Viewport(
-                            width = bitmapWidth,
-                            height = bitmapHeight,
-                            pixelRatio = map.viewport.pixelRatio * bitmapScale,
-                        ),
-                )
+            val bitmapMap = map.forOffscreenViewport(bitmapWidth, bitmapHeight, bitmapScale)
 
             drawScope.draw(
                 density = density,
@@ -75,6 +63,10 @@ internal class VectorBitmapRenderer(
                 drawFeatureGeometry(
                     commands = commands,
                     map = bitmapMap,
+                    pointIconPainters =
+                        (layer as? PointIconPainterLayer)
+                            ?.pointIconPainters
+                            .orEmpty(),
                 )
             }
 
@@ -94,3 +86,23 @@ internal class VectorBitmapRenderer(
             )
         }
 }
+
+internal fun tilo.compose.core.map.MapState.forOffscreenViewport(
+    width: Int,
+    height: Int,
+    bitmapScale: Double,
+): tilo.compose.core.map.MapState =
+    tilo.compose.core.map.MapState(
+        center = center,
+        zoom = zoom,
+        projection = projection,
+        // The padded offscreen viewport is a render buffer, not a camera viewport.
+        // Reapplying camera bounds here would move its center away from the snapshot anchor.
+        config = config.copy(cameraBounds = null),
+        viewport =
+            Viewport(
+                width = width,
+                height = height,
+                pixelRatio = viewport.pixelRatio * bitmapScale,
+            ),
+    )

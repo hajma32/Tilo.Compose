@@ -18,6 +18,7 @@ import tilo.compose.core.feature.LabelStyle
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.LineStyle
+import tilo.compose.core.feature.PointIconStyle
 import tilo.compose.core.feature.PointShape
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.PolygonStyle
@@ -271,6 +272,32 @@ class PointStyleBuilder {
 
     private var fill: FillStyle? = FillStyle(color = ColorValue.Blue)
     private var stroke: StrokeStyle? = StrokeStyle(color = ColorValue.White, width = 2.5)
+    private var icon: PointIconStyle? = null
+
+    /**
+     * Draws a layer-registered icon over the point shape.
+     *
+     * Call [noFill] and [noStroke] when the icon should replace the shape.
+     */
+    fun icon(
+        id: String,
+        size: Dp = 14.dp,
+        tint: Long? = null,
+        opacity: Double = 1.0,
+    ) {
+        icon =
+            PointIconStyle(
+                id = id,
+                size = size.toStyleUnit(),
+                tint = tint?.let(::argb),
+                opacity = opacity,
+            )
+    }
+
+    /** Removes an icon inherited from earlier builder configuration. */
+    fun noIcon() {
+        icon = null
+    }
 
     fun fill(
         color: Long,
@@ -312,6 +339,7 @@ class PointStyleBuilder {
             size = size.toStyleUnit(),
             fill = fill,
             stroke = stroke,
+            icon = icon,
         )
 }
 

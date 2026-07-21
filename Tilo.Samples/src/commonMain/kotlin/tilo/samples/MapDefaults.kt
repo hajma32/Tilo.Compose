@@ -3,6 +3,7 @@
 package tilo.samples
 
 import androidx.compose.runtime.Composable
+import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.transform.Epsg5514ToWgs84Transformation
@@ -22,10 +23,21 @@ internal const val CUZK_ORTHOPHOTO_URL =
 private val PRAGUE = Point(14.4378, 50.0755)
 private val DEFAULT_MAP_CONFIG = MapConfig(minZoom = 1.0, maxZoom = 20.0)
 
+// WGS84 extent published in the ČÚZK ZTM 100 metadata for Czechia.
+private val CZECH_REPUBLIC_SJTSK_BOUNDS =
+    transformedBounds(
+        west = 12.09,
+        south = 48.55,
+        east = 18.86,
+        north = 51.06,
+        transform = Wgs84ToEpsg5514Transformation::sourceToTarget,
+    )
+
 @Composable
 internal fun rememberWebMercatorCamera(
     center: Point = PRAGUE,
     zoom: Double,
+    cameraBounds: BoundingBox? = null,
 ): MapCameraState =
     rememberMapCameraState(
         initialCenter = Wgs84ToWebMercatorTransformation.sourceToTarget(center),
@@ -33,9 +45,17 @@ internal fun rememberWebMercatorCamera(
         projection = webMercator(),
         config =
             DEFAULT_MAP_CONFIG
+                .copy(cameraBounds = cameraBounds)
                 .withTransformation(Wgs84ToWebMercatorTransformation)
                 .withTransformation(WebMercatorToWgs84Transformation),
     )
+
+internal fun webMercatorBounds(
+    west: Double,
+    south: Double,
+    east: Double,
+    north: Double,
+): BoundingBox = transformedBounds(west, south, east, north, Wgs84ToWebMercatorTransformation::sourceToTarget)
 
 @Composable
 internal fun rememberSjtskCamera(): MapCameraState =
@@ -44,9 +64,28 @@ internal fun rememberSjtskCamera(): MapCameraState =
         initialZoom = 12.2,
         projection = sjtsk(),
         config =
-            DEFAULT_MAP_CONFIG
-                .withTransformation(Wgs84ToEpsg5514Transformation)
+            MapConfig(
+                minZoom = 9.0,
+                maxZoom = 16.0,
+                cameraBounds = CZECH_REPUBLIC_SJTSK_BOUNDS,
+            ).withTransformation(Wgs84ToEpsg5514Transformation)
                 .withTransformation(Epsg5514ToWgs84Transformation),
+    )
+
+private fun transformedBounds(
+    west: Double,
+    south: Double,
+    east: Double,
+    north: Double,
+    transform: (Point) -> Point,
+): BoundingBox =
+    BoundingBox.fromPoints(
+        listOf(
+            transform(Point(west, south)),
+            transform(Point(west, north)),
+            transform(Point(east, north)),
+            transform(Point(east, south)),
+        ),
     )
 
 internal fun MapLayerBuilder.openStreetMapLayer() {

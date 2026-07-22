@@ -161,7 +161,6 @@ class FeatureLayerStyleBuilder {
         labelsVisible = true
     }
 
-
     fun zoom(
         minZoom: Double? = null,
         maxZoomExclusive: Double? = null,

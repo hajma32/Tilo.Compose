@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.painter.Painter
+import tilo.compose.core.feature.CasingStyle
 import tilo.compose.core.feature.DashPattern
 import tilo.compose.core.feature.FillPattern
 import tilo.compose.core.feature.FillStyle
@@ -92,7 +93,7 @@ private fun DrawScope.drawLineString(
         drawPath(
             path = path,
             color = casing.color.toColor(casing.opacity),
-            style = toComposeStroke(casing),
+            style = toComposeStroke(casing, command.style.stroke.width),
         )
     }
     drawPath(
@@ -122,7 +123,7 @@ private fun DrawScope.drawPolygon(
         drawPath(
             path = path,
             color = casing.color.toColor(casing.opacity),
-            style = toComposeStroke(casing),
+            style = toComposeStroke(casing, command.style.stroke?.width ?: 0.0),
         )
     }
 
@@ -313,6 +314,17 @@ private fun DrawScope.toComposeStroke(stroke: StrokeStyle): Stroke =
         cap = stroke.lineCap.toComposeCap(),
         join = stroke.lineJoin.toComposeJoin(),
         pathEffect = toPathEffect(stroke.dash),
+    )
+
+private fun DrawScope.toComposeStroke(
+    casing: CasingStyle,
+    foregroundWidth: Double,
+): Stroke =
+    Stroke(
+        width = styleUnitToPx(casing.outerWidth(foregroundWidth)),
+        cap = casing.lineCap.toComposeCap(),
+        join = casing.lineJoin.toComposeJoin(),
+        pathEffect = toPathEffect(casing.dash),
     )
 
 private fun LineCap.toComposeCap(): StrokeCap =

@@ -5,6 +5,7 @@ package tilo.compose.render
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
+import tilo.compose.core.feature.FeatureLayerStyleZoomRule
 import tilo.compose.core.feature.FillStyle
 import tilo.compose.core.feature.PointIconStyle
 import tilo.compose.core.feature.PointStyle
@@ -160,6 +161,33 @@ class CommandBuilderTest {
         assertEquals(Point(0.0, 0.0), label.anchor)
         assertEquals(true, label.followsLine)
         assertEquals(-45.0, label.rotationDegrees, absoluteTolerance = 0.0001)
+    }
+
+    @Test
+    fun zoomRuleCanChangeGeometryAndSuppressLabels() {
+        val compact = PointStyle(size = 12.0)
+        val detailed = PointStyle(size = 24.0)
+        val layerStyle =
+            FeatureLayerStyle(
+                point = compact,
+                zoomRules =
+                    listOf(
+                        FeatureLayerStyleZoomRule(
+                            minZoom = 14.0,
+                            point = detailed,
+                            labelsVisible = false,
+                        ),
+                    ),
+            )
+        val feature = Feature(key = "place", geometry = Point(0.0, 0.0), label = "Place")
+
+        val lowZoom = CommandBuilder.build(testMap(zoom = 13.99), listOf(feature), layerStyle = layerStyle)
+        val highZoom = CommandBuilder.build(testMap(zoom = 14.0), listOf(feature), layerStyle = layerStyle)
+
+        assertEquals(compact, assertIs<RenderPoint>(lowZoom.first()).style)
+        assertIs<RenderLabel>(lowZoom.last())
+        assertEquals(listOf("place:point"), highZoom.map(RenderCommand::id))
+        assertEquals(detailed, assertIs<RenderPoint>(highZoom.single()).style)
     }
 
     private fun square(

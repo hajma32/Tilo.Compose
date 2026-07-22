@@ -1,5 +1,6 @@
 package tilo.compose.draw
 
+import tilo.compose.core.feature.CasingStyle
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.FillStyle
 import tilo.compose.core.feature.LineCap
@@ -27,9 +28,9 @@ data class DefaultDrawStyle(
     override val line: LineStyle =
         LineStyle(
             casing =
-                StrokeStyle(
+                CasingStyle(
                     color = color(0xFFFFFFFF),
-                    width = 7.0,
+                    width = 3.25,
                     lineCap = LineCap.Round,
                     lineJoin = LineJoin.Round,
                 ),
@@ -45,9 +46,9 @@ data class DefaultDrawStyle(
         PolygonStyle(
             fill = FillStyle(color = color(0x33F97316)),
             casing =
-                StrokeStyle(
+                CasingStyle(
                     color = color(0xFFFFFFFF),
-                    width = 7.0,
+                    width = 3.25,
                     lineJoin = LineJoin.Round,
                 ),
             stroke =

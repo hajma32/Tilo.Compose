@@ -51,7 +51,7 @@ internal class VectorRenderPipeline(
 
             vectorLayers.forEach { layer ->
                 val selectedFeatureKeys = selectedFeatures.keysForLayer(layer.id)
-                cacheKeysByLayer[layer.id] = layer.cacheKey(selectedFeatureKeys)
+                cacheKeysByLayer[layer.id] = layer.cacheKey(selectedFeatureKeys, map.zoom)
                 val features = layer.source.getFeatures(map)
                 val projected = transformFeaturesToMapProjection(features, layer.projection, map)
                 val commands =
@@ -123,13 +123,16 @@ internal class VectorRenderPipeline(
         }
 }
 
-internal fun VectorLayer.cacheKey(selectedFeatureKeys: Set<String> = emptySet()): VectorLayerCacheKey =
+internal fun VectorLayer.cacheKey(
+    selectedFeatureKeys: Set<String> = emptySet(),
+    zoom: Double? = null,
+): VectorLayerCacheKey =
     VectorLayerCacheKey(
         layerId = id,
         sourceIdentity = source.hashCode(),
         sourceVersion = source.version,
         renderStrategy = renderStrategy,
-        styleHash = style.hashCode(),
+        styleHash = (zoom?.let(style::resolveAtZoom) ?: style).hashCode(),
         pointIconsHash = (this as? PointIconPainterLayer)?.pointIconPainters.orEmpty().hashCode(),
         selectedFeatureKeys = selectedFeatureKeys,
     )

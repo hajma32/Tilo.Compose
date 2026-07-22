@@ -22,7 +22,7 @@ internal class FeatureHitTester {
                 .map { layer ->
                     FeatureHitTestLayer(
                         id = layer.id,
-                        style = layer.style,
+                        style = layer.style.resolveAtZoom(map.zoom),
                         features =
                             layer.source
                                 .getFeatures(map)

@@ -82,7 +82,7 @@ private fun customStyleFeatures(): List<Feature> =
             style =
                 polygonStyle {
                     fill(0x77BFED6F)
-                    casing(0xFFFFFFFF, width = 7.dp) { lineJoin = LineJoin.Round }
+                    casing(0xFFFFFFFF, width = 4.dp) { lineJoin = LineJoin.Round }
                     stroke(0xFF253E32, width = 3.dp) { lineJoin = LineJoin.Round }
                 }
             labelStyle = mediumLabelStyle { color(0xFF17201C) }
@@ -103,7 +103,7 @@ private fun customStyleFeatures(): List<Feature> =
             label = "Tilo route"
             style =
                 lineStyle {
-                    casing(0xFFFFFFFF, width = 10.dp) {
+                    casing(0xFFFFFFFF, width = 4.dp) {
                         lineCap = LineCap.Round
                         lineJoin = LineJoin.Round
                     }

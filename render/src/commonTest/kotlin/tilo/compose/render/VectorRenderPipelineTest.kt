@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
+import tilo.compose.core.feature.FeatureLayerStyleZoomRule
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.source.FeatureSource
 import tilo.compose.core.geometry.Point
@@ -159,6 +160,26 @@ class VectorRenderPipelineTest {
         assertNotEquals(sourceChanged, styleChanged)
         assertNotEquals(styleChanged, strategyChanged)
         assertNotEquals(strategyChanged, selectionChanged)
+    }
+
+    @Test
+    fun cacheKeyChangesOnlyWhenZoomCrossesAStyleRuleBoundary() {
+        val layer = TestVectorLayer("layer", MutableSource())
+        layer.styleValue =
+            FeatureLayerStyle(
+                point = PointStyle(size = 10.0),
+                zoomRules =
+                    listOf(
+                        FeatureLayerStyleZoomRule(minZoom = 14.0, point = PointStyle(size = 20.0)),
+                    ),
+            )
+
+        val belowFirst = layer.cacheKey(zoom = 12.0)
+        val belowSecond = layer.cacheKey(zoom = 13.99)
+        val above = layer.cacheKey(zoom = 14.0)
+
+        assertEquals(belowFirst, belowSecond)
+        assertNotEquals(belowSecond, above)
     }
 
     private suspend fun renderAfterKeyChange(

@@ -16,6 +16,7 @@ internal fun SampleMap(
             Sample.OpenStreetMap -> OpenStreetMapSample()
             Sample.Geometries -> GeometriesSample()
             Sample.CustomStyles -> CustomStylesSample()
+            Sample.StyleLab -> StyleLabSample()
             Sample.Callout -> CalloutSample()
             Sample.NonMercator -> NonMercatorSample()
             Sample.Drawing -> DrawingSample()

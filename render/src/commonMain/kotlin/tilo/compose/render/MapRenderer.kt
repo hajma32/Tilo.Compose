@@ -102,7 +102,7 @@ fun MapRenderer(
     val vectorLayerCacheSignature = vectorLayers.cacheSignature()
     val currentVectorCacheKeys =
         vectorLayers.associate { layer ->
-            layer.id to layer.cacheKey(selectedFeatures.keysForLayer(layer.id))
+            layer.id to layer.cacheKey(selectedFeatures.keysForLayer(layer.id), map.zoom)
         }
     val renderLoopInput by rememberUpdatedState(
         RenderLoopInput(

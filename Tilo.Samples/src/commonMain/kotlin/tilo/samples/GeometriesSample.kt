@@ -73,7 +73,7 @@ private fun geometryLayerStyle() =
             stroke(0xFFFFFFFF, width = 3.5.dp)
         }
         line {
-            casing(0xFFFFFFFF, width = 8.dp) {
+            casing(0xFFFFFFFF, width = 3.5.dp) {
                 lineCap = LineCap.Round
                 lineJoin = LineJoin.Round
             }
@@ -94,7 +94,7 @@ private fun geometryLayerStyle() =
             stroke(0xFF17201C, width = 4.dp)
         }
         selectedLine {
-            casing(0xFFFFFFFF, width = 11.dp) { lineCap = LineCap.Round }
+            casing(0xFFFFFFFF, width = 4.dp) { lineCap = LineCap.Round }
             stroke(0xFFF2663B, width = 7.dp) { lineCap = LineCap.Round }
         }
         selectedPolygon {

@@ -214,7 +214,7 @@ private fun Feature.asSavedDrawing(): Feature =
                     }
                 is LineString ->
                     lineStyle {
-                        casing(0xFFFFFFFF, width = 8.dp) {
+                        casing(0xFFFFFFFF, width = 3.5.dp) {
                             lineCap = LineCap.Round
                             lineJoin = LineJoin.Round
                         }
@@ -226,7 +226,7 @@ private fun Feature.asSavedDrawing(): Feature =
                 is Polygon ->
                     polygonStyle {
                         fill(0x55F2663B)
-                        casing(0xFFFFFFFF, width = 8.dp) { lineJoin = LineJoin.Round }
+                        casing(0xFFFFFFFF, width = 3.5.dp) { lineJoin = LineJoin.Round }
                         stroke(0xFFF2663B, width = 4.5.dp) { lineJoin = LineJoin.Round }
                     }
                 else -> style

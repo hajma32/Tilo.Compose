@@ -16,11 +16,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import tilo.compose.core.feature.LabelFontStyle
 import tilo.compose.core.feature.LabelFontWeight
 import tilo.compose.core.feature.LabelStyle
+import tilo.compose.core.feature.LabelTextAlign
 import kotlin.math.ceil
 import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 
@@ -244,13 +246,21 @@ private fun DrawScope.labelBitmapPadding(style: LabelStyle): LabelBitmapPadding 
     )
 }
 
-private fun LabelStyle.toTextStyle(): TextStyle =
+internal fun LabelStyle.toTextStyle(): TextStyle =
     TextStyle(
         color = color.toColor(),
         fontSize = fontSize.sp,
         fontWeight = fontWeight.toComposeFontWeight(),
         fontStyle = fontStyle.toComposeFontStyle(),
+        textAlign = textAlign.toComposeTextAlign(),
     )
+
+private fun LabelTextAlign.toComposeTextAlign(): TextAlign =
+    when (this) {
+        LabelTextAlign.Left -> TextAlign.Left
+        LabelTextAlign.Center -> TextAlign.Center
+        LabelTextAlign.Right -> TextAlign.Right
+    }
 
 private fun LabelFontWeight.toComposeFontWeight(): FontWeight =
     when (this) {

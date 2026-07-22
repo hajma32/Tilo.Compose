@@ -6,15 +6,18 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import tilo.compose.core.feature.CasingStyle
 import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.DashPattern
 import tilo.compose.core.feature.FeatureLayerStyle
+import tilo.compose.core.feature.FeatureLayerStyleZoomRule
 import tilo.compose.core.feature.FillPattern
 import tilo.compose.core.feature.FillStyle
 import tilo.compose.core.feature.LabelBackgroundStyle
 import tilo.compose.core.feature.LabelFontStyle
 import tilo.compose.core.feature.LabelFontWeight
 import tilo.compose.core.feature.LabelStyle
+import tilo.compose.core.feature.LabelTextAlign
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.LineStyle
@@ -101,6 +104,8 @@ class FeatureLayerStyleBuilder {
     private var selectedLine: LineStyle? = null
     private var selectedPolygon: PolygonStyle? = null
     private var selectedLabel: LabelStyle? = null
+    private var labelsVisible: Boolean = true
+    private val zoomRules = mutableListOf<FeatureLayerStyleZoomRule>()
 
     fun point(block: PointStyleBuilder.() -> Unit) {
         point = pointStyle(block)
@@ -148,6 +153,26 @@ class FeatureLayerStyleBuilder {
         selectedLabel = style
     }
 
+    fun hideLabels() {
+        labelsVisible = false
+    }
+
+    fun showLabels() {
+        labelsVisible = true
+    }
+
+
+    fun zoom(
+        minZoom: Double? = null,
+        maxZoomExclusive: Double? = null,
+        block: FeatureLayerStyleZoomRuleBuilder.() -> Unit,
+    ) {
+        zoomRules +=
+            FeatureLayerStyleZoomRuleBuilder(minZoom, maxZoomExclusive)
+                .apply(block)
+                .build()
+    }
+
     internal fun build(): FeatureLayerStyle =
         FeatureLayerStyle(
             point = point,
@@ -158,6 +183,95 @@ class FeatureLayerStyleBuilder {
             selectedLine = selectedLine,
             selectedPolygon = selectedPolygon,
             selectedLabel = selectedLabel,
+            labelsVisible = labelsVisible,
+            zoomRules = zoomRules.toList(),
+        )
+}
+
+/** Builder for one zoom-dependent partial [FeatureLayerStyle] replacement. */
+@ExperimentalTiloApi
+@TiloDsl
+class FeatureLayerStyleZoomRuleBuilder internal constructor(
+    private val minZoom: Double?,
+    private val maxZoomExclusive: Double?,
+) {
+    private var point: PointStyle? = null
+    private var line: LineStyle? = null
+    private var polygon: PolygonStyle? = null
+    private var label: LabelStyle? = null
+    private var selectedPoint: PointStyle? = null
+    private var selectedLine: LineStyle? = null
+    private var selectedPolygon: PolygonStyle? = null
+    private var selectedLabel: LabelStyle? = null
+    private var labelsVisible: Boolean? = null
+
+    fun point(block: PointStyleBuilder.() -> Unit) {
+        point = pointStyle(block)
+    }
+
+    fun line(block: LineStyleBuilder.() -> Unit) {
+        line = lineStyle(block)
+    }
+
+    fun polygon(block: PolygonStyleBuilder.() -> Unit) {
+        polygon = polygonStyle(block)
+    }
+
+    fun label(
+        color: Long = 0xFF111827,
+        block: LabelStyleBuilder.() -> Unit = {},
+    ) {
+        label = LabelStyleBuilder(color = argb(color)).apply(block).build()
+    }
+
+    fun label(style: LabelStyle) {
+        label = style
+    }
+
+    fun selectedPoint(block: PointStyleBuilder.() -> Unit) {
+        selectedPoint = pointStyle(block)
+    }
+
+    fun selectedLine(block: LineStyleBuilder.() -> Unit) {
+        selectedLine = lineStyle(block)
+    }
+
+    fun selectedPolygon(block: PolygonStyleBuilder.() -> Unit) {
+        selectedPolygon = polygonStyle(block)
+    }
+
+    fun selectedLabel(
+        color: Long = 0xFF111827,
+        block: LabelStyleBuilder.() -> Unit = {},
+    ) {
+        selectedLabel = LabelStyleBuilder(color = argb(color)).apply(block).build()
+    }
+
+    fun selectedLabel(style: LabelStyle) {
+        selectedLabel = style
+    }
+
+    fun hideLabels() {
+        labelsVisible = false
+    }
+
+    fun showLabels() {
+        labelsVisible = true
+    }
+
+    internal fun build(): FeatureLayerStyleZoomRule =
+        FeatureLayerStyleZoomRule(
+            minZoom = minZoom,
+            maxZoomExclusive = maxZoomExclusive,
+            point = point,
+            line = line,
+            polygon = polygon,
+            label = label,
+            selectedPoint = selectedPoint,
+            selectedLine = selectedLine,
+            selectedPolygon = selectedPolygon,
+            selectedLabel = selectedLabel,
+            labelsVisible = labelsVisible,
         )
 }
 
@@ -177,6 +291,7 @@ class LabelStyleBuilder internal constructor(
 ) {
     var fontWeight: LabelFontWeight = LabelFontWeight.Bold
     var fontStyle: LabelFontStyle = LabelFontStyle.Normal
+    var textAlign: LabelTextAlign = LabelTextAlign.Center
 
     fun color(value: Long) {
         color = argb(value)
@@ -196,6 +311,10 @@ class LabelStyleBuilder internal constructor(
 
     fun fontStyle(value: LabelFontStyle) {
         fontStyle = value
+    }
+
+    fun textAlign(value: LabelTextAlign) {
+        textAlign = value
     }
 
     fun halo(
@@ -253,6 +372,7 @@ class LabelStyleBuilder internal constructor(
             fontSize = fontSize.value.toDouble(),
             fontWeight = fontWeight,
             fontStyle = fontStyle,
+            textAlign = textAlign,
             haloColor = haloColor,
             haloWidth = haloWidth.toStyleUnit(),
             background = background,
@@ -349,10 +469,10 @@ class PointStyleBuilder {
 @ExperimentalTiloApi
 @TiloDsl
 class LineStyleBuilder {
-    private var casing: StrokeStyle? =
-        StrokeStyle(
+    private var casing: CasingStyle? =
+        CasingStyle(
             color = ColorValue.White,
-            width = 6.0,
+            width = 2.0,
             lineCap = LineCap.Round,
             lineJoin = LineJoin.Round,
         )
@@ -384,20 +504,20 @@ class LineStyleBuilder {
 
     fun casing(
         color: Long,
-        width: Dp = 6.dp,
+        width: Dp = 2.dp,
         opacity: Double = 1.0,
-        block: StrokeStyleBuilder.() -> Unit = {},
+        block: CasingStyleBuilder.() -> Unit = {},
     ) {
-        casing = StrokeStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
+        casing = CasingStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
     }
 
     fun casing(
         color: Long,
         width: Double,
         opacity: Double = 1.0,
-        block: StrokeStyleBuilder.() -> Unit = {},
+        block: CasingStyleBuilder.() -> Unit = {},
     ) {
-        casing = StrokeStyleBuilder(argb(color), width, opacity).apply(block).build()
+        casing = CasingStyleBuilder(argb(color), width, opacity).apply(block).build()
     }
 
     fun noCasing() {
@@ -414,10 +534,10 @@ class LineStyleBuilder {
 @TiloDsl
 class PolygonStyleBuilder {
     private var fill: FillStyle? = FillStyle(color = argb(0x331E88E5))
-    private var casing: StrokeStyle? =
-        StrokeStyle(
+    private var casing: CasingStyle? =
+        CasingStyle(
             color = ColorValue.White,
-            width = 5.0,
+            width = 2.0,
             lineJoin = LineJoin.Round,
         )
     private var stroke: StrokeStyle? =
@@ -441,20 +561,20 @@ class PolygonStyleBuilder {
 
     fun casing(
         color: Long,
-        width: Dp = 5.dp,
+        width: Dp = 2.dp,
         opacity: Double = 1.0,
-        block: StrokeStyleBuilder.() -> Unit = {},
+        block: CasingStyleBuilder.() -> Unit = {},
     ) {
-        casing = StrokeStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
+        casing = CasingStyleBuilder(argb(color), width.toStyleUnit(), opacity).apply(block).build()
     }
 
     fun casing(
         color: Long,
         width: Double,
         opacity: Double = 1.0,
-        block: StrokeStyleBuilder.() -> Unit = {},
+        block: CasingStyleBuilder.() -> Unit = {},
     ) {
-        casing = StrokeStyleBuilder(argb(color), width, opacity).apply(block).build()
+        casing = CasingStyleBuilder(argb(color), width, opacity).apply(block).build()
     }
 
     fun noCasing() {
@@ -552,6 +672,64 @@ class FillStyleBuilder internal constructor(
     }
 
     internal fun build(): FillStyle = FillStyle(color = color, opacity = opacity, pattern = pattern)
+}
+
+/** Options for the additional-width casing drawn below a foreground stroke. */
+@ExperimentalTiloApi
+@TiloDsl
+class CasingStyleBuilder internal constructor(
+    private val color: ColorValue,
+    private val width: Double,
+    private val opacity: Double,
+) {
+    var lineCap: LineCap = LineCap.Butt
+    var lineJoin: LineJoin = LineJoin.Miter
+    private var dash: DashPattern? = null
+
+    fun dash(
+        first: Dp,
+        second: Dp,
+        phase: Dp = 0.dp,
+    ) {
+        dash = DashPattern(intervals = listOf(first.toStyleUnit(), second.toStyleUnit()), phase = phase.toStyleUnit())
+    }
+
+    fun dash(
+        first: Dp,
+        second: Dp,
+        third: Dp,
+        fourth: Dp,
+        phase: Dp = 0.dp,
+    ) {
+        dash =
+            DashPattern(
+                intervals =
+                    listOf(
+                        first.toStyleUnit(),
+                        second.toStyleUnit(),
+                        third.toStyleUnit(),
+                        fourth.toStyleUnit(),
+                    ),
+                phase = phase.toStyleUnit(),
+            )
+    }
+
+    fun dash(
+        vararg intervals: Double,
+        phase: Double = 0.0,
+    ) {
+        dash = DashPattern(intervals.toList(), phase)
+    }
+
+    internal fun build(): CasingStyle =
+        CasingStyle(
+            color = color,
+            width = width,
+            opacity = opacity,
+            lineCap = lineCap,
+            lineJoin = lineJoin,
+            dash = dash,
+        )
 }
 
 /**

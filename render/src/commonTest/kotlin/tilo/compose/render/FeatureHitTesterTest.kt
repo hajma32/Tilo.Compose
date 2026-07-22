@@ -1,6 +1,9 @@
 package tilo.compose.render
 
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.FeatureLayerStyle
+import tilo.compose.core.feature.FeatureLayerStyleZoomRule
+import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.map.MapConfig
@@ -112,6 +115,38 @@ class FeatureHitTesterTest {
             )
 
         assertTrue(selections.isEmpty())
+    }
+
+    @Test
+    fun hitTestingUsesStyleResolvedForCurrentZoom() {
+        val map = testMap(center = Point(0.0, 0.0), zoom = 13.0, width = 200, height = 200)
+        val layer =
+            FeatureLayer(
+                id = "places",
+                features = listOf(Feature(key = "place", geometry = Point(0.0, 0.0))),
+                style =
+                    FeatureLayerStyle(
+                        point = PointStyle(size = 10.0, stroke = null),
+                        zoomRules =
+                            listOf(
+                                FeatureLayerStyleZoomRule(
+                                    minZoom = 14.0,
+                                    point = PointStyle(size = 200.0, stroke = null),
+                                ),
+                            ),
+                    ),
+            )
+        val tap = Point(180.0, 100.0)
+
+        assertTrue(FeatureHitTester().hitTest(map, listOf(layer), tap).isEmpty())
+
+        map.zoom = 14.0
+        val selectedKey =
+            FeatureHitTester()
+                .hitTest(map, listOf(layer), tap)
+                .single()
+                .feature.key
+        assertEquals("place", selectedKey)
     }
 
     private fun mercatorMap(center: Point): MapState =

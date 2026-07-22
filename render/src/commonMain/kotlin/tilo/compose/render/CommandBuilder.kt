@@ -40,6 +40,7 @@ internal object CommandBuilder {
         layerStyle: FeatureLayerStyle = FeatureLayerStyle(),
     ): List<RenderCommand> {
         val visible = visibleBounds(map)
+        val resolvedLayerStyle = layerStyle.resolveAtZoom(map.zoom)
 
         return buildList {
             features.forEach { feature ->
@@ -48,11 +49,11 @@ internal object CommandBuilder {
 
                 val baseId = feature.key
                 val isSelected = layerId != null && feature.key in selectedFeatureKeys
-                val style = feature.resolvedStyle(isSelected, layerStyle)
+                val style = feature.resolvedStyle(isSelected, resolvedLayerStyle)
 
                 addAll(geometryToCommands(baseId, feature.geometry, style.geometry))
 
-                feature.label?.takeIf { it.isNotBlank() }?.let { label ->
+                feature.label?.takeIf { resolvedLayerStyle.labelsVisible && it.isNotBlank() }?.let { label ->
                     labelPlacement(feature.geometry, map)?.let { placement ->
                         add(
                             RenderLabel(

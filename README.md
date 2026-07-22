@@ -42,9 +42,9 @@ repositories {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("eu.tilomaps:tilo-compose:0.1.0-alpha01")
+            implementation("eu.tilomaps:tilo-compose:0.1.1-alpha03")
             // Optional drawing plugin:
-            implementation("eu.tilomaps:tilo-compose-draw:0.1.0-alpha01")
+            implementation("eu.tilomaps:tilo-compose-draw:0.1.1-alpha03")
         }
     }
 }

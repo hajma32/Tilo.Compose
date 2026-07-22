@@ -6,9 +6,10 @@ in a file named after the concept it teaches:
 1. `OpenStreetMapSample.kt` — minimal XYZ map with camera bounds and zoom limits
 2. `GeometriesSample.kt` — points, lines, polygons, labels, and selection
 3. `CustomStylesSample.kt` — per-feature styles with XML vector and bitmap point icons
-4. `CalloutSample.kt` — feature hits connected to ordinary Compose UI
-5. `NonMercatorSample.kt` — bounded Czechia WMS map in EPSG:5514
-6. `DrawingSample.kt` — drawing state, history, and saved features
+4. `StyleLabSample.kt` — visual checks for zoom-dependent styles, multi-line label alignment, and casing width
+5. `CalloutSample.kt` — feature hits connected to ordinary Compose UI
+6. `NonMercatorSample.kt` — bounded Czechia WMS map in EPSG:5514
+7. `DrawingSample.kt` — drawing state, history, and saved features
 
 Start with `OpenStreetMapSample.kt`, then follow the numbered list. Shared camera
 and basemap setup is in `MapDefaults.kt`; the application shell is intentionally

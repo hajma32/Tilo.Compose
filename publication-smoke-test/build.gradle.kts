@@ -5,7 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.0"
 }
 
-val tiloVersion = providers.gradleProperty("tilo.version").orElse("0.1.0-alpha01")
+val tiloVersion = providers.gradleProperty("tilo.version").orElse("0.1.1-alpha03")
 
 kotlin {
     androidTarget()

@@ -11,6 +11,7 @@ import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.render.backend.RasterRenderSceneLayer
+import tilo.compose.render.backend.RenderScene
 import tilo.compose.render.backend.RenderSceneBuilder
 import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 import tilo.compose.render.backend.VectorBitmapSnapshot
@@ -83,6 +84,65 @@ class RenderSceneBuilderTest {
             )
 
         assertEquals(emptyList(), scene.layers)
+    }
+
+    /**
+     * Verifies that synchronous placeholder geometry is attached even while raster content is stale or absent.
+     *
+     * Input: an active raster layer, an empty published scene, and a placeholder planned for the live camera.
+     * Expected: the display scene contains that placeholder immediately without waiting for an async render request.
+     */
+    @Test
+    fun liveCameraPlaceholderIsPresentBeforeAsyncRasterSceneArrives() {
+        val raster = TestTileLayer(id = "raster", zIndex = 3)
+        val placeholder = testTile(1, bytes = null)
+
+        val displayScene =
+            RenderScene.Empty.withLiveRasterPlaceholders(
+                activeLayers = listOf(raster),
+                placeholderFrame =
+                    RasterFrame(
+                        tilesByLayer = mapOf(raster.id to listOf(placeholder)),
+                        decodedImagesByLayer = emptyMap(),
+                    ),
+                effectiveOpacitiesByLayerId = mapOf(raster.id to 0.7),
+            )
+
+        val layer = assertIs<RasterRenderSceneLayer>(displayScene.layers.single())
+        assertEquals(emptyList(), layer.tiles)
+        assertEquals(listOf(placeholder), layer.placeholderTiles)
+        assertEquals(0.7, layer.opacity)
+    }
+
+    /** Verifies that refreshing placeholder coverage preserves already decoded fallback content. */
+    @Test
+    fun liveCameraPlaceholderDoesNotReplacePublishedRasterContent() {
+        val raster = TestTileLayer(id = "raster", zIndex = 0)
+        val loaded = testTile(1)
+        val freshPlaceholder = testTile(2, bytes = null)
+        val published =
+            RasterRenderSceneLayer(
+                id = raster.id,
+                zIndex = raster.zIndex,
+                tiles = listOf(loaded),
+                decodedImages = listOf(TestImageBitmap()),
+            )
+
+        val displayScene =
+            RenderScene(listOf(published)).withLiveRasterPlaceholders(
+                activeLayers = listOf(raster),
+                placeholderFrame =
+                    RasterFrame(
+                        tilesByLayer = mapOf(raster.id to listOf(freshPlaceholder)),
+                        decodedImagesByLayer = emptyMap(),
+                    ),
+                effectiveOpacitiesByLayerId = emptyMap(),
+            )
+
+        val layer = assertIs<RasterRenderSceneLayer>(displayScene.layers.single())
+        assertEquals(listOf(loaded), layer.tiles)
+        assertEquals(published.decodedImages, layer.decodedImages)
+        assertEquals(listOf(freshPlaceholder), layer.placeholderTiles)
     }
 
     private class TestTileLayer(

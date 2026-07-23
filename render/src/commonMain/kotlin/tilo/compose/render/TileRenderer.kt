@@ -15,9 +15,17 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-private val TILE_PLACEHOLDER_FILL = Color(0xFFE3F2FD)
-private val TILE_PLACEHOLDER_BORDER = Color(0xFF90CAF9)
 private const val TILE_PLACEHOLDER_BORDER_WIDTH_PX = 1f
+
+internal data class TilePlaceholderColors(
+    val fill: Color,
+    val border: Color,
+) {
+    companion object {
+        val Light = TilePlaceholderColors(fill = Color(0xFFE3F2FD), border = Color(0xFF90CAF9))
+        val Dark = TilePlaceholderColors(fill = Color(0xFF102A43), border = Color(0xFF28547A))
+    }
+}
 
 /**
  * Draws [tiles] onto the canvas using [map].worldToScreen for positioning.
@@ -28,6 +36,7 @@ internal fun DrawScope.drawTiles(
     map: MapState,
     decodedImages: List<ImageBitmap?>? = null,
     opacity: Double = 1.0,
+    placeholderColors: TilePlaceholderColors = TilePlaceholderColors.Light,
 ) {
     val tileImages = resolveTileImages(tiles, tileDecoder, decodedImages)
     withTransform({
@@ -37,10 +46,10 @@ internal fun DrawScope.drawTiles(
         )
     }) {
         tileImages.filter { (_, image) -> image == null }.forEach { (tile, _) ->
-            drawTile(tile, image = null, map = map, opacity = opacity)
+            drawTile(tile, image = null, map = map, opacity = opacity, placeholderColors = placeholderColors)
         }
         tileImages.filter { (_, image) -> image != null }.forEach { (tile, image) ->
-            drawTile(tile, image = image, map = map, opacity = opacity)
+            drawTile(tile, image = image, map = map, opacity = opacity, placeholderColors = placeholderColors)
         }
     }
 }
@@ -65,11 +74,12 @@ private fun DrawScope.drawTile(
     image: ImageBitmap?,
     map: MapState,
     opacity: Double,
+    placeholderColors: TilePlaceholderColors,
 ) {
     val rect = tile.screenRect(map)
 
     if (image == null) {
-        drawTilePlaceholder(rect.x, rect.y, rect.width, rect.height, opacity)
+        drawTilePlaceholder(rect.x, rect.y, rect.width, rect.height, opacity, placeholderColors)
     } else {
         drawImage(
             image = image,
@@ -122,16 +132,17 @@ private fun DrawScope.drawTilePlaceholder(
     width: Int,
     height: Int,
     opacity: Double,
+    colors: TilePlaceholderColors,
 ) {
     val topLeft = Offset(x.toFloat(), y.toFloat())
     val size = Size(width.toFloat(), height.toFloat())
     drawRect(
-        color = TILE_PLACEHOLDER_FILL.copy(alpha = TILE_PLACEHOLDER_FILL.alpha * opacity.toFloat()),
+        color = colors.fill.copy(alpha = colors.fill.alpha * opacity.toFloat()),
         topLeft = topLeft,
         size = size,
     )
     drawRect(
-        color = TILE_PLACEHOLDER_BORDER.copy(alpha = TILE_PLACEHOLDER_BORDER.alpha * opacity.toFloat()),
+        color = colors.border.copy(alpha = colors.border.alpha * opacity.toFloat()),
         topLeft = topLeft,
         size = size,
         style = Stroke(width = TILE_PLACEHOLDER_BORDER_WIDTH_PX),

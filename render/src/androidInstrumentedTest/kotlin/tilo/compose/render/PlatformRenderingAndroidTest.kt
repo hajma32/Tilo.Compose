@@ -3,6 +3,7 @@
 package tilo.compose.render
 
 import android.graphics.Bitmap
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
@@ -32,8 +33,11 @@ import tilo.compose.core.map.Viewport
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.TileBounds
 import tilo.compose.core.tile.TileCoordinate
+import tilo.compose.render.backend.RasterRenderSceneLayer
+import tilo.compose.render.backend.RenderScene
 import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 import tilo.compose.render.backend.VectorBitmapSnapshot
+import tilo.compose.render.backend.drawRenderScene
 import tilo.compose.render.backend.drawVectorBitmapLayer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -152,6 +156,109 @@ class PlatformRenderingAndroidTest {
         val pixel = result.argbAt(16, 16)
         assertEquals(0x80, pixel ushr 24)
         assertEquals(0x00FF0000, pixel and 0x00FFFFFF)
+    }
+
+    /**
+     * Verifies that fallback and current tiles are composited before raster layer opacity is applied.
+     *
+     * Input: two opaque, fully overlapping generations in one raster scene layer at opacity `0.5`.
+     * Expected: the resulting alpha stays `0.5`, rather than accumulating to `0.75` as generations change.
+     */
+    @Test
+    fun rasterOpacityIsAppliedOnceAcrossOverlappingTileGenerations() {
+        val map = MapState(viewport = Viewport(64, 64))
+        val overlappingTile = tile(0, 0, Point(-32.0, 32.0), Point(32.0, -32.0))
+        val density = Density(1f)
+        val layoutDirection = LayoutDirection.Ltr
+        val textMeasurer =
+            TextMeasurer(
+                defaultFontFamilyResolver =
+                    createFontFamilyResolver(
+                        InstrumentationRegistry.getInstrumentation().targetContext,
+                    ),
+                defaultDensity = density,
+                defaultLayoutDirection = layoutDirection,
+            )
+
+        val result =
+            renderBitmap {
+                drawRenderScene(
+                    scene =
+                        RenderScene(
+                            listOf(
+                                RasterRenderSceneLayer(
+                                    id = "tiles",
+                                    zIndex = 0,
+                                    tiles = listOf(overlappingTile, overlappingTile),
+                                    decodedImages = listOf(solidBitmap(RED), solidBitmap(RED)),
+                                    opacity = 0.5,
+                                ),
+                            ),
+                        ),
+                    map = map,
+                    tileDecoder = { error("predecoded tiles must not decode again") },
+                    offscreenLabelDrawScope = CanvasDrawScope(),
+                    textMeasurer = textMeasurer,
+                    labelBitmapCache = LabelBitmapCache(),
+                )
+            }
+
+        val pixel = result.argbAt(32, 32)
+        assertEquals(0x80, pixel ushr 24)
+        assertEquals(0x00FF0000, pixel and 0x00FFFFFF)
+    }
+
+    /**
+     * Verifies that a live-camera placeholder covers space exposed when an older fallback shrinks during zoom-out.
+     *
+     * Input: a full-viewport placeholder and a loaded fallback covering only the centered half of the current viewport.
+     * Expected: the center shows the fallback while every outer sample shows placeholder, never transparent Canvas.
+     */
+    @Test
+    fun livePlaceholderCoversViewportAroundStaleZoomFallback() {
+        val map = MapState(viewport = Viewport(64, 64))
+        val livePlaceholder = tile(0, 0, Point(-32.0, 32.0), Point(32.0, -32.0))
+        val staleFallback = tile(0, 0, Point(-16.0, 16.0), Point(16.0, -16.0))
+        val density = Density(1f)
+        val layoutDirection = LayoutDirection.Ltr
+        val textMeasurer =
+            TextMeasurer(
+                defaultFontFamilyResolver =
+                    createFontFamilyResolver(
+                        InstrumentationRegistry.getInstrumentation().targetContext,
+                    ),
+                defaultDensity = density,
+                defaultLayoutDirection = layoutDirection,
+            )
+
+        val result =
+            renderBitmap {
+                drawRenderScene(
+                    scene =
+                        RenderScene(
+                            listOf(
+                                RasterRenderSceneLayer(
+                                    id = "tiles",
+                                    zIndex = 0,
+                                    tiles = listOf(staleFallback),
+                                    decodedImages = listOf(solidBitmap(RED)),
+                                    placeholderTiles = listOf(livePlaceholder),
+                                ),
+                            ),
+                        ),
+                    map = map,
+                    tileDecoder = { error("predecoded tiles must not decode again") },
+                    offscreenLabelDrawScope = CanvasDrawScope(),
+                    textMeasurer = textMeasurer,
+                    labelBitmapCache = LabelBitmapCache(),
+                )
+            }
+
+        assertEquals(RED, result.argbAt(32, 32))
+        listOf(Offset(4f, 4f), Offset(60f, 4f), Offset(4f, 60f), Offset(60f, 60f)).forEach { point ->
+            assertEquals(0xFFE3F2FD.toInt(), result.argbAt(point.x.toInt(), point.y.toInt()))
+        }
+        assertTrue(result.readArgb().all { argb -> argb ushr 24 == 0xFF })
     }
 
     /**

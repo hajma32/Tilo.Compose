@@ -24,6 +24,7 @@ data class RasterRenderSceneLayer(
     val tiles: List<Tile>,
     val decodedImages: List<ImageBitmap?>? = null,
     override val opacity: Double = 1.0,
+    val placeholderTiles: List<Tile> = emptyList(),
 ) : RenderSceneLayer {
     init {
         require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }

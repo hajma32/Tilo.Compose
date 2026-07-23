@@ -46,7 +46,11 @@ internal fun BoxScope.NonMercatorSample() {
                 layerName = "0",
                 projection = sjtsk(),
                 format = "image/jpeg",
-                attribution = attribution("ČÚZK Ortofoto · EPSG:5514"),
+                attribution =
+                    attribution(
+                        "© Český úřad zeměměřický a katastrální · Ortofoto České republiky · " +
+                            "WMS služba v souřadnicovém systému S‑JTSK / Křovák East North (EPSG:5514)",
+                    ),
                 state = wmsState,
             )
             featureLayer("prague-wgs84-reference", pragueReference) {

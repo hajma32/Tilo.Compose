@@ -38,6 +38,7 @@ import tilo.compose.core.selection.FeatureSelection
 import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.Tile
 import tilo.compose.render.backend.ComposeCanvasRenderBackend
+import tilo.compose.render.backend.RasterRenderSceneLayer
 import tilo.compose.render.backend.RenderBackend
 import tilo.compose.render.backend.RenderScene
 import tilo.compose.render.backend.RenderSceneBuilder
@@ -126,6 +127,7 @@ fun MapRenderer(
     var redrawVersion by remember { mutableStateOf(0) }
     var scene by remember { mutableStateOf(RenderScene.Empty) }
     var lastRasterFrame by remember { mutableStateOf(RasterFrame.Empty) }
+    var rasterFallbackHistory by remember { mutableStateOf<List<RasterFrame>>(emptyList()) }
     var lastOverviewFrame by remember { mutableStateOf(RasterFrame.Empty) }
     var lastVectorCommandsByLayer by remember { mutableStateOf<Map<String, List<RenderCommand>>>(emptyMap()) }
     var lastVectorBitmapsByLayer by remember { mutableStateOf<Map<String, VectorBitmapRenderSceneLayer>>(emptyMap()) }
@@ -146,7 +148,7 @@ fun MapRenderer(
             mergeRasterFrames(
                 placeholderFrame = RasterFrame.Empty,
                 fallbackFrame = lastRasterFrame,
-                overviewFrame = lastOverviewFrame,
+                overviewFrame = combineRasterFrames(rasterFallbackHistory + lastOverviewFrame),
                 currentFrame = RasterFrame.Empty,
                 currentSourceIdentities = currentRasterSourceIdentities,
             )
@@ -209,7 +211,7 @@ fun MapRenderer(
                         mergeRasterFrames(
                             placeholderFrame = placeholderFrame,
                             fallbackFrame = lastRasterFrame,
-                            overviewFrame = lastOverviewFrame,
+                            overviewFrame = combineRasterFrames(rasterFallbackHistory + lastOverviewFrame),
                             currentFrame =
                                 RasterFrame(
                                     tilesByLayer = tilesByLayer,
@@ -265,6 +267,11 @@ fun MapRenderer(
                         decodedImagesByLayer = rasterFrame.decodedImagesByLayer
                         val renderableRasterFrame = rasterFrame.withRenderableTilesOnly()
                         if (renderableRasterFrame.hasTiles()) {
+                            if (lastRasterFrame.hasTiles() && lastRasterFrame != renderableRasterFrame) {
+                                rasterFallbackHistory =
+                                    (rasterFallbackHistory + lastRasterFrame)
+                                        .takeLast(MAX_RASTER_FALLBACK_FRAMES)
+                            }
                             lastRasterFrame = renderableRasterFrame
                         }
                         publishScene()
@@ -306,7 +313,7 @@ fun MapRenderer(
                     mergeRasterFrames(
                         placeholderFrame = placeholderFrame,
                         fallbackFrame = lastRasterFrame,
-                        overviewFrame = overviewFrame,
+                        overviewFrame = combineRasterFrames(rasterFallbackHistory + overviewFrame),
                         currentFrame = RasterFrame.Empty,
                         currentSourceIdentities = input.currentRasterSourceIdentities,
                     )
@@ -366,15 +373,80 @@ fun MapRenderer(
                 drawContent()
             }
 
+    val liveRenderMap =
+        MapState(
+            center = map.center,
+            zoom = map.zoom,
+            bearing = map.bearing,
+            projection = map.projection,
+            config = map.config,
+            viewport = map.viewport,
+        )
+    val livePlaceholderFrame =
+        if (liveRenderMap.viewport.width > 0 && liveRenderMap.viewport.height > 0) {
+            rasterPipeline.buildPlaceholderFrame(tileLayers, liveRenderMap)
+        } else {
+            RasterFrame.Empty
+        }
+    val displayScene =
+        scene.withLiveRasterPlaceholders(
+            activeLayers = activeLayers,
+            placeholderFrame = livePlaceholderFrame,
+            effectiveOpacitiesByLayerId = effectiveOpacitiesByLayerId,
+        )
+
     backend.Content(
         modifier = interactionModifier,
-        scene = scene,
+        scene = displayScene,
         map = map,
         tileDecoder = tileDecoder,
         offscreenLabelDrawScope = offscreenLabelDrawScope,
         textMeasurer = textMeasurer,
         labelBitmapCache = labelBitmapCache,
     )
+}
+
+/**
+ * Adds placeholder coverage planned from the camera used by the current draw frame.
+ * Tile loading remains asynchronous, but placeholder geometry must not lag behind
+ * camera animation or it exposes the Canvas background around stale fallback tiles.
+ */
+internal fun RenderScene.withLiveRasterPlaceholders(
+    activeLayers: List<Layer>,
+    placeholderFrame: RasterFrame,
+    effectiveOpacitiesByLayerId: Map<String, Double>,
+): RenderScene {
+    if (activeLayers.none { it is TileLayer }) return this
+
+    val sceneLayersById = layers.groupBy { it.id }
+    val mergedLayers =
+        buildList {
+            activeLayers.forEach { layer ->
+                val existingLayers = sceneLayersById[layer.id].orEmpty()
+                if (layer is TileLayer) {
+                    val existingRaster = existingLayers.filterIsInstance<RasterRenderSceneLayer>().singleOrNull()
+                    val placeholders = placeholderFrame.tilesByLayer[layer.id].orEmpty()
+                    when {
+                        existingRaster != null -> add(existingRaster.copy(placeholderTiles = placeholders))
+                        placeholders.isNotEmpty() -> {
+                            add(
+                                RasterRenderSceneLayer(
+                                    id = layer.id,
+                                    zIndex = layer.zIndex,
+                                    tiles = emptyList(),
+                                    decodedImages = emptyList(),
+                                    opacity = effectiveOpacitiesByLayerId[layer.id] ?: layer.opacity,
+                                    placeholderTiles = placeholders,
+                                ),
+                            )
+                        }
+                    }
+                } else {
+                    addAll(existingLayers)
+                }
+            }
+        }
+    return RenderScene(mergedLayers)
 }
 
 internal suspend fun <T> Flow<T>.collectLatestRenderRequest(block: suspend (T) -> Unit) {
@@ -416,6 +488,7 @@ private fun List<VectorLayer>.cacheSignature(): String =
     joinToString(separator = "|") { layer -> layer.cacheKey().toString() }
 
 private const val LABEL_TEXT_LAYOUT_CACHE_SIZE = 128
+private const val MAX_RASTER_FALLBACK_FRAMES = 4
 
 private fun Set<FeatureSelectionRef>.keysForLayer(layerId: String): Set<String> =
     asSequence()
@@ -487,6 +560,75 @@ internal fun mergeRasterFrames(
                 compatibleOverview.sourceIdentitiesByLayer +
                 compatiblePlaceholder.sourceIdentitiesByLayer,
     )
+}
+
+/**
+ * Combines a small chronological cache of completed frames for navigation fallback.
+ * Coarser zooms are drawn first and newer same-zoom frames later. Frames belonging
+ * to a replaced raster source are discarded before their tiles can reappear.
+ */
+internal fun combineRasterFrames(frames: List<RasterFrame>): RasterFrame {
+    val populatedFrames = frames.filter(RasterFrame::hasTiles)
+    if (populatedFrames.isEmpty()) return RasterFrame.Empty
+
+    val sourceIdentitiesByLayer =
+        buildMap {
+            populatedFrames.forEach { frame ->
+                frame.sourceIdentitiesByLayer.forEach { (layerId, sourceIdentity) ->
+                    put(layerId, sourceIdentity)
+                }
+            }
+        }
+    val orderedFrames = populatedFrames.sortedBy(RasterFrame::minimumTileZoom)
+    val layerIds = orderedFrames.flatMap { it.tilesByLayer.keys }.distinct()
+    val tilesByLayer =
+        buildMap {
+            layerIds.forEach { layerId ->
+                val expectedSource = sourceIdentitiesByLayer[layerId]
+                put(
+                    layerId,
+                    orderedFrames.flatMap { frame ->
+                        if (frame.matchesSource(layerId, expectedSource)) {
+                            frame.tilesByLayer[layerId].orEmpty()
+                        } else {
+                            emptyList()
+                        }
+                    },
+                )
+            }
+        }
+    val decodedImagesByLayer =
+        buildMap {
+            layerIds.forEach { layerId ->
+                val expectedSource = sourceIdentitiesByLayer[layerId]
+                put(
+                    layerId,
+                    orderedFrames.flatMap { frame ->
+                        if (frame.matchesSource(layerId, expectedSource)) {
+                            frame.imagesForLayer(layerId)
+                        } else {
+                            emptyList()
+                        }
+                    },
+                )
+            }
+        }
+    return RasterFrame(
+        tilesByLayer = tilesByLayer,
+        decodedImagesByLayer = decodedImagesByLayer,
+        sourceIdentitiesByLayer = sourceIdentitiesByLayer,
+    )
+}
+
+private fun RasterFrame.minimumTileZoom(): Int =
+    tilesByLayer.values.flatten().minOfOrNull { tile -> tile.coordinate.z } ?: Int.MAX_VALUE
+
+private fun RasterFrame.matchesSource(
+    layerId: String,
+    expectedSource: Any?,
+): Boolean {
+    val frameSource = sourceIdentitiesByLayer[layerId]
+    return expectedSource == null || frameSource == null || frameSource === expectedSource
 }
 
 private fun RasterFrame.compatibleWith(currentSourceIdentities: Map<String, Any>?): RasterFrame {

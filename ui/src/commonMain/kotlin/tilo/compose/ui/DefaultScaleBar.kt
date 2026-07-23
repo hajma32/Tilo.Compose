@@ -4,9 +4,14 @@ package tilo.compose.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -51,7 +56,9 @@ fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
         modifier =
             Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 12.dp, bottom = 2.dp)
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom),
+                ).padding(start = 12.dp, bottom = 2.dp)
                 .requiredWidth(widthDp)
                 .height(30.dp),
     ) {
@@ -112,7 +119,7 @@ fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
 }
 
 private val ScaleBarColor = Color(0xFF111827)
-private val ScaleBarTextColor = Color.Black
+private val ScaleBarTextColor = Color.Black.copy(alpha = 0.8f)
 private val ScaleBarLightColor = Color.White
 internal const val ScaleBarOpacity = 0.8f
 
@@ -196,7 +203,7 @@ private fun DrawScope.drawLabelWithHalo(
     drawLabelTextWithHalo(
         textLayoutResult = label.fill,
         textColor = ScaleBarTextColor,
-        haloColor = Color.White,
+        haloColor = Color.White.copy(alpha = 0.8f),
         haloWidthPx = 3.dp.toPx(),
         topLeft = topLeft,
     )

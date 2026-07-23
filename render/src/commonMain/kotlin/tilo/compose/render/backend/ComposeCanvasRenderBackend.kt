@@ -3,15 +3,18 @@
 package tilo.compose.render.backend
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -20,6 +23,7 @@ import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.LabelBitmapCache
 import tilo.compose.render.LabelLayoutEngine
 import tilo.compose.render.RenderLabel
+import tilo.compose.render.TilePlaceholderColors
 import tilo.compose.render.drawFeatureGeometry
 import tilo.compose.render.drawPlacedLabels
 import tilo.compose.render.drawTiles
@@ -41,6 +45,7 @@ object ComposeCanvasRenderBackend : RenderBackend {
         textMeasurer: TextMeasurer,
         labelBitmapCache: LabelBitmapCache,
     ) {
+        val placeholderColors = tilePlaceholderColorsFor(MaterialTheme.colorScheme.surface)
         Canvas(modifier = modifier) {
             drawRenderScene(
                 scene = scene,
@@ -50,6 +55,7 @@ object ComposeCanvasRenderBackend : RenderBackend {
                 offscreenLabelDrawScope = offscreenLabelDrawScope,
                 textMeasurer = textMeasurer,
                 labelBitmapCache = labelBitmapCache,
+                placeholderColors = placeholderColors,
             )
         }
     }
@@ -63,6 +69,7 @@ internal fun DrawScope.drawRenderScene(
     offscreenLabelDrawScope: CanvasDrawScope,
     textMeasurer: TextMeasurer,
     labelBitmapCache: LabelBitmapCache,
+    placeholderColors: TilePlaceholderColors = TilePlaceholderColors.Light,
 ) {
     val labels = mutableListOf<RenderLabel>()
     val labelOpacities = mutableListOf<Double>()
@@ -70,13 +77,24 @@ internal fun DrawScope.drawRenderScene(
         when (layer) {
             is RasterRenderSceneLayer -> {
                 if (tileDecoder != null) {
-                    drawTiles(
-                        tiles = layer.tiles,
-                        tileDecoder = tileDecoder,
-                        map = map,
-                        decodedImages = layer.decodedImages,
-                        opacity = layer.opacity,
-                    )
+                    withLayerOpacity(layer.opacity) {
+                        if (layer.placeholderTiles.isNotEmpty()) {
+                            drawTiles(
+                                tiles = layer.placeholderTiles,
+                                tileDecoder = tileDecoder,
+                                map = map,
+                                decodedImages = List(layer.placeholderTiles.size) { null },
+                                placeholderColors = placeholderColors,
+                            )
+                        }
+                        drawTiles(
+                            tiles = layer.tiles,
+                            tileDecoder = tileDecoder,
+                            map = map,
+                            decodedImages = layer.decodedImages,
+                            placeholderColors = placeholderColors,
+                        )
+                    }
                 }
             }
 
@@ -119,6 +137,9 @@ internal fun DrawScope.drawRenderScene(
         labelBitmapCache = labelBitmapCache,
     )
 }
+
+internal fun tilePlaceholderColorsFor(surfaceColor: Color): TilePlaceholderColors =
+    if (surfaceColor.luminance() < 0.5f) TilePlaceholderColors.Dark else TilePlaceholderColors.Light
 
 private inline fun DrawScope.withLayerOpacity(
     opacity: Double,

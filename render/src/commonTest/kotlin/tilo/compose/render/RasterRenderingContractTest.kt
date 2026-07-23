@@ -199,4 +199,69 @@ class RasterRenderingContractTest {
         assertEquals(listOf(placeholder, fallbackTile), merged.tilesByLayer.getValue("tiles"))
         assertEquals(listOf(null, fallbackImage), merged.decodedImagesByLayer.getValue("tiles"))
     }
+
+    /**
+     * Verifies ordering of decoded navigation history across zoom levels.
+     *
+     * Input: a newer fine frame followed by an older coarse frame in cache order.
+     * Expected: combination draws coarse coverage first and fine detail above it, with image indexes aligned.
+     */
+    @Test
+    fun rasterHistoryOrdersCoarseCoverageBeforeFineDetail() {
+        val source = Any()
+        val coarse = testTile(x = 1, z = 2)
+        val fine = testTile(x = 2, z = 5)
+        val coarseImage = TestImageBitmap(width = 2)
+        val fineImage = TestImageBitmap(width = 5)
+
+        val combined =
+            combineRasterFrames(
+                listOf(
+                    RasterFrame(
+                        tilesByLayer = mapOf("tiles" to listOf(fine)),
+                        decodedImagesByLayer = mapOf("tiles" to listOf(fineImage)),
+                        sourceIdentitiesByLayer = mapOf("tiles" to source),
+                    ),
+                    RasterFrame(
+                        tilesByLayer = mapOf("tiles" to listOf(coarse)),
+                        decodedImagesByLayer = mapOf("tiles" to listOf(coarseImage)),
+                        sourceIdentitiesByLayer = mapOf("tiles" to source),
+                    ),
+                ),
+            )
+
+        assertEquals(listOf(coarse, fine), combined.tilesByLayer.getValue("tiles"))
+        assertEquals(listOf(coarseImage, fineImage), combined.decodedImagesByLayer.getValue("tiles"))
+    }
+
+    /** Verifies that decoded history from a replaced source is never revived as fallback. */
+    @Test
+    fun rasterHistoryDropsFramesFromReplacedSource() {
+        val oldSource = Any()
+        val newSource = Any()
+        val stale = testTile(x = 1, z = 2)
+        val current = testTile(x = 2, z = 3)
+        val staleImage = TestImageBitmap(width = 2)
+        val currentImage = TestImageBitmap(width = 3)
+
+        val combined =
+            combineRasterFrames(
+                listOf(
+                    RasterFrame(
+                        tilesByLayer = mapOf("tiles" to listOf(stale)),
+                        decodedImagesByLayer = mapOf("tiles" to listOf(staleImage)),
+                        sourceIdentitiesByLayer = mapOf("tiles" to oldSource),
+                    ),
+                    RasterFrame(
+                        tilesByLayer = mapOf("tiles" to listOf(current)),
+                        decodedImagesByLayer = mapOf("tiles" to listOf(currentImage)),
+                        sourceIdentitiesByLayer = mapOf("tiles" to newSource),
+                    ),
+                ),
+            )
+
+        assertEquals(listOf(current), combined.tilesByLayer.getValue("tiles"))
+        assertEquals(listOf(currentImage), combined.decodedImagesByLayer.getValue("tiles"))
+        assertSame(newSource, combined.sourceIdentitiesByLayer.getValue("tiles"))
+    }
 }

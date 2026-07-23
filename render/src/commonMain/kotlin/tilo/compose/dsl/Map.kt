@@ -9,7 +9,9 @@ import androidx.compose.animation.core.animateTo
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -19,6 +21,7 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.Dp
@@ -1296,19 +1299,12 @@ fun TiloMap(
             selectedFeatures = selectedFeatures,
             invalidationKey = invalidationKey,
         )
-        if (scaleBarContent != null) {
-            ScaleBarOverlay(
-                cameraState = cameraState,
-                content = scaleBarContent,
-            )
-        }
-        if (attributionContent != null) {
-            AttributionOverlay(
-                cameraState = cameraState,
-                layers = builtLayers,
-                content = attributionContent,
-            )
-        }
+        BottomMapOverlays(
+            cameraState = cameraState,
+            layers = builtLayers,
+            attributionContent = attributionContent,
+            scaleBarContent = scaleBarContent,
+        )
         if (cameraControlsContent != null) {
             cameraControlsContent(cameraState)
         }
@@ -1347,16 +1343,42 @@ internal fun rememberManagedMapLayers(layers: MapLayerBuilder.() -> Unit): List<
 }
 
 @Composable
-private fun BoxScope.AttributionOverlay(
+private fun BoxScope.BottomMapOverlays(
     cameraState: MapCameraState,
     layers: List<Layer>,
-    content: @Composable BoxScope.(List<Attribution>) -> Unit,
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)?,
+    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)?,
 ) {
-    cameraState.zoomRevision
-    val layerTree = remember(layers) { ResolvedLayerTree.resolve(layers) }
-    val attributions = layerTree.activeAttributions(cameraState.zoom)
-    if (attributions.isNotEmpty()) {
-        content(attributions)
+    val scaleBar =
+        scaleBarContent?.let {
+            cameraState.revision
+            ScaleBarCalculator.calculate(cameraState.mapState)
+        }
+    val attributions =
+        attributionContent
+            ?.let {
+                cameraState.zoomRevision
+                remember(layers) { ResolvedLayerTree.resolve(layers) }.activeAttributions(cameraState.zoom)
+            }.orEmpty()
+
+    when {
+        scaleBar != null && attributions.isNotEmpty() -> {
+            Row(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Box { scaleBarContent(scaleBar) }
+                Box(modifier = Modifier.weight(1.0f)) {
+                    attributionContent?.invoke(this, attributions)
+                }
+            }
+        }
+
+        scaleBar != null -> scaleBarContent(scaleBar)
+        attributions.isNotEmpty() -> attributionContent?.invoke(this, attributions)
     }
 }
 
@@ -1382,15 +1404,4 @@ private fun MapRendererLayer(
         invalidationKey = invalidationKey to cameraControlRevision,
         onMapChanged = cameraState::markChanged,
     )
-}
-
-@Composable
-private fun BoxScope.ScaleBarOverlay(
-    cameraState: MapCameraState,
-    content: @Composable BoxScope.(ScaleBar) -> Unit,
-) {
-    cameraState.revision
-    ScaleBarCalculator.calculate(cameraState.mapState)?.let { scaleBar ->
-        content(scaleBar)
-    }
 }

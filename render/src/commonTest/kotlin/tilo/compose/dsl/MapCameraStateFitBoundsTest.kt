@@ -78,6 +78,28 @@ class MapCameraStateFitBoundsTest {
             assertEquals(worldBefore.y, map.screenToWorld(focus).y, absoluteTolerance = 1e-9)
         }
 
+    @Test
+    fun animatedZoomByReachesTargetAndHonorsCameraBounds() =
+        runTest {
+            val cameraState =
+                MapCameraState(
+                    MapState(
+                        zoom = 3.0,
+                        config = MapConfig(minZoom = 2.0, maxZoom = 4.0),
+                    ),
+                )
+
+            withContext(AdvancingFrameClock()) {
+                cameraState.animateZoomBy(
+                    delta = 5.0,
+                    animationSpec = tween(durationMillis = 64, easing = LinearEasing),
+                )
+            }
+
+            assertEquals(4.0, cameraState.zoom, absoluteTolerance = 1e-6)
+            assertTrue(cameraState.zoomRevision > 0)
+        }
+
     /**
      * Verifies safe default padding for a viewport smaller than twice the requested padding.
      *

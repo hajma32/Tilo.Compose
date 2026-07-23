@@ -74,22 +74,16 @@ internal object CommandBuilder {
     }
 
     private fun visibleBounds(map: MapState): BoundingBox {
-        val topLeft = map.screenToWorld(Point(0.0, 0.0))
-        val bottomRight = map.screenToWorld(Point(map.viewport.width.toDouble(), map.viewport.height.toDouble()))
+        val visible = map.viewportBounds()
 
-        val minX = minOf(topLeft.x, bottomRight.x)
-        val maxX = maxOf(topLeft.x, bottomRight.x)
-        val minY = minOf(topLeft.y, bottomRight.y)
-        val maxY = maxOf(topLeft.y, bottomRight.y)
-
-        val padX = (maxX - minX) * 0.1
-        val padY = (maxY - minY) * 0.1
+        val padX = (visible.maxX - visible.minX) * 0.1
+        val padY = (visible.maxY - visible.minY) * 0.1
 
         return BoundingBox.fromExtents(
-            minX = minX - padX,
-            maxX = maxX + padX,
-            minY = minY - padY,
-            maxY = maxY + padY,
+            minX = visible.minX - padX,
+            maxX = visible.maxX + padX,
+            minY = visible.minY - padY,
+            maxY = visible.maxY + padY,
         )
     }
 

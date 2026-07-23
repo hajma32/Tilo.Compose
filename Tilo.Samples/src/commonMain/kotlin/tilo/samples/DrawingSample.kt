@@ -44,8 +44,8 @@ import tilo.compose.dsl.lineStyle
 import tilo.compose.dsl.pointStyle
 import tilo.compose.dsl.polygonStyle
 import tilo.compose.dsl.webMercator
-import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
+import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
 @Composable
@@ -63,7 +63,7 @@ internal fun BoxScope.DrawingSample() {
         onTapWorld = drawState::onMapTap,
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = { DefaultZoomControls(it) },
+        cameraControlsContent = defaultCameraControlsContent(),
         invalidationKey = drawState.revision to savedFeatures.size,
         layers = {
             openStreetMapLayer()

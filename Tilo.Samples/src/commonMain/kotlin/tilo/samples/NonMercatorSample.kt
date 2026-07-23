@@ -23,8 +23,8 @@ import tilo.compose.dsl.mediumLabelStyle
 import tilo.compose.dsl.pointStyle
 import tilo.compose.dsl.rememberRasterLayerState
 import tilo.compose.dsl.sjtsk
-import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
+import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
 @Composable
@@ -38,7 +38,7 @@ internal fun BoxScope.NonMercatorSample() {
         modifier = Modifier.fillMaxSize().background(Color(0xFFDBDED3)),
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = { DefaultZoomControls(it) },
+        cameraControlsContent = defaultCameraControlsContent(),
         layers = {
             wmsTileLayer(
                 id = "cuzk-ortofoto-5514",

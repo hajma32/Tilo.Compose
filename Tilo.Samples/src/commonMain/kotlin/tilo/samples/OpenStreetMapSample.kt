@@ -8,8 +8,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.TiloMap
-import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
+import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
 @Composable
@@ -25,7 +25,7 @@ internal fun BoxScope.OpenStreetMapSample() {
         modifier = Modifier.fillMaxSize(),
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = { DefaultZoomControls(it) },
+        cameraControlsContent = defaultCameraControlsContent(),
         layers = { openStreetMapLayer() },
     )
 

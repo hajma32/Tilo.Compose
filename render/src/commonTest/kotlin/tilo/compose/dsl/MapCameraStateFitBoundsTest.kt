@@ -2,6 +2,12 @@
 
 package tilo.compose.dsl
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.MonotonicFrameClock
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapConfig
@@ -34,6 +40,44 @@ class MapCameraStateFitBoundsTest {
         assertEquals(2.0, cameraState.zoom)
     }
 
+    @Test
+    fun rotationControlsPublishNormalizedBearingAndCameraRevision() {
+        val cameraState = MapCameraState(MapState())
+
+        cameraState.rotateBy(30.0)
+        cameraState.setBearing(-10.0)
+
+        assertEquals(350.0, cameraState.bearing)
+        assertEquals(2, cameraState.cameraControlRevision)
+        assertEquals(2, cameraState.revision)
+        assertEquals(0, cameraState.zoomRevision)
+    }
+
+    @Test
+    fun animatedBearingUsesShortestPathAndKeepsFocusFixed() =
+        runTest {
+            val map =
+                MapState(
+                    bearing = 350.0,
+                    viewport = Viewport(width = 300, height = 200),
+                )
+            val cameraState = MapCameraState(map)
+            val focus = Point(240.0, 35.0)
+            val worldBefore = map.screenToWorld(focus)
+
+            withContext(AdvancingFrameClock()) {
+                cameraState.animateBearingTo(
+                    bearing = 10.0,
+                    focus = focus,
+                    animationSpec = tween(durationMillis = 64, easing = LinearEasing),
+                )
+            }
+
+            assertEquals(10.0, cameraState.bearing, absoluteTolerance = 1e-6)
+            assertEquals(worldBefore.x, map.screenToWorld(focus).x, absoluteTolerance = 1e-9)
+            assertEquals(worldBefore.y, map.screenToWorld(focus).y, absoluteTolerance = 1e-9)
+        }
+
     /**
      * Verifies safe default padding for a viewport smaller than twice the requested padding.
      *
@@ -61,6 +105,24 @@ class MapCameraStateFitBoundsTest {
         assertTrue(bottomRight.y <= map.viewport.height)
     }
 
+    @Test
+    fun fitBoundsPublishesBearingResetEvenWhenCenterAndZoomStayUnchanged() {
+        val map =
+            MapState(
+                center = Point(0.0, 0.0),
+                zoom = 2.0,
+                bearing = 90.0,
+                viewport = Viewport(width = 100, height = 100),
+            )
+        val cameraState = MapCameraState(map)
+        val bounds = BoundingBox.fromExtents(-12.5, 12.5, -12.5, 12.5)
+
+        cameraState.fitBounds(bounds, padding = 0.dp)
+
+        assertEquals(0.0, cameraState.bearing)
+        assertEquals(1, cameraState.cameraControlRevision)
+    }
+
     /**
      * Verifies visible and padded snapshot geometry for a measured camera.
      *
@@ -83,6 +145,24 @@ class MapCameraStateFitBoundsTest {
         assertEquals(BoundingBox.fromExtents(0.0, 200.0, 150.0, 250.0), visible.bounds)
         assertEquals(1.0, visible.resolution)
         assertEquals(BoundingBox.fromExtents(-50.0, 250.0, 125.0, 275.0), padded.bounds)
+    }
+
+    @Test
+    fun viewportSnapshotReportsRotatedEnvelopeBearingAndScaleResolution() {
+        val cameraState =
+            MapCameraState(
+                MapState(
+                    bearing = 45.0,
+                    viewport = Viewport(width = 100, height = 100, pixelRatio = 2.0),
+                ),
+            )
+
+        val snapshot = cameraState.viewportSnapshot()
+
+        assertEquals(45.0, snapshot.bearing)
+        assertEquals(-35.3553390593, snapshot.bounds.minX, absoluteTolerance = 1e-9)
+        assertEquals(35.3553390593, snapshot.bounds.maxX, absoluteTolerance = 1e-9)
+        assertEquals(0.5, snapshot.resolution, absoluteTolerance = 1e-12)
     }
 
     /**
@@ -108,5 +188,14 @@ class MapCameraStateFitBoundsTest {
         assertTrue(measured.isReady)
         assertEquals(320, measured.viewportWidth)
         assertEquals(240, measured.viewportHeight)
+    }
+
+    private class AdvancingFrameClock : MonotonicFrameClock {
+        private var frameTimeNanos = 0L
+
+        override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R {
+            frameTimeNanos += 16_000_000L
+            return onFrame(frameTimeNanos)
+        }
     }
 }

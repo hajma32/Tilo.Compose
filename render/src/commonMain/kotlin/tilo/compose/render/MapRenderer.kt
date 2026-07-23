@@ -168,6 +168,7 @@ fun MapRenderer(
         redrawVersion,
         map.center,
         map.zoom,
+        map.bearing,
         map.viewport.width,
         map.viewport.height,
         map.viewport.pixelRatio,
@@ -182,6 +183,7 @@ fun MapRenderer(
             MapState(
                 center = map.center,
                 zoom = map.zoom,
+                bearing = map.bearing,
                 projection = map.projection,
                 config = map.config,
                 viewport = map.viewport,

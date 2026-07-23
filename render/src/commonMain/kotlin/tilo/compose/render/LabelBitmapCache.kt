@@ -5,7 +5,10 @@ package tilo.compose.render
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
@@ -210,24 +213,49 @@ internal fun DrawScope.createLabelBitmap(
                     ),
             )
         }
-        if (haloWidthPx > 0f) {
-            drawText(
-                textLayoutResult = textLayout,
-                color = haloColor,
-                topLeft = baseTopLeft,
-                drawStyle = Stroke(width = haloWidthPx),
-            )
-        }
-        drawText(
+        drawLabelTextWithHalo(
             textLayoutResult = textLayout,
-            color = textColor,
+            textColor = textColor,
+            haloColor = haloColor,
+            haloWidthPx = haloWidthPx,
             topLeft = baseTopLeft,
-            drawStyle = Fill,
         )
     }
 
     return bitmap
 }
+
+/** Draws text with the same stroked halo used by cached map labels. */
+@ExperimentalTiloRenderingApi
+fun DrawScope.drawLabelTextWithHalo(
+    textLayoutResult: TextLayoutResult,
+    textColor: Color,
+    haloColor: Color,
+    haloWidthPx: Float,
+    topLeft: Offset,
+) {
+    if (haloWidthPx > 0f) {
+        drawText(
+            textLayoutResult = textLayoutResult,
+            color = haloColor,
+            topLeft = topLeft,
+            drawStyle = roundedLabelHaloStroke(haloWidthPx),
+        )
+    }
+    drawText(
+        textLayoutResult = textLayoutResult,
+        color = textColor,
+        topLeft = topLeft,
+        drawStyle = Fill,
+    )
+}
+
+internal fun roundedLabelHaloStroke(width: Float): Stroke =
+    Stroke(
+        width = width,
+        cap = StrokeCap.Round,
+        join = StrokeJoin.Round,
+    )
 
 private data class LabelBitmapPadding(
     val x: Int,

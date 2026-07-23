@@ -120,11 +120,11 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 | Drawing plugin | ✅ Done | Drawing supports point/line/polygon drafts, undo/redo, custom controls, configurable style, and app-owned save callbacks. |
 | Selection | ✅ Done | `onFeatureSelect`, multi-hit selection results, selected feature refs, and selected styles are available. |
 | Attribution | ✅ Done | Layers carry attribution metadata and the UI module provides a clickable default attribution overlay. |
-| Default map UI | ✅ Done | Scale bar, attribution overlay, and zoom controls are available as optional content helpers. |
+| Default map UI | ✅ Done | Scale bar, attribution overlay, zoom controls, and a north-reset compass are available as optional content helpers. |
 | CRS transformations | ✅ Done | Android uses Proj4J; iOS bundles PROJ 9.8.1 with its database and basic resources embedded in the native library. |
 | Layer controls | ✅ Done | Atomic nested groups, ordering, visibility, cascading opacity, min/max zoom, source identity, and attribution are implemented. |
 | Vector performance | 🟡 Partial | Immediate and cached-bitmap render modes exist; v1 still needs batching by style/geometry and stronger diagnostics. |
-| Camera control | 🟡 Partial | Programmatic and animated pan/zoom, default zoom UI, and `fitBounds` exist; rotation/bearing remains future work. |
+| Camera control | ✅ Done | Programmatic and animated pan/zoom/rotation, focus-preserving gestures, default zoom/compass UI, and north-resetting `fitBounds` are implemented. |
 | Loading and errors | 🟡 Partial | WMS, XYZ/OSM, and tile-store declarations share observable initialization state, recoverable tile errors, and explicit retry; offline state and richer diagnostics remain. |
 | Performance tooling | 🟡 Partial | The opt-in debug overlay reports zoom, FPS, frame times, and skipped frames; tile/cache/feature/label counters remain. |
 | Testing strategy | 🟡 Partial | Unit tests, critical rendering contracts, quality gates, and a coordinate-only publication consumer exist; CI still needs emulator pixel tests, iOS simulator tests, publication verification, and screenshots/goldens. |

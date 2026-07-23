@@ -142,6 +142,7 @@ internal fun VectorBitmapSnapshot.canCover(
     strategy: VectorRenderStrategy.CachedBitmap,
 ): Boolean {
     if (abs(map.zoom - zoom) > strategy.invalidateOnZoomDelta + ZOOM_COMPARISON_EPSILON) return false
+    if (abs(map.bearing - bearing) > BEARING_COMPARISON_EPSILON) return false
 
     val anchor = map.worldToScreen(center)
     val scale = 2.0.pow(map.zoom - zoom)
@@ -154,6 +155,7 @@ internal fun VectorBitmapSnapshot.canCover(
 }
 
 private const val ZOOM_COMPARISON_EPSILON = 1e-9
+private const val BEARING_COMPARISON_EPSILON = 1e-9
 
 private fun Set<FeatureSelectionRef>.keysForLayer(layerId: String): Set<String> =
     asSequence()

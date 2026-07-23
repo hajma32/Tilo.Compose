@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import tilo.compose.core.map.MapState
@@ -29,11 +30,18 @@ internal fun DrawScope.drawTiles(
     opacity: Double = 1.0,
 ) {
     val tileImages = resolveTileImages(tiles, tileDecoder, decodedImages)
-    tileImages.filter { (_, image) -> image == null }.forEach { (tile, _) ->
-        drawTile(tile, image = null, map = map, opacity = opacity)
-    }
-    tileImages.filter { (_, image) -> image != null }.forEach { (tile, image) ->
-        drawTile(tile, image = image, map = map, opacity = opacity)
+    withTransform({
+        rotate(
+            degrees = -map.bearing.toFloat(),
+            pivot = Offset(map.viewport.width / 2f, map.viewport.height / 2f),
+        )
+    }) {
+        tileImages.filter { (_, image) -> image == null }.forEach { (tile, _) ->
+            drawTile(tile, image = null, map = map, opacity = opacity)
+        }
+        tileImages.filter { (_, image) -> image != null }.forEach { (tile, image) ->
+            drawTile(tile, image = image, map = map, opacity = opacity)
+        }
     }
 }
 
@@ -73,8 +81,20 @@ private fun DrawScope.drawTile(
 }
 
 internal fun Tile.screenRect(map: MapState): TileScreenRect {
-    val topLeft = map.worldToScreen(bounds.topLeft)
-    val bottomRight = map.worldToScreen(bounds.bottomRight)
+    val topLeft =
+        map.viewport.worldToScreen(
+            bounds.topLeft,
+            map.center,
+            map.zoom,
+            map.projection.worldUnitsPerMapUnit,
+        )
+    val bottomRight =
+        map.viewport.worldToScreen(
+            bounds.bottomRight,
+            map.center,
+            map.zoom,
+            map.projection.worldUnitsPerMapUnit,
+        )
 
     val left = min(topLeft.x, bottomRight.x).roundToInt()
     val top = min(topLeft.y, bottomRight.y).roundToInt()

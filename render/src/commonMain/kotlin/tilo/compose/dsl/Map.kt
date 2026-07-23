@@ -76,6 +76,7 @@ data class MapViewportSnapshot(
     val viewportWidth: Int,
     val viewportHeight: Int,
     val resolution: Double,
+    val bearing: Double = 0.0,
 ) {
     val isReady: Boolean
         get() = viewportWidth > 0 && viewportHeight > 0
@@ -101,12 +102,17 @@ class MapCameraState internal constructor(
         private set
 
     private var observableZoom by mutableDoubleStateOf(mapState.zoom)
+    private var observableBearing by mutableDoubleStateOf(mapState.bearing)
 
     val center: Point
         get() = mapState.center
 
     val zoom: Double
         get() = observableZoom
+
+    /** Clockwise map rotation in degrees, normalized to the `[0, 360)` range. */
+    val bearing: Double
+        get() = observableBearing
 
     val projection: Projection
         get() = mapState.projection
@@ -128,15 +134,11 @@ class MapCameraState internal constructor(
         revision // Establish a Compose snapshot read for camera and viewport changes.
 
         val viewport = mapState.viewport
-        val topLeft = mapState.screenToWorld(Point(0.0, 0.0))
-        val bottomRight =
-            mapState.screenToWorld(
-                Point(viewport.width.toDouble(), viewport.height.toDouble()),
-            )
-        val minX = minOf(topLeft.x, bottomRight.x)
-        val maxX = maxOf(topLeft.x, bottomRight.x)
-        val minY = minOf(topLeft.y, bottomRight.y)
-        val maxY = maxOf(topLeft.y, bottomRight.y)
+        val visible = mapState.viewportBounds()
+        val minX = visible.minX
+        val maxX = visible.maxX
+        val minY = visible.minY
+        val maxY = visible.maxY
         val padX = (maxX - minX) * paddingFraction
         val padY = (maxY - minY) * paddingFraction
         val bounds =
@@ -152,12 +154,8 @@ class MapCameraState internal constructor(
             zoom = mapState.zoom,
             viewportWidth = viewport.width,
             viewportHeight = viewport.height,
-            resolution =
-                if (viewport.width > 0) {
-                    (maxX - minX) / viewport.width
-                } else {
-                    Double.POSITIVE_INFINITY
-                },
+            resolution = if (viewport.width > 0) mapState.resolution() else Double.POSITIVE_INFINITY,
+            bearing = mapState.bearing,
         )
     }
 
@@ -267,18 +265,74 @@ class MapCameraState internal constructor(
         animateZoomBy(delta = -step, focus = focus, animationSpec = animationSpec)
     }
 
-    /** Centers the map on [bounds], leaving a density-independent [padding]. */
+    /** Rotates the map clockwise by [delta] degrees while keeping [focus] fixed on screen. */
+    fun rotateBy(
+        delta: Double,
+        focus: Point? = null,
+    ) {
+        val previousCenter = mapState.center
+        val previousBearing = mapState.bearing
+        mapState.rotateBy(delta, focus)
+        if (mapState.center != previousCenter || mapState.bearing != previousBearing) {
+            markCameraChanged()
+        }
+    }
+
+    /** Sets the clockwise map [bearing], taking the shortest path around north. */
+    fun setBearing(
+        bearing: Double,
+        focus: Point? = null,
+    ) {
+        require(bearing.isFinite()) { "bearing must be finite" }
+        rotateBy(shortestBearingDelta(mapState.bearing, bearing), focus)
+    }
+
+    /** Animates a clockwise rotation by [delta] degrees. */
+    suspend fun animateRotateBy(
+        delta: Double,
+        focus: Point? = null,
+        animationSpec: AnimationSpec<Float> = DefaultRotationAnimationSpec,
+    ) {
+        require(delta.isFinite()) { "delta must be finite" }
+        if (delta == 0.0) return
+        val target = delta.toFloat()
+        require(target.isFinite()) { "delta must be representable as Float" }
+
+        var previousValue = 0.0
+        AnimationState(initialValue = 0f)
+            .animateTo(targetValue = target, animationSpec = animationSpec) {
+                rotateBy(value.toDouble() - previousValue, focus)
+                previousValue = value.toDouble()
+            }
+    }
+
+    /** Animates to [bearing] using the shortest path around north. */
+    suspend fun animateBearingTo(
+        bearing: Double,
+        focus: Point? = null,
+        animationSpec: AnimationSpec<Float> = DefaultRotationAnimationSpec,
+    ) {
+        require(bearing.isFinite()) { "bearing must be finite" }
+        animateRotateBy(shortestBearingDelta(mapState.bearing, bearing), focus, animationSpec)
+    }
+
+    /** Resets bearing to north and centers [bounds], leaving density-independent [padding]. */
     fun fitBounds(
         bounds: BoundingBox,
         padding: Dp = 48.dp,
     ) {
         val previousCenter = mapState.center
         val previousZoom = mapState.zoom
+        val previousBearing = mapState.bearing
         val requestedPaddingPx = padding.value * mapState.viewport.pixelRatio
         val smallestViewportDimension = minOf(mapState.viewport.width, mapState.viewport.height).toDouble()
         val maxPaddingPx = ((smallestViewportDimension - 1.0) / 2.0).coerceAtLeast(0.0)
         mapState.fitBounds(bounds, requestedPaddingPx.coerceAtMost(maxPaddingPx))
-        if (mapState.center != previousCenter || mapState.zoom != previousZoom) {
+        if (
+            mapState.center != previousCenter ||
+            mapState.zoom != previousZoom ||
+            mapState.bearing != previousBearing
+        ) {
             markCameraChanged()
         }
     }
@@ -288,6 +342,9 @@ class MapCameraState internal constructor(
         if (mapState.zoom != observableZoom) {
             observableZoom = mapState.zoom
             zoomRevision += 1
+        }
+        if (mapState.bearing != observableBearing) {
+            observableBearing = mapState.bearing
         }
     }
 
@@ -301,6 +358,20 @@ class MapCameraState internal constructor(
             tween(durationMillis = 220, easing = FastOutSlowInEasing)
         val DefaultPanAnimationSpec: AnimationSpec<Float> =
             tween(durationMillis = 260, easing = FastOutSlowInEasing)
+        val DefaultRotationAnimationSpec: AnimationSpec<Float> =
+            tween(durationMillis = 220, easing = FastOutSlowInEasing)
+
+        fun shortestBearingDelta(
+            from: Double,
+            to: Double,
+        ): Double {
+            val delta = (to - from) % 360.0
+            return when {
+                delta > 180.0 -> delta - 360.0
+                delta < -180.0 -> delta + 360.0
+                else -> delta
+            }
+        }
     }
 }
 
@@ -1166,7 +1237,7 @@ class FeatureLayerOptions {
 /**
  * Remembers camera state for [TiloMap].
  *
- * [initialCenter] and [initialZoom] initialize a newly remembered state and are
+ * [initialCenter], [initialZoom], and [initialBearing] initialize a newly remembered state and are
  * not reapplied by later recompositions. [projection] and [config] are immutable
  * properties of [MapCameraState]; changing either replaces the remembered state.
  */
@@ -1177,6 +1248,7 @@ fun rememberMapCameraState(
     initialZoom: Double = 0.0,
     projection: Projection = IdentityProjection,
     config: MapConfig = MapConfig.Default,
+    initialBearing: Double = 0.0,
 ): MapCameraState =
     remember(projection, config) {
         MapCameraState(
@@ -1186,6 +1258,7 @@ fun rememberMapCameraState(
                     zoom = initialZoom,
                     projection = projection,
                     config = config,
+                    bearing = initialBearing,
                 ),
         )
     }

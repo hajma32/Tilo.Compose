@@ -111,6 +111,28 @@ class PlatformRenderingAndroidTest {
         )
     }
 
+    @Test
+    fun rasterTilesRotateAroundViewportCenterWithoutSeams() {
+        val map = MapState(bearing = 90.0, viewport = Viewport(64, 64))
+        val images = listOf(RED, GREEN, BLUE, YELLOW).map(::solidBitmap)
+
+        val result =
+            renderBitmap {
+                drawTiles(
+                    quadrantTiles(),
+                    tileDecoder = { error("predecoded tiles must not decode again") },
+                    map,
+                    images,
+                )
+            }
+
+        assertTrue(result.readArgb().all { argb -> argb ushr 24 == 0xFF })
+        assertEquals(
+            listOf(GREEN, YELLOW, RED, BLUE),
+            listOf(result.argbAt(16, 16), result.argbAt(48, 16), result.argbAt(16, 48), result.argbAt(48, 48)),
+        )
+    }
+
     /** Verifies that raster layer opacity reaches decoded tile pixels. */
     @Test
     fun rasterOpacityIsAppliedToDecodedTiles() {
@@ -201,6 +223,22 @@ class PlatformRenderingAndroidTest {
         assertEquals(0, result.argbAt(48, 32)) // polygon hole remains transparent
     }
 
+    @Test
+    fun vectorGeometryUsesCameraBearing() {
+        val map = MapState(bearing = 90.0, viewport = Viewport(64, 64))
+        val point =
+            RenderPoint(
+                id = "east",
+                point = Point(16.0, 0.0),
+                style = PointStyle(size = 8.0, fill = FillStyle(ColorValue(RED.toUInt().toULong())), stroke = null),
+            )
+
+        val result = renderBitmap { drawFeatureGeometry(listOf(point), map) }
+
+        assertEquals(RED, result.argbAt(32, 16))
+        assertEquals(0, result.argbAt(48, 32))
+    }
+
     /**
      * Verifies that selected and normal feature styles remain visually distinguishable.
      *
@@ -251,6 +289,31 @@ class PlatformRenderingAndroidTest {
 
         assertEquals(MAGENTA, result.argbAt(32, 32))
         assertEquals(0, result.argbAt(20, 20))
+    }
+
+    @Test
+    fun cachedVectorBitmapTracksBearingWhileReplacementRenders() {
+        val source =
+            Bitmap
+                .createBitmap(20, 20, Bitmap.Config.ARGB_8888)
+                .apply {
+                    repeat(height) { y ->
+                        repeat(width) { x -> setPixel(x, y, if (x < width / 2) RED else BLUE) }
+                    }
+                }.asImageBitmap()
+        val layer =
+            VectorBitmapRenderSceneLayer(
+                id = "cached",
+                zIndex = 0,
+                bitmap = source,
+                snapshot = VectorBitmapSnapshot(Point(0.0, 0.0), 0.0, 20, 20, 20, 20, bearing = 0.0),
+            )
+        val map = MapState(bearing = 90.0, viewport = Viewport(64, 64))
+
+        val result = renderBitmap { drawVectorBitmapLayer(layer, map) }
+
+        assertEquals(BLUE, result.argbAt(32, 24))
+        assertEquals(RED, result.argbAt(32, 40))
     }
 
     /**

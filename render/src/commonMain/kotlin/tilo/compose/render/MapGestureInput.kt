@@ -32,7 +32,7 @@ import kotlin.math.ln
  * Calls [onChanged] after each gesture so the caller can trigger recomposition.
  */
 @Composable
-@Suppress("CyclomaticComplexMethod") // Pointer gesture arbitration is intentionally one state machine.
+@Suppress("CyclomaticComplexMethod", "LongMethod") // Pointer gesture arbitration is intentionally one state machine.
 internal fun Modifier.mapGestureInput(
     map: MapState,
     onChanged: () -> Unit,
@@ -120,7 +120,14 @@ internal fun Modifier.mapGestureInput(
                                     focus = zoomFocus,
                                 )
                             }
-                            if (panChange != Offset.Zero || zoomChange != 1f) {
+                            if (rotationChange != 0f) {
+                                applyRotationGesture(
+                                    map = map,
+                                    rotationChange = rotationChange.toDouble(),
+                                    focus = Point(centroid.x.toDouble(), centroid.y.toDouble()),
+                                )
+                            }
+                            if (panChange != Offset.Zero || zoomChange != 1f || rotationChange != 0f) {
                                 currentOnChanged.value()
                             }
                             event.changes.forEach { change ->
@@ -158,6 +165,15 @@ internal fun Modifier.mapGestureInput(
             }
         }
     }
+}
+
+/** Applies Compose's clockwise-positive gesture rotation to map bearing. */
+internal fun applyRotationGesture(
+    map: MapState,
+    rotationChange: Double,
+    focus: Point,
+) {
+    map.rotateBy(delta = -rotationChange, focus = focus)
 }
 
 @Composable

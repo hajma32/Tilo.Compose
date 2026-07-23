@@ -9,6 +9,7 @@ import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg5514Projection
+import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.core.tile.TileRequest
@@ -193,6 +194,55 @@ class RasterTileLayerTest {
 
         assertFailsWith<IllegalArgumentException> {
             layer.planTiles(map)
+        }
+    }
+
+    @Test
+    fun rotatedViewportPlansTilesCoveringAllFourCorners() {
+        val grid = TileGrid(originX = -128.0, originY = 128.0, worldWidth = 256.0, nTilesX0 = 1, nTilesY0 = 1)
+        val source =
+            TileStoreTileSource(
+                projection = IdentityProjection,
+                grid = grid,
+                readTile = { byteArrayOf(1) },
+            )
+        val layer = RasterTileLayer(id = "rotated", source = source, maxVisibleTiles = 16)
+        try {
+            val unrotated =
+                layer.planTiles(
+                    MapState(
+                        center = Point(32.0, 32.0),
+                        zoom = 2.0,
+                        viewport = Viewport(width = 400, height = 400, pixelRatio = 2.0),
+                    ),
+                )
+            val rotated =
+                layer.planTiles(
+                    MapState(
+                        center = Point(32.0, 32.0),
+                        zoom = 2.0,
+                        bearing = 45.0,
+                        viewport = Viewport(width = 400, height = 400, pixelRatio = 2.0),
+                    ),
+                )
+
+            assertEquals(setOf(TileCoordinate(2, 2, 1)), unrotated.map { it.coordinate }.toSet())
+            assertEquals(
+                setOf(
+                    TileCoordinate(2, 1, 1),
+                    TileCoordinate(2, 2, 1),
+                    TileCoordinate(2, 3, 1),
+                    TileCoordinate(2, 1, 0),
+                    TileCoordinate(2, 2, 0),
+                    TileCoordinate(2, 3, 0),
+                    TileCoordinate(2, 1, 2),
+                    TileCoordinate(2, 2, 2),
+                    TileCoordinate(2, 3, 2),
+                ),
+                rotated.map { it.coordinate }.toSet(),
+            )
+        } finally {
+            layer.close()
         }
     }
 

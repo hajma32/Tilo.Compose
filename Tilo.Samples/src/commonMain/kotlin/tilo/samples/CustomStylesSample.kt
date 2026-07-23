@@ -22,8 +22,8 @@ import tilo.compose.dsl.pointStyle
 import tilo.compose.dsl.polygonStyle
 import tilo.compose.dsl.smallLabelStyle
 import tilo.compose.dsl.wgs84
-import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
+import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 import tilocompose.tilo_samples.generated.resources.Res
 import tilocompose.tilo_samples.generated.resources.sample_stop_bitmap
@@ -41,7 +41,7 @@ internal fun BoxScope.CustomStylesSample() {
         modifier = Modifier.fillMaxSize(),
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = { DefaultZoomControls(it) },
+        cameraControlsContent = defaultCameraControlsContent(),
         layers = {
             openStreetMapLayer(opacity = 0.65)
             layerGroup(id = "styled-content", zIndex = 3, opacity = 0.8) {

@@ -64,6 +64,7 @@ data class VectorBitmapSnapshot(
     val bitmapHeight: Int,
     val displayWidth: Int,
     val displayHeight: Int,
+    val bearing: Double = 0.0,
 )
 
 @ExperimentalTiloRenderingApi

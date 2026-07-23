@@ -1,6 +1,5 @@
 package tilo.compose.core.layers.raster
 
-import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.map.MapState
 import tilo.compose.core.projection.Projection
@@ -128,20 +127,13 @@ open class RasterTileLayer(
         maxVisibleTiles: Int,
         prefetchMargin: Int,
     ): TileRequestPlan {
-        val topLeft = map.screenToWorld(Point(0.0, 0.0))
-        val bottomRight =
-            map.screenToWorld(
-                Point(
-                    map.viewport.width.toDouble(),
-                    map.viewport.height.toDouble(),
-                ),
-            )
+        val visible = map.viewportBounds()
 
         return grid.requestPlan(
-            minX = minOf(topLeft.x, bottomRight.x),
-            maxX = maxOf(topLeft.x, bottomRight.x),
-            minY = minOf(topLeft.y, bottomRight.y),
-            maxY = maxOf(topLeft.y, bottomRight.y),
+            minX = visible.minX,
+            maxX = visible.maxX,
+            minY = visible.minY,
+            maxY = visible.maxY,
             preferredZoom = preferredZoom,
             maxVisibleTiles = maxVisibleTiles,
             prefetchMargin = prefetchMargin,

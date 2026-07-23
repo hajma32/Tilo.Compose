@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -150,9 +151,16 @@ internal fun DrawScope.drawVectorBitmapLayer(
             x = anchor.x.toFloat() - width / 2f,
             y = anchor.y.toFloat() - height / 2f,
         )
-    drawImage(
-        image = layer.bitmap,
-        dstOffset = IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()),
-        dstSize = IntSize(width, height),
-    )
+    withTransform({
+        rotate(
+            degrees = (layer.snapshot.bearing - map.bearing).toFloat(),
+            pivot = Offset(anchor.x.toFloat(), anchor.y.toFloat()),
+        )
+    }) {
+        drawImage(
+            image = layer.bitmap,
+            dstOffset = IntOffset(topLeft.x.roundToInt(), topLeft.y.roundToInt()),
+            dstSize = IntSize(width, height),
+        )
+    }
 }

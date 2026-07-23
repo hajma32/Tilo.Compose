@@ -23,8 +23,8 @@ import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
 import tilo.compose.dsl.mediumLabelStyle
 import tilo.compose.dsl.wgs84
-import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
+import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
 private const val GEOMETRY_LAYER_ID = "sample-geometries"
@@ -42,7 +42,7 @@ internal fun BoxScope.GeometriesSample() {
         selectedFeatures = selectedFeatures,
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = { DefaultZoomControls(it) },
+        cameraControlsContent = defaultCameraControlsContent(),
         layers = {
             openStreetMapLayer()
             featureLayer(GEOMETRY_LAYER_ID, features) {

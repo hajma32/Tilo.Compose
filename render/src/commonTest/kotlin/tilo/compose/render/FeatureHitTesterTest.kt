@@ -149,6 +149,20 @@ class FeatureHitTesterTest {
         assertEquals("place", selectedKey)
     }
 
+    @Test
+    fun hitTestingUsesRotatedWorldToScreenTransform() {
+        val map = MapState(bearing = 90.0, viewport = Viewport(width = 100, height = 100))
+        val layer =
+            FeatureLayer(
+                id = "points",
+                features = listOf(Feature(key = "east", geometry = Point(20.0, 0.0))),
+            )
+
+        val selections = FeatureHitTester().hitTest(map, listOf(layer), Point(50.0, 30.0))
+
+        assertEquals(listOf("east"), selections.map { it.feature.key })
+    }
+
     private fun mercatorMap(center: Point): MapState =
         MapState(
             center = center,

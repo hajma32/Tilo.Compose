@@ -18,8 +18,8 @@ import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
 import tilo.compose.dsl.wgs84
-import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
+import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
 /** Visual regression playground for zoom styles, multi-line alignment, and casing width. */
@@ -34,7 +34,7 @@ internal fun BoxScope.StyleLabSample() {
         modifier = Modifier.fillMaxSize(),
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = { DefaultZoomControls(it) },
+        cameraControlsContent = defaultCameraControlsContent(),
         layers = {
             openStreetMapLayer()
             layerGroup(

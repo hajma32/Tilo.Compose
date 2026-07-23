@@ -64,12 +64,12 @@ fun BoxScope.DefaultZoomControls(
                 .padding(top = 16.dp, end = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        ZoomButton(
+        CameraButton(
             icon = Res.drawable.ic_add_24,
             contentDescription = "Zoom in",
             onClick = { animateZoom(zoomStep) },
         )
-        ZoomButton(
+        CameraButton(
             icon = Res.drawable.ic_remove_24,
             contentDescription = "Zoom out",
             onClick = { animateZoom(-zoomStep) },
@@ -79,11 +79,13 @@ fun BoxScope.DefaultZoomControls(
 }
 
 @Composable
-private fun ZoomButton(
+internal fun CameraButton(
     icon: DrawableResource,
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    iconModifier: Modifier = Modifier,
+    colorFilter: ColorFilter? = ColorFilter.tint(ZoomButtonIconColor),
 ) {
     Box(
         modifier =
@@ -97,10 +99,10 @@ private fun ZoomButton(
         Image(
             painter = painterResource(icon),
             contentDescription = contentDescription,
-            colorFilter = ColorFilter.tint(ZoomButtonIconColor),
-            modifier = Modifier.size(24.dp),
+            colorFilter = colorFilter,
+            modifier = iconModifier.size(24.dp),
         )
     }
 }
 
-private val ZoomButtonIconColor = Color(0xFF111827)
+internal val ZoomButtonIconColor = Color(0xFF111827)

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.ui
 
 import androidx.compose.foundation.Canvas
@@ -11,20 +13,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import tilo.compose.core.scale.ScaleBar
+import tilo.compose.render.ExperimentalTiloRenderingApi
+import tilo.compose.render.drawLabelTextWithHalo
 
 @OptIn(ExperimentalTextApi::class)
 @Composable
@@ -50,32 +57,37 @@ fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
     ) {
         val barHeight = 12.dp.toPx()
         val radius = 3.dp.toPx()
-        val halfWidth = size.width / 2.0f
+        val segments = scaleBarSegments(width = size.width, height = barHeight)
 
         drawScaleBarShadow(
             width = size.width,
             height = barHeight,
             radius = radius,
         )
-        drawRoundRect(
-            color = ScaleBarLightColor,
-            topLeft = Offset.Zero,
-            size = Size(size.width, barHeight),
-            cornerRadius = CornerRadius(radius, radius),
-        )
-        drawRoundRect(
-            color = ScaleBarColor,
-            topLeft = Offset.Zero,
-            size = Size(halfWidth + radius, barHeight),
-            cornerRadius = CornerRadius(radius, radius),
-        )
-        drawRect(
-            color = ScaleBarLightColor,
-            topLeft = Offset(halfWidth, 0.0f),
-            size = Size(radius, barHeight),
-        )
+        val barPath =
+            Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        rect = Rect(0.0f, 0.0f, size.width, barHeight),
+                        cornerRadius = CornerRadius(radius, radius),
+                    ),
+                )
+            }
+        clipPath(barPath) {
+            drawRect(
+                color = ScaleBarColor.copy(alpha = ScaleBarOpacity),
+                topLeft = segments.start.topLeft,
+                size = segments.start.size,
+            )
+            drawRect(
+                color = ScaleBarLightColor.copy(alpha = ScaleBarOpacity),
+                topLeft = segments.end.topLeft,
+                size = segments.end.size,
+            )
+        }
 
         val labelTop = barHeight + 3.dp.toPx()
+        val halfWidth = segments.start.right
         drawLabelWithHalo(
             label = labels.start,
             x = 0.0f,
@@ -102,6 +114,7 @@ fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
 private val ScaleBarColor = Color(0xFF111827)
 private val ScaleBarTextColor = Color.Black
 private val ScaleBarLightColor = Color.White
+internal const val ScaleBarOpacity = 0.8f
 
 private val ScaleBarTextStyle =
     TextStyle(
@@ -111,33 +124,10 @@ private val ScaleBarTextStyle =
         fontSynthesis = FontSynthesis.None,
     )
 
-private val ScaleBarHaloTextStyle = ScaleBarTextStyle.copy(color = Color.White)
-
-private val ScaleBarHaloOffsets =
-    listOf(
-        Offset(-3.0f, -3.0f),
-        Offset(0.0f, -3.0f),
-        Offset(3.0f, -3.0f),
-        Offset(-2.0f, -2.0f),
-        Offset(0.0f, -2.0f),
-        Offset(2.0f, -2.0f),
-        Offset(-3.0f, 0.0f),
-        Offset(-2.0f, 0.0f),
-        Offset(2.0f, 0.0f),
-        Offset(3.0f, 0.0f),
-        Offset(-2.0f, 2.0f),
-        Offset(0.0f, 2.0f),
-        Offset(2.0f, 2.0f),
-        Offset(-3.0f, 3.0f),
-        Offset(0.0f, 3.0f),
-        Offset(3.0f, 3.0f),
-    )
-
 @OptIn(ExperimentalTextApi::class)
 private fun androidx.compose.ui.text.TextMeasurer.measureLabel(text: String): ScaleBarLabelLayout =
     ScaleBarLabelLayout(
         fill = measure(text, ScaleBarTextStyle),
-        halo = measure(text, ScaleBarHaloTextStyle),
     )
 
 private data class ScaleBarLabelLayouts(
@@ -148,8 +138,23 @@ private data class ScaleBarLabelLayouts(
 
 private data class ScaleBarLabelLayout(
     val fill: TextLayoutResult,
-    val halo: TextLayoutResult,
 )
+
+internal data class ScaleBarSegments(
+    val start: Rect,
+    val end: Rect,
+)
+
+internal fun scaleBarSegments(
+    width: Float,
+    height: Float,
+): ScaleBarSegments {
+    val halfWidth = width / 2.0f
+    return ScaleBarSegments(
+        start = Rect(0.0f, 0.0f, halfWidth, height),
+        end = Rect(halfWidth, 0.0f, width, height),
+    )
+}
 
 private fun DrawScope.drawScaleBarShadow(
     width: Float,
@@ -188,13 +193,13 @@ private fun DrawScope.drawLabelWithHalo(
                 },
             y = y,
         )
-    ScaleBarHaloOffsets.forEach { offset ->
-        drawText(
-            textLayoutResult = label.halo,
-            topLeft = topLeft + offset,
-        )
-    }
-    drawText(textLayoutResult = label.fill, topLeft = topLeft)
+    drawLabelTextWithHalo(
+        textLayoutResult = label.fill,
+        textColor = ScaleBarTextColor,
+        haloColor = Color.White,
+        haloWidthPx = 3.dp.toPx(),
+        topLeft = topLeft,
+    )
 }
 
 private enum class LabelAlignment {

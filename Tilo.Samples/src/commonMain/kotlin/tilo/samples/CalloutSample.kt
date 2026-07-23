@@ -36,8 +36,8 @@ import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
 import tilo.compose.dsl.smallLabelStyle
 import tilo.compose.dsl.wgs84
-import tilo.compose.ui.DefaultZoomControls
 import tilo.compose.ui.defaultAttributionContent
+import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
 private const val CALLOUT_LAYER_ID = "sample-callouts"
@@ -68,7 +68,7 @@ internal fun BoxScope.CalloutSample() {
         selectedFeatures = selectedFeatures,
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
-        cameraControlsContent = { DefaultZoomControls(it) },
+        cameraControlsContent = defaultCameraControlsContent(),
         layers = {
             openStreetMapLayer()
             featureLayer(CALLOUT_LAYER_ID, features) {

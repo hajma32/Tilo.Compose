@@ -15,6 +15,8 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
+import tilo.compose.core.map.MapState
+import tilo.compose.core.map.Viewport
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -108,6 +110,17 @@ class CommandBuilderTest {
             )
 
         assertEquals(listOf("center:point", "padded-edge:point"), commands.map(RenderCommand::id))
+    }
+
+    @Test
+    fun rotatedViewportCullingUsesAllFourCorners() {
+        val commands =
+            CommandBuilder.build(
+                map = MapState(bearing = 45.0, viewport = Viewport(width = 100, height = 100)),
+                features = listOf(Feature(key = "rotated-corner", geometry = Point(65.0, 0.0))),
+            )
+
+        assertEquals(listOf("rotated-corner:point"), commands.map(RenderCommand::id))
     }
 
     /**

@@ -82,6 +82,7 @@ internal class VectorBitmapRenderer(
                         bitmapHeight = bitmapHeight,
                         displayWidth = displayWidth,
                         displayHeight = displayHeight,
+                        bearing = map.bearing,
                     ),
             )
         }
@@ -95,6 +96,7 @@ internal fun tilo.compose.core.map.MapState.forOffscreenViewport(
     tilo.compose.core.map.MapState(
         center = center,
         zoom = zoom,
+        bearing = bearing,
         projection = projection,
         // The padded offscreen viewport is a render buffer, not a camera viewport.
         // Reapplying camera bounds here would move its center away from the snapshot anchor.

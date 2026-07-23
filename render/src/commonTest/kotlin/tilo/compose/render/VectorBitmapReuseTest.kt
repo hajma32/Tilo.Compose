@@ -59,6 +59,16 @@ class VectorBitmapReuseTest {
         assertFalse(bitmap.canCover(map, strategy))
     }
 
+    @Test
+    fun bitmapIsInvalidatedWhenBearingChanges() {
+        val map = testMap()
+        val bitmap = testBitmapLayer()
+
+        assertTrue(bitmap.canCover(map, strategy))
+        map.rotateBy(0.01)
+        assertFalse(bitmap.canCover(map, strategy))
+    }
+
     /**
      * Verifies stable cache identity for equivalent DSL-style layer reconstruction.
      *

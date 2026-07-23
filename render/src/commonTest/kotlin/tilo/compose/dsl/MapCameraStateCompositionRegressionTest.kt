@@ -27,10 +27,11 @@ class MapCameraStateCompositionRegressionTest {
      * Expected: the same camera state keeps the center and zoom with which it was created.
      */
     @Test
-    fun initialCenterAndZoomDoNotResetExistingState() =
+    fun initialCameraValuesDoNotResetExistingState() =
         runTest {
             val center = mutableStateOf(Point(1.0, 2.0))
             val zoom = mutableStateOf(3.0)
+            val bearing = mutableStateOf(15.0)
             var cameraState: MapCameraState? = null
 
             withCameraComposition {
@@ -38,18 +39,21 @@ class MapCameraStateCompositionRegressionTest {
                     rememberMapCameraState(
                         initialCenter = center.value,
                         initialZoom = zoom.value,
+                        initialBearing = bearing.value,
                     )
             }.use { composition ->
                 val initialState = requireNotNull(cameraState)
 
                 center.value = Point(10.0, 20.0)
                 zoom.value = 8.0
+                bearing.value = 120.0
                 composition.recompose()
                 val recomposedState = requireNotNull(cameraState)
 
                 assertSame(initialState, recomposedState)
                 assertEquals(Point(1.0, 2.0), recomposedState.center)
                 assertEquals(3.0, recomposedState.zoom)
+                assertEquals(15.0, recomposedState.bearing)
             }
         }
 

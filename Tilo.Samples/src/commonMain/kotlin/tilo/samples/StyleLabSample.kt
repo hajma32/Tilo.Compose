@@ -37,45 +37,51 @@ internal fun BoxScope.StyleLabSample() {
         cameraControlsContent = { DefaultZoomControls(it) },
         layers = {
             openStreetMapLayer()
-            featureLayer("zoom-style", route) {
-                zIndex = 3
-                projection = wgs84()
-                style =
-                    featureLayerStyle {
-                        line {
-                            casing(0xFFFFFFFF, width = 2.dp) {
-                                lineCap = LineCap.Round
-                                lineJoin = LineJoin.Round
-                            }
-                            stroke(0xFFF2663B, width = 6.dp) {
-                                lineCap = LineCap.Round
-                                lineJoin = LineJoin.Round
-                            }
-                        }
-                        label {
-                            color(0xFF17201C)
-                            background(0xFFFFFFFF, opacity = 0.92)
-                        }
-                        zoom(minZoom = 14.0) {
+            layerGroup(
+                id = "style-lab-overlays",
+                zIndex = 3,
+                minZoom = 11.0,
+            ) {
+                featureLayer("zoom-style", route) {
+                    zIndex = 0
+                    projection = wgs84()
+                    style =
+                        featureLayerStyle {
                             line {
                                 casing(0xFFFFFFFF, width = 2.dp) {
                                     lineCap = LineCap.Round
                                     lineJoin = LineJoin.Round
                                 }
-                                stroke(0xFF2F6FEB, width = 20.dp) {
+                                stroke(0xFFF2663B, width = 6.dp) {
                                     lineCap = LineCap.Round
                                     lineJoin = LineJoin.Round
                                 }
                             }
-                            hideLabels()
+                            label {
+                                color(0xFF17201C)
+                                background(0xFFFFFFFF, opacity = 0.92)
+                            }
+                            zoom(minZoom = 14.0) {
+                                line {
+                                    casing(0xFFFFFFFF, width = 2.dp) {
+                                        lineCap = LineCap.Round
+                                        lineJoin = LineJoin.Round
+                                    }
+                                    stroke(0xFF2F6FEB, width = 20.dp) {
+                                        lineCap = LineCap.Round
+                                        lineJoin = LineJoin.Round
+                                    }
+                                }
+                                hideLabels()
+                            }
                         }
+                }
+                LabelTextAlign.entries.forEachIndexed { index, alignment ->
+                    featureLayer("alignment-${alignment.name.lowercase()}", listOf(alignedLabels[index])) {
+                        zIndex = 10 + index
+                        projection = wgs84()
+                        style = alignmentStyle(alignment)
                     }
-            }
-            LabelTextAlign.entries.forEachIndexed { index, alignment ->
-                featureLayer("alignment-${alignment.name.lowercase()}", listOf(alignedLabels[index])) {
-                    zIndex = 4
-                    projection = wgs84()
-                    style = alignmentStyle(alignment)
                 }
             }
         },
@@ -85,8 +91,8 @@ internal fun BoxScope.StyleLabSample() {
         sample = Sample.StyleLab,
         body =
             "Zoom from 13 to 14: the route changes from 6 dp orange to 20 dp blue and its label disappears. " +
-                "The three labels exercise left, center and right multi-line alignment.",
-        code = "zoom(minZoom = 14.0) { …; hideLabels() }",
+                "The grouped overlays also exercise left, center and right multi-line alignment.",
+        code = "layerGroup(\"style-lab-overlays\") { zoom(minZoom = 14.0) { … } }",
     )
     MapPill("Casing width is +2 dp · zoom across 14")
 }

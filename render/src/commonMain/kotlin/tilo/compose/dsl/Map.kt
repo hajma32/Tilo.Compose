@@ -29,6 +29,7 @@ import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.Layer
+import tilo.compose.core.layers.LayerGroup
 import tilo.compose.core.layers.LayerSink
 import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileLayer
@@ -53,6 +54,7 @@ import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.MapRenderer
+import tilo.compose.render.ResolvedLayerTree
 
 private const val OPEN_STREET_MAP_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 private val OPEN_STREET_MAP_ATTRIBUTION =
@@ -311,15 +313,17 @@ class MapCameraState internal constructor(
 @ExperimentalTiloApi
 @TiloDsl
 class MapLayerBuilder private constructor(
-    private val rasterLayerStore: RasterLayerStore?,
-    private val loadWMSCapabilities: suspend (String) -> WMSCapabilities,
+    private val context: MapLayerBuildContext,
 ) : LayerSink {
     private val items = mutableListOf<MapLayerItem>()
-    private val layerIds = mutableSetOf<String>()
-    internal val managedRasterKeys = mutableSetOf<ManagedRasterLayerKey>()
-    internal val managedRasterUpdates = mutableMapOf<ManagedRasterLayerKey, RasterLayerUpdate>()
 
-    constructor() : this(rasterLayerStore = null, loadWMSCapabilities = DEFAULT_WMS_CAPABILITIES_LOADER)
+    constructor() :
+        this(
+            MapLayerBuildContext(
+                rasterLayerStore = null,
+                loadWMSCapabilities = DEFAULT_WMS_CAPABILITIES_LOADER,
+            ),
+        )
 
     internal companion object {
         private val DEFAULT_WMS_CAPABILITIES_LOADER: suspend (String) -> WMSCapabilities = { url ->
@@ -329,7 +333,13 @@ class MapLayerBuilder private constructor(
         fun managed(
             rasterLayerStore: RasterLayerStore,
             loadWMSCapabilities: suspend (String) -> WMSCapabilities = DEFAULT_WMS_CAPABILITIES_LOADER,
-        ): MapLayerBuilder = MapLayerBuilder(rasterLayerStore, loadWMSCapabilities)
+        ): MapLayerBuilder =
+            MapLayerBuilder(
+                MapLayerBuildContext(
+                    rasterLayerStore = rasterLayerStore,
+                    loadWMSCapabilities = loadWMSCapabilities,
+                ),
+            )
     }
 
     /**
@@ -339,9 +349,7 @@ class MapLayerBuilder private constructor(
      * responsible for closing it if it owns resources.
      */
     override fun layer(layer: Layer) {
-        require(layerIds.add(layer.id)) {
-            "Duplicate layer id '${layer.id}'. Layer IDs must be unique within one TiloMap."
-        }
+        registerLayerTree(layer)
         items += MapLayerItem.LayerValue(layer)
     }
 
@@ -351,6 +359,41 @@ class MapLayerBuilder private constructor(
      */
     operator fun Layer.unaryPlus() {
         layer(this)
+    }
+
+    /**
+     * Adds a composite layer whose children occupy one ordered slot among this builder's layers.
+     *
+     * Child [Layer.zIndex] values are local to the group. Visibility and zoom limits declared here
+     * constrain all descendants. The nested block supports the same layer DSL, including further
+     * groups and managed raster layers.
+     */
+    fun layerGroup(
+        id: String,
+        zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
+        attribution: Attribution? = null,
+        attributions: List<Attribution> = emptyList(),
+        layers: MapLayerBuilder.() -> Unit,
+    ) {
+        require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
+            "minZoom must not be greater than maxZoom"
+        }
+        registerLayerId(id)
+        val childBuilder = MapLayerBuilder(context)
+        childBuilder.layers()
+        items +=
+            MapLayerItem.Group(
+                id = id,
+                zIndex = zIndex,
+                visible = visible,
+                minZoom = minZoom,
+                maxZoom = maxZoom,
+                attributions = attributions.withSingle(attribution),
+                children = childBuilder.items.toList(),
+            )
     }
 
     /**
@@ -399,7 +442,7 @@ class MapLayerBuilder private constructor(
         state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
     ) {
-        require(layerIds.add(id)) {
+        require(context.layerIds.add(id)) {
             "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
         }
         val resolvedAttributions = attributions.withSingle(attribution)
@@ -438,7 +481,7 @@ class MapLayerBuilder private constructor(
                     state = state,
                     onError = onError,
                     create = { reportError ->
-                        val capabilities = loadWMSCapabilities(capabilitiesUrl)
+                        val capabilities = context.loadWMSCapabilities(capabilitiesUrl)
                         capabilities.createTileLayer(
                             id = id,
                             layerName = layerName,
@@ -847,15 +890,50 @@ class MapLayerBuilder private constructor(
         )
 
     internal val managedWMSDeclarations: List<ManagedWMSLayerDeclaration>
-        get() = items.mapNotNull { (it as? MapLayerItem.ManagedWMS)?.declaration }
+        get() = items.managedWMSDeclarations()
+
+    internal val managedRasterKeys: Set<ManagedRasterLayerKey>
+        get() = context.managedRasterKeys
+
+    internal val managedRasterUpdates: Map<ManagedRasterLayerKey, RasterLayerUpdate>
+        get() = context.managedRasterUpdates
 
     internal fun build(resolvedWMSLayers: Map<ManagedWMSLayerKey, TileLayer?> = emptyMap()): List<Layer> =
-        items.mapNotNull { item ->
-            when (item) {
-                is MapLayerItem.LayerValue -> item.layer
-                is MapLayerItem.ManagedWMS -> resolvedWMSLayers[item.declaration.key]
+        items.buildLayers(resolvedWMSLayers)
+
+    private fun registerLayerTree(layer: Layer) {
+        val ids =
+            buildList {
+                fun collect(current: Layer) {
+                    add(current.id)
+                    if (current is LayerGroup) {
+                        current.children.forEach(::collect)
+                    }
+                }
+                collect(layer)
             }
+        val duplicateWithinTree =
+            ids
+                .groupingBy { it }
+                .eachCount()
+                .entries
+                .firstOrNull { it.value > 1 }
+                ?.key
+        require(duplicateWithinTree == null) {
+            "Duplicate layer id '$duplicateWithinTree'. Layer IDs must be unique within one TiloMap."
         }
+        val duplicateInMap = ids.firstOrNull(context.layerIds::contains)
+        require(duplicateInMap == null) {
+            "Duplicate layer id '$duplicateInMap'. Layer IDs must be unique within one TiloMap."
+        }
+        context.layerIds += ids
+    }
+
+    private fun registerLayerId(id: String) {
+        require(context.layerIds.add(id)) {
+            "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
+        }
+    }
 
     private fun managedRasterLayer(
         id: String,
@@ -868,17 +946,17 @@ class MapLayerBuilder private constructor(
         update: RasterLayerUpdate = RasterLayerUpdate.None,
         create: () -> StoredRasterLayer,
     ) {
-        require(layerIds.add(id)) {
+        require(context.layerIds.add(id)) {
             "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
         }
-        val store = rasterLayerStore
+        val store = context.rasterLayerStore
         val layer =
             if (store == null) {
                 create().layer
             } else {
                 val key = ManagedRasterLayerKey(layerId = id, configuration = configuration)
-                managedRasterKeys += key
-                managedRasterUpdates[key] = update
+                context.managedRasterKeys += key
+                context.managedRasterUpdates[key] = update
                 PresentedTileLayer(
                     runtime = store.getOrCreate(key, create),
                     id = id,
@@ -893,6 +971,15 @@ class MapLayerBuilder private constructor(
     }
 }
 
+private class MapLayerBuildContext(
+    val rasterLayerStore: RasterLayerStore?,
+    val loadWMSCapabilities: suspend (String) -> WMSCapabilities,
+) {
+    val layerIds = mutableSetOf<String>()
+    val managedRasterKeys = mutableSetOf<ManagedRasterLayerKey>()
+    val managedRasterUpdates = mutableMapOf<ManagedRasterLayerKey, RasterLayerUpdate>()
+}
+
 private sealed interface MapLayerItem {
     class LayerValue(
         val layer: Layer,
@@ -901,7 +988,44 @@ private sealed interface MapLayerItem {
     class ManagedWMS(
         val declaration: ManagedWMSLayerDeclaration,
     ) : MapLayerItem
+
+    class Group(
+        val id: String,
+        val zIndex: Int,
+        val visible: Boolean,
+        val minZoom: Double?,
+        val maxZoom: Double?,
+        val attributions: List<Attribution>,
+        val children: List<MapLayerItem>,
+    ) : MapLayerItem
 }
+
+private fun List<MapLayerItem>.managedWMSDeclarations(): List<ManagedWMSLayerDeclaration> =
+    flatMap { item ->
+        when (item) {
+            is MapLayerItem.Group -> item.children.managedWMSDeclarations()
+            is MapLayerItem.LayerValue -> emptyList()
+            is MapLayerItem.ManagedWMS -> listOf(item.declaration)
+        }
+    }
+
+private fun List<MapLayerItem>.buildLayers(resolvedWMSLayers: Map<ManagedWMSLayerKey, TileLayer?>): List<Layer> =
+    mapNotNull { item ->
+        when (item) {
+            is MapLayerItem.LayerValue -> item.layer
+            is MapLayerItem.ManagedWMS -> resolvedWMSLayers[item.declaration.key]
+            is MapLayerItem.Group ->
+                LayerGroup(
+                    id = item.id,
+                    children = item.children.buildLayers(resolvedWMSLayers),
+                    zIndex = item.zIndex,
+                    visible = item.visible,
+                    minZoom = item.minZoom,
+                    maxZoom = item.maxZoom,
+                    attributions = item.attributions,
+                )
+        }
+    }
 
 internal data class XyzRasterConfiguration(
     val projectionId: String,
@@ -1105,7 +1229,8 @@ private fun BoxScope.AttributionOverlay(
     content: @Composable BoxScope.(List<Attribution>) -> Unit,
 ) {
     cameraState.zoomRevision
-    val attributions = layers.filter { it.isVisibleAt(cameraState.zoom) }.attributions()
+    val layerTree = remember(layers) { ResolvedLayerTree.resolve(layers) }
+    val attributions = layerTree.activeAttributions(cameraState.zoom)
     if (attributions.isNotEmpty()) {
         content(attributions)
     }

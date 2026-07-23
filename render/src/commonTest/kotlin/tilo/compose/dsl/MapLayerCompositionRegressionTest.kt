@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Layer
+import tilo.compose.core.layers.LayerGroup
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.raster.TileRowScheme
 import tilo.compose.core.map.MapState
@@ -33,6 +34,59 @@ import kotlin.test.assertTrue
  * alone cannot detect runtime/cache churn caused by commit and disposal timing.
  */
 class MapLayerCompositionRegressionTest {
+    /**
+     * Verifies that nested managed layers participate in the map's normal ownership lifecycle.
+     *
+     * Input: a blocking tile layer inside a group, followed by removal of the complete group.
+     * Expected: the child request is cancelled and the group leaves the committed layer list.
+     */
+    @Test
+    fun removingGroupFromCompositionRetiresItsManagedChildren() {
+        runTest {
+            val includeGroup = mutableStateOf(true)
+            val requestStarted = CompletableDeferred<Unit>()
+            val requestCancelled = CompletableDeferred<Unit>()
+            var currentLayers: List<Layer> = emptyList()
+
+            withLayerComposition {
+                currentLayers =
+                    rememberManagedMapLayers {
+                        if (includeGroup.value) {
+                            layerGroup(id = "base-maps") {
+                                tileStoreLayer(
+                                    id = "base",
+                                    projection = IdentityProjection,
+                                    grid = singleTileGrid,
+                                    sourceId = "grouped-blocking-source",
+                                    readTile = {
+                                        requestStarted.complete(Unit)
+                                        try {
+                                            awaitCancellation()
+                                        } finally {
+                                            requestCancelled.complete(Unit)
+                                        }
+                                    },
+                                    scheme = TileRowScheme.XYZ,
+                                )
+                            }
+                        }
+                    }
+            }.use { composition ->
+                val group = currentLayers.single() as LayerGroup
+                val request = async { (group.children.single() as TileLayer).loadTiles(singleTileMap) }
+                requestStarted.await()
+
+                includeGroup.value = false
+                composition.recompose()
+                requestCancelled.await()
+                request.join()
+
+                assertTrue(request.isCancelled)
+                assertTrue(currentLayers.isEmpty())
+            }
+        }
+    }
+
     /**
      * Verifies that unrelated Compose state changes preserve a managed raster runtime and cache.
      *

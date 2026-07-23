@@ -11,12 +11,14 @@ import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
+import tilo.compose.core.layers.LayerGroup
 import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.raster.TileRowScheme
 import tilo.compose.core.layers.raster.TileStoreTileSource
 import tilo.compose.core.layers.raster.WMSCapabilities
 import tilo.compose.core.layers.raster.WMSLayerCapabilities
+import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
@@ -32,6 +34,85 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 class MapLayerBuilderTest {
+    @Test
+    fun layerGroupBuildsNestedMixedLayerTree() {
+        val builder = MapLayerBuilder()
+
+        builder.layerGroup(
+            id = "transport",
+            zIndex = 10,
+            minZoom = 11.0,
+            attribution = Attribution("Transport"),
+        ) {
+            featureLayer(id = "roads", features = emptyList(), zIndex = 0)
+            layerGroup(id = "labels", zIndex = 10) {
+                featureLayer(id = "road-labels", features = emptyList())
+            }
+        }
+
+        val group = builder.build().single() as LayerGroup
+        assertEquals("transport", group.id)
+        assertEquals(10, group.zIndex)
+        assertEquals(11.0, group.minZoom)
+        assertEquals(listOf("Transport"), group.attributions.map(Attribution::label))
+        assertEquals(listOf("roads", "labels"), group.children.map { it.id })
+        assertEquals(
+            listOf("road-labels"),
+            (group.children.last() as LayerGroup).children.map { it.id },
+        )
+    }
+
+    @Test
+    fun nestedManagedRasterLayersShareTheMapStore() {
+        val store = RasterLayerStore()
+        try {
+            val builder = MapLayerBuilder.managed(store)
+            builder.layerGroup(id = "base-maps") {
+                xyzTileLayer(id = "base", urlTemplate = "https://example.test/{z}/{x}/{y}.png")
+            }
+
+            val group = builder.build().single() as LayerGroup
+
+            assertEquals(1, builder.managedRasterKeys.size)
+            assertTrue(group.children.single() is TileLayer)
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun duplicateIdsAreRejectedAcrossGroupBoundaries() {
+        val builder = MapLayerBuilder()
+        builder.featureLayer(id = "roads", features = emptyList())
+
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                builder.layerGroup(id = "transport") {
+                    featureLayer(id = "roads", features = emptyList())
+                }
+            }
+
+        assertContains(error.message.orEmpty(), "Duplicate layer id 'roads'")
+    }
+
+    @Test
+    fun prebuiltGroupRegistersAllDescendantIds() {
+        val builder = MapLayerBuilder()
+        builder.layer(
+            LayerGroup(
+                id = "transport",
+                children =
+                    listOf(
+                        FeatureLayer(id = "roads", features = emptyList()),
+                    ),
+            ),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            builder.featureLayer(id = "roads", features = emptyList())
+        }
+    }
+
     @Test
     fun featureLayerRegistersPointIconsById() {
         val painter = ColorPainter(Color.Red)

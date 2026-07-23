@@ -74,7 +74,8 @@ fun MapRenderer(
     val rasterPipeline = remember { RasterRenderPipeline() }
     val vectorPipeline = remember { VectorRenderPipeline() }
     val featureHitTester = remember { FeatureHitTester() }
-    val layerFlowKey = sortedLayersKey(layers)
+    val layerTree = remember(layers) { ResolvedLayerTree.resolve(layers) }
+    val layerFlowKey = layerTree.key
     val overviewRequestTracker = remember(layerFlowKey) { OverviewRequestTracker() }
 
     val renderRequests =
@@ -94,8 +95,7 @@ fun MapRenderer(
             )
         }
 
-    val sortedLayers = remember(layers) { layers.sortedWith(compareBy(Layer::zIndex)) }
-    val activeLayers = remember(sortedLayers, map.zoom) { sortedLayers.activeAt(map.zoom) }
+    val activeLayers = remember(layerTree, map.zoom) { layerTree.activeAt(map.zoom) }
     val tileLayers = remember(activeLayers) { activeLayers.filterIsInstance<TileLayer>() }
     val vectorLayers = remember(activeLayers) { activeLayers.filterIsInstance<VectorLayer>() }
     val currentRasterSourceIdentities = remember(tileLayers) { tileLayers.sourceIdentitiesByLayer() }
@@ -402,11 +402,6 @@ internal class OverviewRequestTracker {
 
     fun isLatest(request: OverviewRenderRequest): Boolean = request.id == latestId
 }
-
-private fun sortedLayersKey(layers: List<Layer>): String =
-    layers.sortedWith(compareBy(Layer::zIndex)).joinToString(separator = "|") { layer -> "${layer.id}:${layer.zIndex}" }
-
-internal fun List<Layer>.activeAt(zoom: Double): List<Layer> = filter { layer -> layer.isVisibleAt(zoom) }
 
 private fun List<VectorLayer>.cacheSignature(): String =
     joinToString(separator = "|") { layer -> layer.cacheKey().toString() }

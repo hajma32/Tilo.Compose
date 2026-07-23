@@ -124,7 +124,7 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 | CRS transformations | ✅ Done | Android uses Proj4J; iOS bundles PROJ 9.8.1 with its database and basic resources embedded in the native library. |
 | Vector performance | 🟡 Partial | Immediate and cached-bitmap render modes exist; v1 still needs batching by style/geometry and stronger diagnostics. |
 | Camera control | 🟡 Partial | Programmatic and animated pan/zoom, default zoom UI, and `fitBounds` exist; rotation/bearing remains future work. |
-| Layer controls | 🟡 Partial | Ordering, visibility, min/max zoom, source identity, and attribution are implemented; layer opacity and grouping remain open. |
+| Layer controls | 🟡 Partial | Atomic nested groups, ordering, visibility, min/max zoom, source identity, and attribution are implemented; layer opacity remains open. |
 | Loading and errors | 🟡 Partial | WMS, XYZ/OSM, and tile-store declarations share observable initialization state, recoverable tile errors, and explicit retry; offline state and richer diagnostics remain. |
 | Performance tooling | 🟡 Partial | The opt-in debug overlay reports zoom, FPS, frame times, and skipped frames; tile/cache/feature/label counters remain. |
 | Testing strategy | 🟡 Partial | Unit tests, critical rendering contracts, quality gates, and a coordinate-only publication consumer exist; CI still needs emulator pixel tests, iOS simulator tests, publication verification, and screenshots/goldens. |

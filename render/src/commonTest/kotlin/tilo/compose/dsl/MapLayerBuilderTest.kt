@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.feature.PointIconStyle
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.geometry.BoundingBox
@@ -35,12 +36,43 @@ import kotlin.test.assertTrue
 
 class MapLayerBuilderTest {
     @Test
+    fun opacityDoesNotChangeExistingDslPositionalArguments() {
+        val builder = MapLayerBuilder()
+
+        builder.layerGroup("group", 2, true, 0.5, 2.0, null, emptyList()) {
+            featureLayer(
+                "features",
+                emptyList(),
+                3,
+                true,
+                0.75,
+                1.75,
+                null,
+                immediate(),
+                FeatureLayerStyle(),
+                null,
+                emptyList(),
+            )
+        }
+
+        val group = builder.build().single() as LayerGroup
+        val layer = group.children.single()
+        assertEquals(0.5, group.minZoom)
+        assertEquals(2.0, group.maxZoom)
+        assertEquals(1.0, group.opacity)
+        assertEquals(0.75, layer.minZoom)
+        assertEquals(1.75, layer.maxZoom)
+        assertEquals(1.0, layer.opacity)
+    }
+
+    @Test
     fun layerGroupBuildsNestedMixedLayerTree() {
         val builder = MapLayerBuilder()
 
         builder.layerGroup(
             id = "transport",
             zIndex = 10,
+            opacity = 0.5,
             minZoom = 11.0,
             attribution = Attribution("Transport"),
         ) {
@@ -53,6 +85,7 @@ class MapLayerBuilderTest {
         val group = builder.build().single() as LayerGroup
         assertEquals("transport", group.id)
         assertEquals(10, group.zIndex)
+        assertEquals(0.5, group.opacity)
         assertEquals(11.0, group.minZoom)
         assertEquals(listOf("Transport"), group.attributions.map(Attribution::label))
         assertEquals(listOf("roads", "labels"), group.children.map { it.id })
@@ -63,18 +96,34 @@ class MapLayerBuilderTest {
     }
 
     @Test
+    fun featureLayerDslExposesOpacity() {
+        val builder = MapLayerBuilder()
+
+        builder.featureLayer(id = "places", features = emptyList()) {
+            opacity = 0.35
+        }
+
+        assertEquals(0.35, builder.build().single().opacity)
+    }
+
+    @Test
     fun nestedManagedRasterLayersShareTheMapStore() {
         val store = RasterLayerStore()
         try {
             val builder = MapLayerBuilder.managed(store)
-            builder.layerGroup(id = "base-maps") {
-                xyzTileLayer(id = "base", urlTemplate = "https://example.test/{z}/{x}/{y}.png")
+            builder.layerGroup(id = "base-maps", opacity = 0.5) {
+                xyzTileLayer(
+                    id = "base",
+                    urlTemplate = "https://example.test/{z}/{x}/{y}.png",
+                    opacity = 0.4,
+                )
             }
 
             val group = builder.build().single() as LayerGroup
 
             assertEquals(1, builder.managedRasterKeys.size)
             assertTrue(group.children.single() is TileLayer)
+            assertEquals(0.4, group.children.single().opacity)
         } finally {
             store.close()
         }

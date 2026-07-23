@@ -19,10 +19,12 @@ internal object RenderSceneBuilder {
         commandsByLayer: Map<String, List<RenderCommand>>,
         vectorBitmapsByLayer: Map<String, VectorBitmapRenderSceneLayer> = emptyMap(),
         decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap(),
+        effectiveOpacitiesByLayerId: Map<String, Double> = emptyMap(),
     ): RenderScene {
         val sceneLayers =
             buildList {
                 layers.forEach { layer ->
+                    val opacity = effectiveOpacitiesByLayerId[layer.id] ?: layer.opacity
                     when (layer) {
                         is TileLayer -> {
                             val tiles = tilesByLayer[layer.id].orEmpty()
@@ -32,6 +34,7 @@ internal object RenderSceneBuilder {
                                     RasterRenderSceneLayer(
                                         id = layer.id,
                                         zIndex = layer.zIndex,
+                                        opacity = opacity,
                                         tiles = tiles,
                                         decodedImages = images,
                                     ),
@@ -41,7 +44,7 @@ internal object RenderSceneBuilder {
 
                         is VectorLayer -> {
                             vectorBitmapsByLayer[layer.id]?.let { bitmapLayer ->
-                                add(bitmapLayer)
+                                add(bitmapLayer.copy(opacity = opacity))
                             }
                             val commands = commandsByLayer[layer.id].orEmpty()
                             if (commands.isNotEmpty()) {
@@ -49,6 +52,7 @@ internal object RenderSceneBuilder {
                                     VectorRenderSceneLayer(
                                         id = layer.id,
                                         zIndex = layer.zIndex,
+                                        opacity = opacity,
                                         commands = commands,
                                         pointIconPainters =
                                             (layer as? PointIconPainterLayer)

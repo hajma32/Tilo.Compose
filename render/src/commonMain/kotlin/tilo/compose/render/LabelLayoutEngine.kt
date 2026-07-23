@@ -23,6 +23,7 @@ internal data class PlacedLabel(
     val width: Int,
     val height: Int,
     val order: Int,
+    val opacity: Double = 1.0,
 )
 
 internal class LabelLayoutEngine(
@@ -34,6 +35,7 @@ internal class LabelLayoutEngine(
         drawScope: DrawScope,
         textMeasurer: TextMeasurer,
         labelBitmapCache: LabelBitmapCache,
+        opacities: List<Double> = emptyList(),
     ): List<PlacedLabel> {
         if (labels.isEmpty()) return emptyList()
 
@@ -58,6 +60,7 @@ internal class LabelLayoutEngine(
                     width = candidate.width,
                     height = candidate.height,
                     order = candidate.order,
+                    opacity = opacities.getOrElse(candidate.order) { 1.0 },
                 )
             }
     }
@@ -198,6 +201,7 @@ internal fun DrawScope.drawPlacedLabels(
                         y = label.topLeft.y.roundToInt(),
                     ),
                 dstSize = IntSize(label.width, label.height),
+                alpha = label.opacity.toFloat(),
             )
         }
     }

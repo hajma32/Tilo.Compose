@@ -88,6 +88,6 @@ private fun transformedBounds(
         ),
     )
 
-internal fun MapLayerBuilder.openStreetMapLayer() {
-    osmLayer(id = "osm-standard")
+internal fun MapLayerBuilder.openStreetMapLayer(opacity: Double = 1.0) {
+    osmLayer(id = "osm-standard", opacity = opacity)
 }

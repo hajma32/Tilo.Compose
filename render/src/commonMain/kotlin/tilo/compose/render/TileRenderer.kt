@@ -26,13 +26,14 @@ internal fun DrawScope.drawTiles(
     tileDecoder: (ByteArray) -> ImageBitmap?,
     map: MapState,
     decodedImages: List<ImageBitmap?>? = null,
+    opacity: Double = 1.0,
 ) {
     val tileImages = resolveTileImages(tiles, tileDecoder, decodedImages)
     tileImages.filter { (_, image) -> image == null }.forEach { (tile, _) ->
-        drawTile(tile, image = null, map = map)
+        drawTile(tile, image = null, map = map, opacity = opacity)
     }
     tileImages.filter { (_, image) -> image != null }.forEach { (tile, image) ->
-        drawTile(tile, image = image, map = map)
+        drawTile(tile, image = image, map = map, opacity = opacity)
     }
 }
 
@@ -55,16 +56,18 @@ private fun DrawScope.drawTile(
     tile: Tile,
     image: ImageBitmap?,
     map: MapState,
+    opacity: Double,
 ) {
     val rect = tile.screenRect(map)
 
     if (image == null) {
-        drawTilePlaceholder(rect.x, rect.y, rect.width, rect.height)
+        drawTilePlaceholder(rect.x, rect.y, rect.width, rect.height, opacity)
     } else {
         drawImage(
             image = image,
             dstOffset = IntOffset(rect.x, rect.y),
             dstSize = IntSize(rect.width, rect.height),
+            alpha = opacity.toFloat(),
         )
     }
 }
@@ -98,16 +101,17 @@ private fun DrawScope.drawTilePlaceholder(
     y: Int,
     width: Int,
     height: Int,
+    opacity: Double,
 ) {
     val topLeft = Offset(x.toFloat(), y.toFloat())
     val size = Size(width.toFloat(), height.toFloat())
     drawRect(
-        color = TILE_PLACEHOLDER_FILL,
+        color = TILE_PLACEHOLDER_FILL.copy(alpha = TILE_PLACEHOLDER_FILL.alpha * opacity.toFloat()),
         topLeft = topLeft,
         size = size,
     )
     drawRect(
-        color = TILE_PLACEHOLDER_BORDER,
+        color = TILE_PLACEHOLDER_BORDER.copy(alpha = TILE_PLACEHOLDER_BORDER.alpha * opacity.toFloat()),
         topLeft = topLeft,
         size = size,
         style = Stroke(width = TILE_PLACEHOLDER_BORDER_WIDTH_PX),

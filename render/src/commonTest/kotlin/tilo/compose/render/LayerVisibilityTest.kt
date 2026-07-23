@@ -67,6 +67,44 @@ class LayerVisibilityTest {
     }
 
     @Test
+    fun nestedGroupAndLayerOpacitiesAreMultiplied() {
+        val layers =
+            listOf(
+                LayerGroup(
+                    id = "outer",
+                    opacity = 0.5,
+                    children =
+                        listOf(
+                            layer(id = "direct", opacity = 0.8),
+                            LayerGroup(
+                                id = "inner",
+                                opacity = 0.25,
+                                children = listOf(layer(id = "nested", opacity = 0.4)),
+                            ),
+                        ),
+                ),
+            )
+
+        assertEquals(
+            mapOf("direct" to 0.4, "nested" to 0.05),
+            ResolvedLayerTree.resolve(layers).activeLayersAt(12.0).effectiveOpacitiesByLayerId,
+        )
+    }
+
+    @Test
+    fun invalidCustomLayerOpacityIsRejectedWhenResolvingTree() {
+        val invalidLayer =
+            object : Layer {
+                override val id = "invalid"
+                override val opacity = Double.NaN
+            }
+
+        assertFailsWith<IllegalArgumentException> {
+            ResolvedLayerTree.resolve(listOf(invalidLayer))
+        }
+    }
+
+    @Test
     fun activeAttributionsIncludeGroupsAndActiveDescendantsOnlyOnce() {
         val shared = Attribution("Shared")
         val layers =
@@ -132,11 +170,13 @@ class LayerVisibilityTest {
         visible: Boolean = true,
         minZoom: Double? = null,
         zIndex: Int = 0,
+        opacity: Double = 1.0,
         attribution: Attribution? = null,
     ) = FeatureLayer(
         id = id,
         zIndex = zIndex,
         visible = visible,
+        opacity = opacity,
         minZoom = minZoom,
         attributions = listOfNotNull(attribution),
         features = listOf(Feature(key = id, geometry = Point(0.0, 0.0))),

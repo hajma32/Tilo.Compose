@@ -111,6 +111,27 @@ class PlatformRenderingAndroidTest {
         )
     }
 
+    /** Verifies that raster layer opacity reaches decoded tile pixels. */
+    @Test
+    fun rasterOpacityIsAppliedToDecodedTiles() {
+        val map = MapState(viewport = Viewport(64, 64))
+
+        val result =
+            renderBitmap {
+                drawTiles(
+                    tiles = quadrantTiles(),
+                    tileDecoder = { error("predecoded tiles must not decode again") },
+                    map = map,
+                    decodedImages = List(4) { solidBitmap(RED) },
+                    opacity = 0.5,
+                )
+            }
+
+        val pixel = result.argbAt(16, 16)
+        assertEquals(0x80, pixel ushr 24)
+        assertEquals(0x00FF0000, pixel and 0x00FFFFFF)
+    }
+
     /**
      * Verifies the concrete placeholder drawn for a tile without a decoded image.
      *

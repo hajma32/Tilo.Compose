@@ -9,22 +9,34 @@ internal class ResolvedLayerTree private constructor(
     private val roots: List<ResolvedLayerNode>,
     val key: List<LayerTreeKey>,
 ) {
-    /** Returns active renderable leaves without sorting or rebuilding the tree. */
-    fun activeAt(zoom: Double): List<Layer> =
-        buildList {
-            fun appendActive(nodes: List<ResolvedLayerNode>) {
-                nodes.forEach { node ->
-                    if (node.layer.isVisibleAt(zoom)) {
-                        if (node.children == null) {
-                            add(node.layer)
-                        } else {
-                            appendActive(node.children)
-                        }
+    /** Returns active renderable leaves and their opacity inherited from composite ancestors. */
+    fun activeLayersAt(zoom: Double): ActiveLayerSet {
+        val layers = mutableListOf<Layer>()
+        val effectiveOpacities = mutableMapOf<String, Double>()
+
+        fun appendActive(
+            nodes: List<ResolvedLayerNode>,
+            parentOpacity: Double,
+        ) {
+            nodes.forEach { node ->
+                if (node.layer.isVisibleAt(zoom)) {
+                    val effectiveOpacity = parentOpacity * node.layer.opacity
+                    if (node.children == null) {
+                        layers += node.layer
+                        effectiveOpacities[node.layer.id] = effectiveOpacity
+                    } else {
+                        appendActive(node.children, effectiveOpacity)
                     }
                 }
             }
-            appendActive(roots)
         }
+
+        appendActive(roots, parentOpacity = 1.0)
+        return ActiveLayerSet(layers, effectiveOpacities)
+    }
+
+    /** Returns active renderable leaves without sorting or rebuilding the tree. */
+    fun activeAt(zoom: Double): List<Layer> = activeLayersAt(zoom).layers
 
     /** Collects attribution from active composite nodes and leaves. */
     fun activeAttributions(zoom: Double): List<Attribution> =
@@ -48,6 +60,9 @@ internal class ResolvedLayerTree private constructor(
                 siblings
                     .sortedWith(compareBy(Layer::zIndex))
                     .map { layer ->
+                        require(layer.opacity in 0.0..1.0) {
+                            "Layer '${layer.id}' opacity must be between 0.0 and 1.0"
+                        }
                         require(ids.add(layer.id)) {
                             "Duplicate layer id '${layer.id}'. Layer IDs must be unique within one map."
                         }
@@ -75,6 +90,7 @@ private data class ResolvedLayerNode(
             LayerTreeKey(
                 id = layer.id,
                 zIndex = layer.zIndex,
+                opacity = layer.opacity,
                 children = children?.map(ResolvedLayerNode::key).orEmpty(),
             )
 }
@@ -82,5 +98,11 @@ private data class ResolvedLayerNode(
 internal data class LayerTreeKey(
     val id: String,
     val zIndex: Int,
+    val opacity: Double,
     val children: List<LayerTreeKey>,
+)
+
+internal data class ActiveLayerSet(
+    val layers: List<Layer>,
+    val effectiveOpacitiesByLayerId: Map<String, Double>,
 )

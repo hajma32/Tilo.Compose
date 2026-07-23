@@ -40,10 +40,12 @@ internal fun BoxScope.StyleLabSample() {
             layerGroup(
                 id = "style-lab-overlays",
                 zIndex = 3,
+                opacity = 0.85,
                 minZoom = 11.0,
             ) {
                 featureLayer("zoom-style", route) {
                     zIndex = 0
+                    opacity = 0.9
                     projection = wgs84()
                     style =
                         featureLayerStyle {
@@ -91,8 +93,8 @@ internal fun BoxScope.StyleLabSample() {
         sample = Sample.StyleLab,
         body =
             "Zoom from 13 to 14: the route changes from 6 dp orange to 20 dp blue and its label disappears. " +
-                "The grouped overlays also exercise left, center and right multi-line alignment.",
-        code = "layerGroup(\"style-lab-overlays\") { zoom(minZoom = 14.0) { … } }",
+                "The translucent group also exercises cascading opacity and multi-line alignment.",
+        code = "layerGroup(\"style-lab-overlays\", opacity = 0.85) { … }",
     )
     MapPill("Casing width is +2 dp · zoom across 14")
 }

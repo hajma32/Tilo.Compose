@@ -95,7 +95,9 @@ fun MapRenderer(
             )
         }
 
-    val activeLayers = remember(layerTree, map.zoom) { layerTree.activeAt(map.zoom) }
+    val activeLayerSet = remember(layerTree, map.zoom) { layerTree.activeLayersAt(map.zoom) }
+    val activeLayers = activeLayerSet.layers
+    val effectiveOpacitiesByLayerId = activeLayerSet.effectiveOpacitiesByLayerId
     val tileLayers = remember(activeLayers) { activeLayers.filterIsInstance<TileLayer>() }
     val vectorLayers = remember(activeLayers) { activeLayers.filterIsInstance<VectorLayer>() }
     val currentRasterSourceIdentities = remember(tileLayers) { tileLayers.sourceIdentitiesByLayer() }
@@ -106,7 +108,8 @@ fun MapRenderer(
         }
     val renderLoopInput by rememberUpdatedState(
         RenderLoopInput(
-            sortedLayers = activeLayers,
+            activeLayers = activeLayers,
+            effectiveOpacitiesByLayerId = effectiveOpacitiesByLayerId,
             tileLayers = tileLayers,
             vectorLayers = vectorLayers,
             currentVectorCacheKeys = currentVectorCacheKeys,
@@ -154,6 +157,7 @@ fun MapRenderer(
                 commandsByLayer = validVectorCommands,
                 vectorBitmapsByLayer = validVectorBitmaps,
                 decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
+                effectiveOpacitiesByLayerId = effectiveOpacitiesByLayerId,
             )
         scene = nextScene
         backend.onScene(nextScene)
@@ -214,11 +218,12 @@ fun MapRenderer(
                         )
                     val nextScene =
                         RenderSceneBuilder.build(
-                            layers = input.sortedLayers,
+                            layers = input.activeLayers,
                             tilesByLayer = displayRasterFrame.tilesByLayer,
                             commandsByLayer = commandsByLayer,
                             vectorBitmapsByLayer = vectorBitmapsByLayer,
                             decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
+                            effectiveOpacitiesByLayerId = input.effectiveOpacitiesByLayerId,
                         )
                     scene = nextScene
                     input.backend.onScene(nextScene)
@@ -305,11 +310,12 @@ fun MapRenderer(
                     )
                 val nextScene =
                     RenderSceneBuilder.build(
-                        layers = input.sortedLayers,
+                        layers = input.activeLayers,
                         tilesByLayer = displayRasterFrame.tilesByLayer,
                         commandsByLayer = validVectorCommands,
                         vectorBitmapsByLayer = validVectorBitmaps,
                         decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
+                        effectiveOpacitiesByLayerId = input.effectiveOpacitiesByLayerId,
                     )
                 scene = nextScene
                 input.backend.onScene(nextScene)
@@ -374,7 +380,8 @@ internal suspend fun <T> Flow<T>.collectLatestRenderRequest(block: suspend (T) -
 }
 
 private data class RenderLoopInput(
-    val sortedLayers: List<Layer>,
+    val activeLayers: List<Layer>,
+    val effectiveOpacitiesByLayerId: Map<String, Double>,
     val tileLayers: List<TileLayer>,
     val vectorLayers: List<VectorLayer>,
     val currentVectorCacheKeys: Map<String, VectorLayerCacheKey>,

@@ -365,8 +365,8 @@ class MapLayerBuilder private constructor(
      * Adds a composite layer whose children occupy one ordered slot among this builder's layers.
      *
      * Child [Layer.zIndex] values are local to the group. Visibility and zoom limits declared here
-     * constrain all descendants. The nested block supports the same layer DSL, including further
-     * groups and managed raster layers.
+     * constrain all descendants. Group opacity is multiplied with each descendant's opacity. The
+     * nested block supports the same layer DSL, including further groups and managed raster layers.
      */
     fun layerGroup(
         id: String,
@@ -377,10 +377,36 @@ class MapLayerBuilder private constructor(
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
         layers: MapLayerBuilder.() -> Unit,
+    ) = addLayerGroup(id, zIndex, visible, minZoom, maxZoom, attribution, attributions, 1.0, layers)
+
+    /** Adds a composite layer with [opacity] multiplied into every descendant. */
+    fun layerGroup(
+        id: String,
+        zIndex: Int = 0,
+        visible: Boolean = true,
+        minZoom: Double? = null,
+        maxZoom: Double? = null,
+        attribution: Attribution? = null,
+        attributions: List<Attribution> = emptyList(),
+        opacity: Double,
+        layers: MapLayerBuilder.() -> Unit,
+    ) = addLayerGroup(id, zIndex, visible, minZoom, maxZoom, attribution, attributions, opacity, layers)
+
+    private fun addLayerGroup(
+        id: String,
+        zIndex: Int,
+        visible: Boolean,
+        minZoom: Double?,
+        maxZoom: Double?,
+        attribution: Attribution?,
+        attributions: List<Attribution>,
+        opacity: Double,
+        layers: MapLayerBuilder.() -> Unit,
     ) {
         require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
             "minZoom must not be greater than maxZoom"
         }
+        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
         registerLayerId(id)
         val childBuilder = MapLayerBuilder(context)
         childBuilder.layers()
@@ -389,6 +415,7 @@ class MapLayerBuilder private constructor(
                 id = id,
                 zIndex = zIndex,
                 visible = visible,
+                opacity = opacity,
                 minZoom = minZoom,
                 maxZoom = maxZoom,
                 attributions = attributions.withSingle(attribution),
@@ -441,7 +468,9 @@ class MapLayerBuilder private constructor(
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
+        opacity: Double = 1.0,
     ) {
+        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
         require(context.layerIds.add(id)) {
             "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
         }
@@ -475,6 +504,7 @@ class MapLayerBuilder private constructor(
                     id = id,
                     zIndex = zIndex,
                     visible = visible,
+                    opacity = opacity,
                     minZoom = minZoom,
                     maxZoom = maxZoom,
                     attributions = resolvedAttributions,
@@ -532,6 +562,7 @@ class MapLayerBuilder private constructor(
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
+        opacity: Double = 1.0,
     ) {
         require(layerNames.isNotEmpty()) { "At least one WMS layer name is required." }
         wmsTileLayer(
@@ -545,6 +576,7 @@ class MapLayerBuilder private constructor(
             axisOrder = axisOrder,
             zIndex = zIndex,
             visible = visible,
+            opacity = opacity,
             minZoom = minZoom,
             maxZoom = maxZoom,
             tileSize = tileSize,
@@ -578,12 +610,14 @@ class MapLayerBuilder private constructor(
         maxZoom: Double? = null,
         state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
+        opacity: Double = 1.0,
     ) {
         xyzTileLayer(
             id = id,
             urlTemplate = OPEN_STREET_MAP_URL,
             zIndex = zIndex,
             visible = visible,
+            opacity = opacity,
             minZoom = minZoom,
             maxZoom = maxZoom,
             projection = Epsg3857Projection,
@@ -625,12 +659,14 @@ class MapLayerBuilder private constructor(
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
+        opacity: Double = 1.0,
     ) {
         val resolvedAttributions = attributions.withSingle(attribution)
         managedRasterLayer(
             id = id,
             zIndex = zIndex,
             visible = visible,
+            opacity = opacity,
             minZoom = minZoom,
             maxZoom = maxZoom,
             attributions = resolvedAttributions,
@@ -661,6 +697,7 @@ class MapLayerBuilder private constructor(
                         tms = tms,
                         zIndex = zIndex,
                         visible = visible,
+                        opacity = opacity,
                         minZoom = minZoom,
                         maxZoom = maxZoom,
                         maxVisibleTiles = maxVisibleTiles,
@@ -714,12 +751,14 @@ class MapLayerBuilder private constructor(
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
+        opacity: Double = 1.0,
     ) {
         val resolvedAttributions = attributions.withSingle(attribution)
         managedRasterLayer(
             id = id,
             zIndex = zIndex,
             visible = visible,
+            opacity = opacity,
             minZoom = minZoom,
             maxZoom = maxZoom,
             attributions = resolvedAttributions,
@@ -755,6 +794,7 @@ class MapLayerBuilder private constructor(
                             ),
                         zIndex = zIndex,
                         visible = visible,
+                        opacity = opacity,
                         minZoom = minZoom,
                         maxZoom = maxZoom,
                         maxVisibleTiles = maxVisibleTiles,
@@ -804,6 +844,7 @@ class MapLayerBuilder private constructor(
         style: FeatureLayerStyle = FeatureLayerStyle(),
         attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
+        opacity: Double = 1.0,
     ) {
         validatePointIconReferences(
             layerId = id,
@@ -817,6 +858,7 @@ class MapLayerBuilder private constructor(
                 features,
                 zIndex,
                 visible,
+                opacity,
                 minZoom,
                 maxZoom,
                 projection,
@@ -846,6 +888,7 @@ class MapLayerBuilder private constructor(
                 features,
                 options.zIndex,
                 options.visible,
+                options.opacity,
                 options.minZoom,
                 options.maxZoom,
                 options.projection,
@@ -868,6 +911,7 @@ class MapLayerBuilder private constructor(
         features: List<Feature>,
         zIndex: Int,
         visible: Boolean,
+        opacity: Double,
         minZoom: Double?,
         maxZoom: Double?,
         projection: Projection?,
@@ -880,6 +924,7 @@ class MapLayerBuilder private constructor(
             id = id,
             zIndex = zIndex,
             visible = visible,
+            opacity = opacity,
             minZoom = minZoom,
             maxZoom = maxZoom,
             projection = projection,
@@ -939,6 +984,7 @@ class MapLayerBuilder private constructor(
         id: String,
         zIndex: Int,
         visible: Boolean,
+        opacity: Double,
         minZoom: Double?,
         maxZoom: Double?,
         attributions: List<Attribution>,
@@ -946,6 +992,7 @@ class MapLayerBuilder private constructor(
         update: RasterLayerUpdate = RasterLayerUpdate.None,
         create: () -> StoredRasterLayer,
     ) {
+        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
         require(context.layerIds.add(id)) {
             "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
         }
@@ -962,6 +1009,7 @@ class MapLayerBuilder private constructor(
                     id = id,
                     zIndex = zIndex,
                     visible = visible,
+                    opacity = opacity,
                     minZoom = minZoom,
                     maxZoom = maxZoom,
                     attributions = attributions,
@@ -993,6 +1041,7 @@ private sealed interface MapLayerItem {
         val id: String,
         val zIndex: Int,
         val visible: Boolean,
+        val opacity: Double,
         val minZoom: Double?,
         val maxZoom: Double?,
         val attributions: List<Attribution>,
@@ -1020,6 +1069,7 @@ private fun List<MapLayerItem>.buildLayers(resolvedWMSLayers: Map<ManagedWMSLaye
                     children = item.children.buildLayers(resolvedWMSLayers),
                     zIndex = item.zIndex,
                     visible = item.visible,
+                    opacity = item.opacity,
                     minZoom = item.minZoom,
                     maxZoom = item.maxZoom,
                     attributions = item.attributions,
@@ -1089,6 +1139,7 @@ class FeatureLayerOptions {
 
     var zIndex: Int = 0
     var visible: Boolean = true
+    var opacity: Double = 1.0
     var minZoom: Double? = null
     var maxZoom: Double? = null
     var projection: Projection? = null

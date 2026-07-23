@@ -40,6 +40,7 @@ class WMSTileLayer(
     attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,
+    opacity: Double = 1.0,
 ) : RasterTileLayer(
         id = id,
         source =
@@ -56,6 +57,7 @@ class WMSTileLayer(
             ),
         zIndex = zIndex,
         visible = visible,
+        opacity = opacity,
         minZoom = minZoom,
         maxZoom = maxZoom,
         maxVisibleTiles = maxVisibleTiles,

@@ -39,9 +39,11 @@ open class RasterTileLayer(
     override val attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,
+    override val opacity: Double = 1.0,
 ) : TileLayer,
     AutoCloseable {
     init {
+        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
         val minimum = minZoom
         val maximum = maxZoom
         require(minimum == null || maximum == null || minimum <= maximum) {

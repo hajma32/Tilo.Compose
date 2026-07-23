@@ -87,6 +87,7 @@ data class WMSCapabilities(
         attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
         onError: ((Throwable) -> Unit)? = null,
+        opacity: Double = 1.0,
     ): WMSTileLayer =
         createTileLayer(
             id = id,
@@ -99,6 +100,7 @@ data class WMSCapabilities(
             axisOrder = axisOrder,
             zIndex = zIndex,
             visible = visible,
+            opacity = opacity,
             minZoom = minZoom,
             maxZoom = maxZoom,
             tileSize = tileSize,
@@ -135,6 +137,7 @@ data class WMSCapabilities(
         attributions: List<Attribution> = emptyList(),
         fetchConfig: TileFetchConfig = TileFetchConfig(),
         onError: ((Throwable) -> Unit)? = null,
+        opacity: Double = 1.0,
     ): WMSTileLayer {
         val resolvedBaseUrl =
             requireNotNull(baseUrl) {
@@ -153,6 +156,7 @@ data class WMSCapabilities(
             axisOrder = axisOrder,
             zIndex = zIndex,
             visible = visible,
+            opacity = opacity,
             minZoom = minZoom,
             maxZoom = maxZoom,
             maxVisibleTiles = maxVisibleTiles,

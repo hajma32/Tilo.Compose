@@ -48,6 +48,12 @@ class RenderSceneBuilderTest {
                 tilesByLayer = mapOf(raster.id to listOf(testTile(0))),
                 commandsByLayer = mapOf(cached.id to listOf(label), immediate.id to listOf(point)),
                 vectorBitmapsByLayer = mapOf(cached.id to bitmap),
+                effectiveOpacitiesByLayerId =
+                    mapOf(
+                        raster.id to 0.2,
+                        cached.id to 0.4,
+                        immediate.id to 0.6,
+                    ),
             )
 
         assertEquals(listOf("raster", "cached", "cached", "immediate"), scene.layers.map { it.id })
@@ -55,6 +61,7 @@ class RenderSceneBuilderTest {
         assertIs<VectorBitmapRenderSceneLayer>(scene.layers[1])
         assertIs<VectorRenderSceneLayer>(scene.layers[2])
         assertIs<VectorRenderSceneLayer>(scene.layers[3])
+        assertEquals(listOf(0.2, 0.4, 0.4, 0.6), scene.layers.map { it.opacity })
     }
 
     /**

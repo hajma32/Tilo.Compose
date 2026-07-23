@@ -14,6 +14,7 @@ import tilo.compose.render.RenderCommand
 sealed interface RenderSceneLayer {
     val id: String
     val zIndex: Int
+    val opacity: Double
 }
 
 @ExperimentalTiloRenderingApi
@@ -22,7 +23,12 @@ data class RasterRenderSceneLayer(
     override val zIndex: Int,
     val tiles: List<Tile>,
     val decodedImages: List<ImageBitmap?>? = null,
-) : RenderSceneLayer
+    override val opacity: Double = 1.0,
+) : RenderSceneLayer {
+    init {
+        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
+    }
+}
 
 @ExperimentalTiloRenderingApi
 class VectorRenderSceneLayer(
@@ -30,7 +36,12 @@ class VectorRenderSceneLayer(
     override val zIndex: Int,
     val commands: List<RenderCommand>,
     val pointIconPainters: Map<String, Painter> = emptyMap(),
-) : RenderSceneLayer
+    override val opacity: Double = 1.0,
+) : RenderSceneLayer {
+    init {
+        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
+    }
+}
 
 @ExperimentalTiloRenderingApi
 data class VectorBitmapRenderSceneLayer(
@@ -38,7 +49,12 @@ data class VectorBitmapRenderSceneLayer(
     override val zIndex: Int,
     val bitmap: ImageBitmap,
     val snapshot: VectorBitmapSnapshot,
-) : RenderSceneLayer
+    override val opacity: Double = 1.0,
+) : RenderSceneLayer {
+    init {
+        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
+    }
+}
 
 @ExperimentalTiloRenderingApi
 data class VectorBitmapSnapshot(

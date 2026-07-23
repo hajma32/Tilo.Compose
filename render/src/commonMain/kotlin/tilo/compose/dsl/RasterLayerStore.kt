@@ -131,11 +131,13 @@ internal data class PresentedTileLayer(
     override val id: String,
     override val zIndex: Int,
     override val visible: Boolean,
+    override val opacity: Double,
     override val minZoom: Double?,
     override val maxZoom: Double?,
     override val attributions: List<Attribution>,
 ) : TileLayer by runtime {
     init {
+        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
         require(minZoom == null || maxZoom == null || minZoom <= maxZoom) { "minZoom must not be greater than maxZoom" }
     }
 }

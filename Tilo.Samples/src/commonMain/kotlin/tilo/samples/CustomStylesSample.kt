@@ -43,12 +43,14 @@ internal fun BoxScope.CustomStylesSample() {
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = { DefaultZoomControls(it) },
         layers = {
-            openStreetMapLayer()
-            featureLayer("custom-styles", features) {
-                zIndex = 3
-                projection = wgs84()
-                pointIcon("vector-stop", vectorStopIcon)
-                pointIcon("bitmap-stop", bitmapStopIcon)
+            openStreetMapLayer(opacity = 0.65)
+            layerGroup(id = "styled-content", zIndex = 3, opacity = 0.8) {
+                featureLayer("custom-styles", features) {
+                    opacity = 0.75
+                    projection = wgs84()
+                    pointIcon("vector-stop", vectorStopIcon)
+                    pointIcon("bitmap-stop", bitmapStopIcon)
+                }
             }
         },
     )
@@ -57,8 +59,8 @@ internal fun BoxScope.CustomStylesSample() {
         sample = Sample.CustomStyles,
         body =
             "Styles can live on a layer or on an individual feature. " +
-                "The stops use XML vector and bitmap icons through the same lightweight API.",
-        code = "pointIcon(\"stop\", painterResource(...))",
+                "The faded raster and grouped vectors demonstrate cascading layer opacity.",
+        code = "layerGroup(opacity = 0.8) { featureLayer(...) { opacity = 0.75 } }",
     )
 }
 

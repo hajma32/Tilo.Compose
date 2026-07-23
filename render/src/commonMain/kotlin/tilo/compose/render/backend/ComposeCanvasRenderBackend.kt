@@ -6,7 +6,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.TextMeasurer
@@ -62,6 +64,7 @@ internal fun DrawScope.drawRenderScene(
     labelBitmapCache: LabelBitmapCache,
 ) {
     val labels = mutableListOf<RenderLabel>()
+    val labelOpacities = mutableListOf<Double>()
     scene.layers.forEach { layer ->
         when (layer) {
             is RasterRenderSceneLayer -> {
@@ -71,25 +74,31 @@ internal fun DrawScope.drawRenderScene(
                         tileDecoder = tileDecoder,
                         map = map,
                         decodedImages = layer.decodedImages,
+                        opacity = layer.opacity,
                     )
                 }
             }
 
             is VectorRenderSceneLayer -> {
-                drawFeatureGeometry(
-                    commands = layer.commands,
-                    map = map,
-                    pointIconPainters = layer.pointIconPainters,
-                )
+                withLayerOpacity(layer.opacity) {
+                    drawFeatureGeometry(
+                        commands = layer.commands,
+                        map = map,
+                        pointIconPainters = layer.pointIconPainters,
+                    )
+                }
                 layer.commands.forEach { command ->
                     if (command is RenderLabel) {
                         labels += command
+                        labelOpacities += layer.opacity
                     }
                 }
             }
 
             is VectorBitmapRenderSceneLayer -> {
-                drawVectorBitmapLayer(layer = layer, map = map)
+                withLayerOpacity(layer.opacity) {
+                    drawVectorBitmapLayer(layer = layer, map = map)
+                }
             }
         }
     }
@@ -102,11 +111,30 @@ internal fun DrawScope.drawRenderScene(
                 drawScope = this,
                 textMeasurer = textMeasurer,
                 labelBitmapCache = labelBitmapCache,
+                opacities = labelOpacities,
             ),
         offscreenDrawScope = offscreenLabelDrawScope,
         textMeasurer = textMeasurer,
         labelBitmapCache = labelBitmapCache,
     )
+}
+
+private inline fun DrawScope.withLayerOpacity(
+    opacity: Double,
+    draw: DrawScope.() -> Unit,
+) {
+    if (opacity <= 0.0) return
+    if (opacity >= 1.0) {
+        draw()
+        return
+    }
+    val paint = Paint().apply { alpha = opacity.toFloat() }
+    drawContext.canvas.saveLayer(Rect(Offset.Zero, size), paint)
+    try {
+        draw()
+    } finally {
+        drawContext.canvas.restore()
+    }
 }
 
 internal fun DrawScope.drawVectorBitmapLayer(

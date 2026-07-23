@@ -37,6 +37,7 @@ import tilo.compose.render.backend.RasterRenderSceneLayer
 import tilo.compose.render.backend.RenderScene
 import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 import tilo.compose.render.backend.VectorBitmapSnapshot
+import tilo.compose.render.backend.VectorRenderSceneLayer
 import tilo.compose.render.backend.drawRenderScene
 import tilo.compose.render.backend.drawVectorBitmapLayer
 import kotlin.test.Test
@@ -206,6 +207,60 @@ class PlatformRenderingAndroidTest {
         val pixel = result.argbAt(32, 32)
         assertEquals(0x80, pixel ushr 24)
         assertEquals(0x00FF0000, pixel and 0x00FFFFFF)
+    }
+
+    /** A raster with a higher z-index must cover labels belonging to a lower vector layer. */
+    @Test
+    fun labelsRenderAtTheirLayerZIndex() {
+        val map = MapState(viewport = Viewport(64, 64))
+        val density = Density(1f)
+        val layoutDirection = LayoutDirection.Ltr
+        val textMeasurer =
+            TextMeasurer(
+                defaultFontFamilyResolver =
+                    createFontFamilyResolver(
+                        InstrumentationRegistry.getInstrumentation().targetContext,
+                    ),
+                defaultDensity = density,
+                defaultLayoutDirection = layoutDirection,
+            )
+        val coveringTile = tile(0, 0, Point(-32.0, 32.0), Point(32.0, -32.0))
+
+        val result =
+            renderBitmap {
+                drawRenderScene(
+                    scene =
+                        RenderScene(
+                            listOf(
+                                VectorRenderSceneLayer(
+                                    id = "labels",
+                                    zIndex = 0,
+                                    commands =
+                                        listOf(
+                                            RenderLabel(
+                                                id = "covered-label",
+                                                text = "COVERED",
+                                                anchor = Point(0.0, 0.0),
+                                            ),
+                                        ),
+                                ),
+                                RasterRenderSceneLayer(
+                                    id = "cover",
+                                    zIndex = 1,
+                                    tiles = listOf(coveringTile),
+                                    decodedImages = listOf(solidBitmap(BLUE)),
+                                ),
+                            ),
+                        ),
+                    map = map,
+                    tileDecoder = { error("predecoded tile must not decode again") },
+                    offscreenLabelDrawScope = CanvasDrawScope(),
+                    textMeasurer = textMeasurer,
+                    labelBitmapCache = LabelBitmapCache(),
+                )
+            }
+
+        assertTrue(result.readArgb().all { pixel -> pixel == BLUE })
     }
 
     /**
@@ -468,7 +523,7 @@ class PlatformRenderingAndroidTest {
         ) {
             placed =
                 LabelLayoutEngine().layout(
-                    labels = labels,
+                    items = labels.map { label -> LabelLayoutItem(label) },
                     map = MapState(viewport = Viewport(64, 64)),
                     drawScope = this,
                     textMeasurer = textMeasurer,

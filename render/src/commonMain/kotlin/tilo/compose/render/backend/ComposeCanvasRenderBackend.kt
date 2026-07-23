@@ -22,6 +22,8 @@ import tilo.compose.core.map.MapState
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.LabelBitmapCache
 import tilo.compose.render.LabelLayoutEngine
+import tilo.compose.render.LabelLayoutItem
+import tilo.compose.render.PlacedLabel
 import tilo.compose.render.RenderLabel
 import tilo.compose.render.TilePlaceholderColors
 import tilo.compose.render.drawFeatureGeometry
@@ -71,9 +73,31 @@ internal fun DrawScope.drawRenderScene(
     labelBitmapCache: LabelBitmapCache,
     placeholderColors: TilePlaceholderColors = TilePlaceholderColors.Light,
 ) {
-    val labels = mutableListOf<RenderLabel>()
-    val labelOpacities = mutableListOf<Double>()
-    scene.layers.forEach { layer ->
+    val labels =
+        scene.layers.flatMapIndexed { layerOrder, layer ->
+            if (layer is VectorRenderSceneLayer) {
+                layer.commands.filterIsInstance<RenderLabel>().map { label ->
+                    LabelLayoutItem(
+                        command = label,
+                        layerOrder = layerOrder,
+                        opacity = layer.opacity,
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        }
+    val placedLabelsByLayer =
+        labelLayoutEngine
+            .layout(
+                items = labels,
+                map = map,
+                drawScope = this,
+                textMeasurer = textMeasurer,
+                labelBitmapCache = labelBitmapCache,
+            ).groupBy(PlacedLabel::layerOrder)
+
+    scene.layers.forEachIndexed { layerOrder, layer ->
         when (layer) {
             is RasterRenderSceneLayer -> {
                 if (tileDecoder != null) {
@@ -106,12 +130,6 @@ internal fun DrawScope.drawRenderScene(
                         pointIconPainters = layer.pointIconPainters,
                     )
                 }
-                layer.commands.forEach { command ->
-                    if (command is RenderLabel) {
-                        labels += command
-                        labelOpacities += layer.opacity
-                    }
-                }
             }
 
             is VectorBitmapRenderSceneLayer -> {
@@ -120,22 +138,15 @@ internal fun DrawScope.drawRenderScene(
                 }
             }
         }
-    }
-
-    drawPlacedLabels(
-        labels =
-            labelLayoutEngine.layout(
-                labels = labels,
-                map = map,
-                drawScope = this,
+        placedLabelsByLayer[layerOrder]?.let { placedLabels ->
+            drawPlacedLabels(
+                labels = placedLabels,
+                offscreenDrawScope = offscreenLabelDrawScope,
                 textMeasurer = textMeasurer,
                 labelBitmapCache = labelBitmapCache,
-                opacities = labelOpacities,
-            ),
-        offscreenDrawScope = offscreenLabelDrawScope,
-        textMeasurer = textMeasurer,
-        labelBitmapCache = labelBitmapCache,
-    )
+            )
+        }
+    }
 }
 
 internal fun tilePlaceholderColorsFor(surfaceColor: Color): TilePlaceholderColors =

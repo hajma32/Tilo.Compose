@@ -23,6 +23,13 @@ internal data class PlacedLabel(
     val width: Int,
     val height: Int,
     val order: Int,
+    val layerOrder: Int = 0,
+    val opacity: Double = 1.0,
+)
+
+internal data class LabelLayoutItem(
+    val command: RenderLabel,
+    val layerOrder: Int = 0,
     val opacity: Double = 1.0,
 )
 
@@ -30,19 +37,19 @@ internal class LabelLayoutEngine(
     private val collisionPaddingStyleUnits: Double = 2.0,
 ) {
     fun layout(
-        labels: List<RenderLabel>,
+        items: List<LabelLayoutItem>,
         map: MapState,
         drawScope: DrawScope,
         textMeasurer: TextMeasurer,
         labelBitmapCache: LabelBitmapCache,
-        opacities: List<Double> = emptyList(),
     ): List<PlacedLabel> {
-        if (labels.isEmpty()) return emptyList()
+        if (items.isEmpty()) return emptyList()
 
         val candidates =
-            labels.mapIndexed { index, label ->
-                label.toCandidate(
+            items.mapIndexed { index, item ->
+                item.command.toCandidate(
                     order = index,
+                    layerOrder = item.layerOrder,
                     map = map,
                     drawScope = drawScope,
                     textMeasurer = textMeasurer,
@@ -60,13 +67,15 @@ internal class LabelLayoutEngine(
                     width = candidate.width,
                     height = candidate.height,
                     order = candidate.order,
-                    opacity = opacities.getOrElse(candidate.order) { 1.0 },
+                    layerOrder = candidate.layerOrder,
+                    opacity = items[candidate.order].opacity,
                 )
             }
     }
 
     private fun RenderLabel.toCandidate(
         order: Int,
+        layerOrder: Int,
         map: MapState,
         drawScope: DrawScope,
         textMeasurer: TextMeasurer,
@@ -114,6 +123,7 @@ internal class LabelLayoutEngine(
                     degrees = rotationDegrees.toFloat(),
                 ),
             order = order,
+            layerOrder = layerOrder,
         )
     }
 
@@ -143,6 +153,7 @@ internal data class LabelCollisionCandidate(
     val height: Int,
     val bounds: ScreenBounds,
     val order: Int,
+    val layerOrder: Int = 0,
 ) {
     val area: Float = width.toFloat() * height.toFloat()
 }
@@ -172,9 +183,10 @@ private fun labelCollisionOrder(): Comparator<LabelCollisionCandidate> =
                 leftPriority != null && rightPriority != null -> rightPriority.compareTo(leftPriority)
                 leftPriority != null -> -1
                 rightPriority != null -> 1
-                else -> b.area.compareTo(a.area)
+                else -> 0
             }
-        }.thenByDescending { it.area }
+        }.thenByDescending { it.layerOrder }
+        .thenByDescending { it.area }
         .thenBy { it.order }
 
 internal fun DrawScope.drawPlacedLabels(

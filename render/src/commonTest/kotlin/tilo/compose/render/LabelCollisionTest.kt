@@ -59,6 +59,28 @@ class LabelCollisionTest {
         assertEquals(listOf(1, 0), accepted.map { it.order })
     }
 
+    /** A later scene layer wins when selection and explicit label priority are otherwise equal. */
+    @Test
+    fun higherLayerOrderWinsCollisionAtEqualPriority() {
+        val lower = candidate(id = "lower", width = 40, height = 20, order = 0, layerOrder = 2)
+        val higher = candidate(id = "higher", width = 10, height = 10, order = 1, layerOrder = 3)
+
+        val accepted = selectLabelCollisionCandidates(listOf(lower, higher), collisionPadding = 0f)
+
+        assertEquals(listOf("higher"), accepted.map { it.command.id })
+    }
+
+    /** Explicit label priority remains stronger than scene layer order. */
+    @Test
+    fun explicitPriorityWinsCollisionAcrossLayerOrder() {
+        val priority = candidate(id = "priority", priority = 10, order = 0, layerOrder = 0)
+        val higherLayer = candidate(id = "higher-layer", priority = 5, order = 1, layerOrder = 100)
+
+        val accepted = selectLabelCollisionCandidates(listOf(priority, higherLayer), collisionPadding = 0f)
+
+        assertEquals(listOf("priority"), accepted.map { it.command.id })
+    }
+
     private fun candidate(
         id: String,
         selected: Boolean = false,
@@ -67,6 +89,7 @@ class LabelCollisionTest {
         height: Int = 10,
         order: Int,
         left: Float = 0f,
+        layerOrder: Int = 0,
     ): LabelCollisionCandidate =
         LabelCollisionCandidate(
             command =
@@ -83,5 +106,6 @@ class LabelCollisionTest {
             height = height,
             bounds = ScreenBounds(left, 0f, left + width, height.toFloat()),
             order = order,
+            layerOrder = layerOrder,
         )
 }

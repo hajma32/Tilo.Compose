@@ -42,9 +42,9 @@ repositories {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("eu.tilomaps:tilo-compose:0.1.1-alpha03")
+            implementation("eu.tilomaps:tilo-compose:0.1.2-alpha05")
             // Optional drawing plugin:
-            implementation("eu.tilomaps:tilo-compose-draw:0.1.1-alpha03")
+            implementation("eu.tilomaps:tilo-compose-draw:0.1.2-alpha05")
         }
     }
 }
@@ -123,15 +123,15 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 | Default map UI | ✅ Done | Scale bar, attribution overlay, zoom controls, and a north-reset compass are available as optional content helpers. |
 | CRS transformations | ✅ Done | Android uses Proj4J; iOS bundles PROJ 9.8.1 with its database and basic resources embedded in the native library. |
 | Layer controls | ✅ Done | Atomic nested groups, ordering, visibility, cascading opacity, min/max zoom, source identity, and attribution are implemented. |
-| Vector performance | 🟡 Partial | Immediate and cached-bitmap render modes exist; v1 still needs batching by style/geometry and stronger diagnostics. |
 | Camera control | ✅ Done | Programmatic and animated pan/zoom/rotation, focus-preserving gestures, default zoom/compass UI, and north-resetting `fitBounds` are implemented. |
+| iOS validation | ✅ Done | Device and simulator targets compile, native PROJ transformations have runtime simulator tests, and CI runs the iOS simulator test suites plus a sample framework build. |
+| Vector performance | 🟡 Partial | Immediate and cached-bitmap render modes exist; v1 still needs batching by style/geometry and stronger diagnostics. |
 | Loading and errors | 🟡 Partial | WMS, XYZ/OSM, and tile-store declarations share observable initialization state, recoverable tile errors, and explicit retry; offline state and richer diagnostics remain. |
 | Performance tooling | 🟡 Partial | The opt-in debug overlay reports zoom, FPS, frame times, and skipped frames; tile/cache/feature/label counters remain. |
-| Testing strategy | 🟡 Partial | Unit tests, critical rendering contracts, quality gates, and a coordinate-only publication consumer exist; CI still needs emulator pixel tests, iOS simulator tests, publication verification, and screenshots/goldens. |
-| Documentation | 🟡 Partial | The web Learn guide and API reference are published; public KDoc coverage, experimental marker rendering, and cross-module Dokka links remain. |
-| API stability and adoption | 🟡 Partial | Renderer internals and experimental boundaries are established; supported coordinates and alpha compatibility expectations still need documentation. |
-| Publication | 🟡 Partial | Six Maven artifacts share verified `eu.tilomaps` coordinates, metadata, sources/docs artifacts, signing support, and a consumer smoke test; release CI and the Central publishing workflow remain. |
-| iOS validation | 🟡 Partial | Device/simulator targets compile and native PROJ transformations have runtime simulator tests; automated iOS CI coverage remains. |
+| Testing strategy | 🟡 Partial | CI runs unit tests, quality gates, Android emulator pixel contracts, iOS simulator suites, and publication verification against a coordinate-only consumer; reusable screenshot/golden baselines and broader platform coverage remain. |
+| Documentation | 🟡 Partial | The web Learn guide and API reference are published; broader public KDoc coverage and cross-module Dokka links remain. |
+| API stability and adoption | 🟡 Partial | Renderer internals and experimental boundaries are established, with alpha compatibility notes published per release; a formal stability policy and wider adoption feedback remain. |
+| Publication | 🟡 Partial | Six Maven artifacts share verified `eu.tilomaps` coordinates, metadata, sources/docs artifacts, signing support, and a consumer smoke test; release CI now verifies and uploads signed deployments, while the first live Central handoff and portal validation remain. |
 | Raster MBTiles | ⬜ Planned | Add dedicated `mbTilesLayer(...)` with SQLite access, metadata resolution, TMS/XYZ row schemes, Web Mercator defaults, and S-JTSK/Krovak grids. |
 | Editing plugin | ⬜ Planned | Build edit as a plugin on top of selection: vertex handles, move/insert/delete, save/cancel, and history. |
 | Event routing | ⬜ Planned | Define gesture priority between overlays, draw, edit, selection, and default pan/zoom/rotate interactions. |

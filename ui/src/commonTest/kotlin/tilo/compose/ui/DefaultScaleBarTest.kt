@@ -18,6 +18,6 @@ class DefaultScaleBarTest {
 
     @Test
     fun scaleBarBodyUsesRequestedOpacity() {
-        assertEquals(0.8f, ScaleBarOpacity)
+        assertEquals(0.8f, SCALE_BAR_OPACITY)
     }
 }

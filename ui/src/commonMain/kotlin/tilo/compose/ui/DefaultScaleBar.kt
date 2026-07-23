@@ -82,12 +82,12 @@ fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
             }
         clipPath(barPath) {
             drawRect(
-                color = ScaleBarColor.copy(alpha = ScaleBarOpacity),
+                color = ScaleBarColor.copy(alpha = SCALE_BAR_OPACITY),
                 topLeft = segments.start.topLeft,
                 size = segments.start.size,
             )
             drawRect(
-                color = ScaleBarLightColor.copy(alpha = ScaleBarOpacity),
+                color = ScaleBarLightColor.copy(alpha = SCALE_BAR_OPACITY),
                 topLeft = segments.end.topLeft,
                 size = segments.end.size,
             )
@@ -121,7 +121,7 @@ fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
 private val ScaleBarColor = Color(0xFF111827)
 private val ScaleBarTextColor = Color.Black.copy(alpha = 0.8f)
 private val ScaleBarLightColor = Color.White
-internal const val ScaleBarOpacity = 0.8f
+internal const val SCALE_BAR_OPACITY = 0.8f
 
 private val ScaleBarTextStyle =
     TextStyle(

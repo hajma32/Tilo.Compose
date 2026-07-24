@@ -24,10 +24,18 @@ internal fun transformFeaturesToMapProjection(
     if (source === map.projection) return features
 
     return features.map { feature ->
-        feature.copy(
-            geometry = transformGeometry(feature.geometry, map, source),
-        )
+        transformFeatureToMapProjection(feature, source, map)
     }
+}
+
+internal fun transformFeatureToMapProjection(
+    feature: Feature,
+    featuresSourceProjection: Projection?,
+    map: MapState,
+): Feature {
+    val source = featuresSourceProjection ?: return feature
+    if (source === map.projection || source.id == map.projection.id) return feature
+    return feature.copy(geometry = transformGeometry(feature.geometry, map, source))
 }
 
 private fun transformGeometry(

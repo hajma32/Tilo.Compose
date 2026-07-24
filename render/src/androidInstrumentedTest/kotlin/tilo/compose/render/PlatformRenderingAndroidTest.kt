@@ -23,6 +23,8 @@ import tilo.compose.core.feature.ColorValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FillStyle
 import tilo.compose.core.feature.LineStyle
+import tilo.compose.core.feature.LineCap
+import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.feature.PointIconStyle
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.PolygonStyle
@@ -399,6 +401,42 @@ class PlatformRenderingAndroidTest {
 
         assertEquals(RED, result.argbAt(32, 16))
         assertEquals(0, result.argbAt(48, 32))
+    }
+
+    @Test
+    fun cachedGeometryUsesCanvasCameraMatrix() {
+        val map = MapState(bearing = 90.0, viewport = Viewport(64, 64))
+        val commands =
+            listOf(
+                RenderPoint(
+                    id = "east",
+                    point = Point(16.0, 0.0),
+                    style = PointStyle(size = 8.0, fill = FillStyle(ColorValue(RED.toUInt().toULong())), stroke = null),
+                ),
+                RenderLineString(
+                    id = "line",
+                    points = listOf(Point(-20.0, 12.0), Point(20.0, 12.0)),
+                    style =
+                        LineStyle(
+                            casing = null,
+                            stroke =
+                                StrokeStyle(
+                                    color = ColorValue(GREEN.toUInt().toULong()),
+                                    width = 4.0,
+                                    lineCap = LineCap.Round,
+                                    lineJoin = LineJoin.Round,
+                                ),
+                        ),
+                ),
+            )
+        val pixelScale = WorldToScreenTransform.from(map).pixelScale
+        val cached = CachedGeometry.build(commands, pointWorldUnitsPerPixel = 1.0 / pixelScale)
+
+        val result = renderBitmap { drawCachedGeometry(cached, map) }
+
+        assertEquals(RED, result.argbAt(32, 16))
+        assertEquals(GREEN, result.argbAt(20, 20))
+        assertEquals(GREEN, result.argbAt(20, 44))
     }
 
     /**

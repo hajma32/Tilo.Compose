@@ -51,4 +51,5 @@ class GeometryCommandBatchesTest {
         assertEquals(1, batches.lines.size)
         assertEquals(1, batches.polygons.size)
     }
+
 }

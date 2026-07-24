@@ -132,15 +132,21 @@ fun MapRenderer(
     var rasterFallbackHistory by remember { mutableStateOf<List<RasterFrame>>(emptyList()) }
     var lastOverviewFrame by remember { mutableStateOf(RasterFrame.Empty) }
     var lastVectorCommandsByLayer by remember { mutableStateOf<Map<String, List<RenderCommand>>>(emptyMap()) }
+    var lastCachedGeometryByLayer by remember { mutableStateOf<Map<String, CachedGeometry>>(emptyMap()) }
     var lastVectorBitmapsByLayer by remember { mutableStateOf<Map<String, VectorBitmapRenderSceneLayer>>(emptyMap()) }
     var lastVectorCacheKeysByLayer by remember { mutableStateOf<Map<String, VectorLayerCacheKey>>(emptyMap()) }
 
     LaunchedEffect(activeLayers, vectorLayerCacheSignature, invalidationKey) {
         val validVectorCommands =
             lastVectorCommandsByLayer.validCommandsFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+        val validCachedGeometry =
+            lastCachedGeometryByLayer.validCachedGeometryFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
         val validVectorBitmaps = lastVectorBitmapsByLayer.validFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
         if (validVectorCommands.size != lastVectorCommandsByLayer.size) {
             lastVectorCommandsByLayer = validVectorCommands
+        }
+        if (validCachedGeometry.size != lastCachedGeometryByLayer.size) {
+            lastCachedGeometryByLayer = validCachedGeometry
         }
         if (validVectorBitmaps.size != lastVectorBitmapsByLayer.size) {
             lastVectorBitmapsByLayer = validVectorBitmaps
@@ -159,6 +165,7 @@ fun MapRenderer(
                 layers = activeLayers,
                 tilesByLayer = displayRasterFrame.tilesByLayer,
                 commandsByLayer = validVectorCommands,
+                cachedGeometryByLayer = validCachedGeometry,
                 vectorBitmapsByLayer = validVectorBitmaps,
                 decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
                 effectiveOpacitiesByLayerId = effectiveOpacitiesByLayerId,
@@ -204,6 +211,8 @@ fun MapRenderer(
                 var decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap()
                 var commandsByLayer: Map<String, List<RenderCommand>> =
                     lastVectorCommandsByLayer.validCommandsFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+                var cachedGeometryByLayer: Map<String, CachedGeometry> =
+                    lastCachedGeometryByLayer.validCachedGeometryFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
                 var vectorBitmapsByLayer: Map<String, VectorBitmapRenderSceneLayer> =
                     lastVectorBitmapsByLayer.validFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
                 val placeholderFrame = rasterPipeline.buildPlaceholderFrame(input.tileLayers, renderMap)
@@ -227,6 +236,7 @@ fun MapRenderer(
                             layers = input.activeLayers,
                             tilesByLayer = displayRasterFrame.tilesByLayer,
                             commandsByLayer = commandsByLayer,
+                            cachedGeometryByLayer = cachedGeometryByLayer,
                             vectorBitmapsByLayer = vectorBitmapsByLayer,
                             decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
                             effectiveOpacitiesByLayerId = input.effectiveOpacitiesByLayerId,
@@ -250,8 +260,10 @@ fun MapRenderer(
                                 performanceLogger = input.performanceLogger,
                             )
                         commandsByLayer = vectorFrame.commandsByLayer
+                        cachedGeometryByLayer = vectorFrame.cachedGeometryByLayer
                         vectorBitmapsByLayer = vectorFrame.bitmapLayersByLayer
                         lastVectorCommandsByLayer = commandsByLayer
+                        lastCachedGeometryByLayer = cachedGeometryByLayer
                         lastVectorBitmapsByLayer = vectorBitmapsByLayer
                         lastVectorCacheKeysByLayer = vectorFrame.cacheKeysByLayer
                         publishScene()
@@ -310,6 +322,8 @@ fun MapRenderer(
                 val placeholderFrame = rasterPipeline.buildPlaceholderFrame(input.tileLayers, overviewMap)
                 val validVectorCommands =
                     lastVectorCommandsByLayer.validCommandsFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
+                val validCachedGeometry =
+                    lastCachedGeometryByLayer.validCachedGeometryFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
                 val validVectorBitmaps =
                     lastVectorBitmapsByLayer.validFor(input.currentVectorCacheKeys, lastVectorCacheKeysByLayer)
                 val displayRasterFrame =
@@ -325,6 +339,7 @@ fun MapRenderer(
                         layers = input.activeLayers,
                         tilesByLayer = displayRasterFrame.tilesByLayer,
                         commandsByLayer = validVectorCommands,
+                        cachedGeometryByLayer = validCachedGeometry,
                         vectorBitmapsByLayer = validVectorBitmaps,
                         decodedImagesByLayer = displayRasterFrame.decodedImagesByLayer,
                         effectiveOpacitiesByLayerId = input.effectiveOpacitiesByLayerId,
@@ -512,8 +527,20 @@ internal fun Map<String, List<RenderCommand>>.validCommandsFor(
 ): Map<String, List<RenderCommand>> =
     filterKeys { layerId ->
         val currentKey = currentKeys[layerId] ?: return@filterKeys false
-        previousKeys[layerId] == currentKey || currentKey.renderStrategy is VectorRenderStrategy.Immediate
+        previousKeys[layerId] == currentKey || currentKey.renderStrategy.isImmediateMode()
     }
+
+internal fun Map<String, CachedGeometry>.validCachedGeometryFor(
+    currentKeys: Map<String, VectorLayerCacheKey>,
+    previousKeys: Map<String, VectorLayerCacheKey>,
+): Map<String, CachedGeometry> =
+    filterKeys { layerId ->
+        val currentKey = currentKeys[layerId] ?: return@filterKeys false
+        previousKeys[layerId] == currentKey || currentKey.renderStrategy.isImmediateMode()
+    }
+
+private fun VectorRenderStrategy.isImmediateMode(): Boolean =
+    this is VectorRenderStrategy.Immediate || this is VectorRenderStrategy.ImmediateLod
 
 internal fun mergeRasterFrames(
     placeholderFrame: RasterFrame,

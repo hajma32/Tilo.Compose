@@ -9,6 +9,7 @@ import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.tile.Tile
 import tilo.compose.render.ExperimentalTiloRenderingApi
+import tilo.compose.render.CachedGeometry
 import tilo.compose.render.PointIconPainterLayer
 import tilo.compose.render.RenderCommand
 
@@ -17,6 +18,7 @@ internal object RenderSceneBuilder {
         layers: List<Layer>,
         tilesByLayer: Map<String, List<Tile>>,
         commandsByLayer: Map<String, List<RenderCommand>>,
+        cachedGeometryByLayer: Map<String, CachedGeometry> = emptyMap(),
         vectorBitmapsByLayer: Map<String, VectorBitmapRenderSceneLayer> = emptyMap(),
         decodedImagesByLayer: Map<String, List<ImageBitmap?>> = emptyMap(),
         effectiveOpacitiesByLayerId: Map<String, Double> = emptyMap(),
@@ -54,6 +56,7 @@ internal object RenderSceneBuilder {
                                         zIndex = layer.zIndex,
                                         opacity = opacity,
                                         commands = commands,
+                                        cachedGeometry = cachedGeometryByLayer[layer.id],
                                         pointIconPainters =
                                             (layer as? PointIconPainterLayer)
                                                 ?.pointIconPainters

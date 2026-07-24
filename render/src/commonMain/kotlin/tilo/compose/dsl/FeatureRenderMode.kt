@@ -15,6 +15,10 @@ sealed interface FeatureRenderMode
 
 private data object ImmediateFeatureRenderMode : FeatureRenderMode
 
+private data class ImmediateLodFeatureRenderMode(
+    val tolerancePx: Double,
+) : FeatureRenderMode
+
 private data class CachedBitmapFeatureRenderMode(
     val scale: Double,
     val paddingPx: Int,
@@ -24,6 +28,19 @@ private data class CachedBitmapFeatureRenderMode(
 /** Draw vector features directly every frame. */
 @ExperimentalTiloApi
 fun immediate(): FeatureRenderMode = ImmediateFeatureRenderMode
+
+/**
+ * Draw vector features directly after zoom-dependent Douglas-Peucker simplification.
+ *
+ * [tolerancePx] is the maximum screen-space deviation for lines and polygon rings.
+ */
+@ExperimentalTiloApi
+fun immediateLod(tolerancePx: Double = 1.5): FeatureRenderMode {
+    require(tolerancePx.isFinite() && tolerancePx > 0.0) {
+        "tolerancePx must be finite and positive"
+    }
+    return ImmediateLodFeatureRenderMode(tolerancePx)
+}
 
 /**
  * Render vector features into an offscreen bitmap and reuse it while panning.
@@ -51,6 +68,7 @@ fun cachedBitmap(
 internal fun FeatureRenderMode.toVectorRenderStrategy(): VectorRenderStrategy =
     when (this) {
         ImmediateFeatureRenderMode -> VectorRenderStrategy.Immediate
+        is ImmediateLodFeatureRenderMode -> VectorRenderStrategy.ImmediateLod(tolerancePx)
         is CachedBitmapFeatureRenderMode ->
             VectorRenderStrategy.CachedBitmap(
                 scale = scale,

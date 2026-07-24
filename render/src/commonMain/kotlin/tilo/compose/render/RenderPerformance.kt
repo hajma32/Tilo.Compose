@@ -31,13 +31,17 @@ data class VectorLayerPerformanceEvent(
     val commandBuildMillis: Double,
     val bitmapMillis: Double,
     val reusedBitmap: Boolean,
+    val queryCacheHit: Boolean = false,
+    val projectedFeatureCacheHits: Int = 0,
+    val commandCacheHit: Boolean = false,
     override val totalMillis: Double,
 ) : RenderPerformanceEvent {
     override fun toLogLine(): String =
         "vector layer=$layerId total=${totalMillis.ms()} query=${queryMillis.ms()} " +
             "projection=${projectionMillis.ms()} commands=${commandBuildMillis.ms()} " +
             "bitmap=${bitmapMillis.ms()} reusedBitmap=$reusedBitmap features=$featureCount " +
-            "commandsCount=$commandCount vertices=$vertexCount"
+            "commandsCount=$commandCount vertices=$vertexCount queryCacheHit=$queryCacheHit " +
+            "projectionCacheHits=$projectedFeatureCacheHits commandCacheHit=$commandCacheHit"
 }
 
 /** CPU timings for one Compose Canvas draw. GPU execution can continue after this event. */

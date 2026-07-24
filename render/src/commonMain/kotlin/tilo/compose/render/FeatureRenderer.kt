@@ -9,7 +9,6 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathFillType
-import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -82,23 +81,11 @@ private fun DrawScope.drawPointBatch(
         }
     val size = styleUnitToPx(style.size).coerceAtLeast(1f)
 
-    if (style.shape == PointShape.Circle && style.stroke == null) {
-        style.fill?.let { fill ->
-            drawPoints(
-                points = centers,
-                pointMode = PointMode.Points,
-                color = fill.color.toColor(fill.opacity),
-                strokeWidth = size,
-                cap = StrokeCap.Round,
-            )
-        }
-    } else {
-        val path = Path()
-        centers.forEach { center -> path.addPointShape(style.shape, center, size) }
-        style.fill?.let { fill -> drawPath(path = path, color = fill.color.toColor(fill.opacity)) }
-        style.stroke?.let { stroke ->
-            drawPath(path = path, color = stroke.color.toColor(stroke.opacity), style = toComposeStroke(stroke))
-        }
+    val path = Path()
+    centers.forEach { center -> path.addPointShape(style.shape, center, size) }
+    style.fill?.let { fill -> drawPath(path = path, color = fill.color.toColor(fill.opacity)) }
+    style.stroke?.let { stroke ->
+        drawPath(path = path, color = stroke.color.toColor(stroke.opacity), style = toComposeStroke(stroke))
     }
 
     style.icon?.let { icon ->

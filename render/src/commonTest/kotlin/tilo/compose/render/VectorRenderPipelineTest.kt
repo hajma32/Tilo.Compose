@@ -11,6 +11,7 @@ import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.feature.FeatureLayerStyleZoomRule
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.source.FeatureSource
+import tilo.compose.core.geometry.LineString
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
@@ -22,10 +23,73 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class VectorRenderPipelineTest {
+    @Test
+    fun bufferedQueryAndCommandsAreReusedDuringPan() =
+        runTest {
+            val source = CountingBufferedSource()
+            val layer = TestVectorLayer("places", source)
+            val pipeline = VectorRenderPipeline(StandardTestDispatcher(testScheduler))
+            val map = testMap(width = 100, height = 100, zoom = 5.0)
+
+            val first = pipeline.buildFrame(listOf(layer), map, Density(1f), LayoutDirection.Ltr)
+            map.panBy(10.0, 0.0)
+            val second = pipeline.buildFrame(listOf(layer), map, Density(1f), LayoutDirection.Ltr)
+
+            assertEquals(1, source.queryCount)
+            assertSame(
+                first.commandsByLayer.getValue(layer.id),
+                second.commandsByLayer.getValue(layer.id),
+            )
+            assertSame(
+                first.cachedGeometryByLayer.getValue(layer.id),
+                second.cachedGeometryByLayer.getValue(layer.id),
+            )
+
+            map.panBy(60.0, 0.0)
+            pipeline.buildFrame(listOf(layer), map, Density(1f), LayoutDirection.Ltr)
+            assertEquals(2, source.queryCount)
+        }
+
+    @Test
+    fun zoomInvalidatesBufferedQueryAndCommands() =
+        runTest {
+            val events = mutableListOf<VectorLayerPerformanceEvent>()
+            val source = ZoomFilteringBufferedSource()
+            val layer = TestVectorLayer("places", source)
+            val pipeline = VectorRenderPipeline(StandardTestDispatcher(testScheduler))
+            val map = testMap(zoom = 5.0)
+
+            val first = pipeline.buildFrame(listOf(layer), map, Density(1f), LayoutDirection.Ltr)
+            map.zoom = 5.25
+            val second = pipeline.buildFrame(
+                listOf(layer),
+                map,
+                Density(1f),
+                LayoutDirection.Ltr,
+                performanceLogger = RenderPerformanceLogger { event ->
+                    if (event is VectorLayerPerformanceEvent) events += event
+                },
+            )
+
+            assertEquals(2, source.queryCount)
+            assertTrue(!events.single().queryCacheHit)
+            assertEquals(1, events.single().projectedFeatureCacheHits)
+            assertTrue(!events.single().commandCacheHit)
+            assertNotSame(
+                first.commandsByLayer.getValue(layer.id),
+                second.commandsByLayer.getValue(layer.id),
+            )
+            assertNotSame(
+                first.cachedGeometryByLayer.getValue(layer.id),
+                second.cachedGeometryByLayer.getValue(layer.id),
+            )
+        }
+
     @Test
     fun performanceLoggerReceivesStructuredLayerTiming() =
         runTest {
@@ -70,6 +134,42 @@ class VectorRenderPipelineTest {
 
             assertEquals(listOf("feature:point"), frame.commandsByLayer.getValue("places").map(RenderCommand::id))
             assertEquals(0, bitmapRenders)
+        }
+
+    @Test
+    fun immediateLodSimplifiesLineCommandsAtCurrentZoom() =
+        runTest {
+            val sourcePoints =
+                List(101) { index ->
+                    Point(
+                        x = -1.0 + index / 50.0,
+                        y = if (index == 50) 0.2 else 0.001 * (index % 2),
+                    )
+                }
+            val source =
+                object : FeatureSource {
+                    override fun getFeatures(map: MapState): List<Feature> =
+                        listOf(Feature(key = "line", geometry = LineString(sourcePoints)))
+                }
+            val layer =
+                TestVectorLayer(
+                    id = "lod-lines",
+                    source = source,
+                    renderStrategy = VectorRenderStrategy.ImmediateLod(tolerancePx = 1.5),
+                )
+
+            val frame =
+                VectorRenderPipeline(StandardTestDispatcher(testScheduler)).buildFrame(
+                    vectorLayers = listOf(layer),
+                    map = testMap(zoom = 5.0),
+                    density = Density(1f),
+                    layoutDirection = LayoutDirection.Ltr,
+                )
+            val command = assertIs<RenderLineString>(frame.commandsByLayer.getValue(layer.id).single())
+
+            assertTrue(command.points.size < sourcePoints.size)
+            assertEquals(sourcePoints.first(), command.points.first())
+            assertEquals(sourcePoints.last(), command.points.last())
         }
 
     /**
@@ -280,6 +380,38 @@ class VectorRenderPipelineTest {
 
         override fun getFeatures(map: MapState): List<Feature> =
             listOf(Feature(key = "feature", geometry = Point(map.center.x, map.center.y)))
+    }
+
+    private class CountingBufferedSource : FeatureSource {
+        override val supportsBufferedQueries: Boolean = true
+        override val version: Long = 1L
+        var queryCount = 0
+        val features =
+            listOf(
+                Feature(key = "one", geometry = Point(0.0, 0.0)),
+                Feature(key = "two", geometry = Point(0.25, 0.25)),
+            )
+
+        override fun getFeatures(map: MapState): List<Feature> {
+            queryCount++
+            return features
+        }
+    }
+
+    private class ZoomFilteringBufferedSource : FeatureSource {
+        override val supportsBufferedQueries: Boolean = true
+        override val version: Long = 1L
+        var queryCount = 0
+        private val features =
+            listOf(
+                Feature(key = "one", geometry = Point(0.0, 0.0)),
+                Feature(key = "two", geometry = Point(0.25, 0.25)),
+            )
+
+        override fun getFeatures(map: MapState): List<Feature> {
+            queryCount++
+            return if (map.zoom > 5.0) features.take(1) else features
+        }
     }
 
     private class TestVectorLayer(

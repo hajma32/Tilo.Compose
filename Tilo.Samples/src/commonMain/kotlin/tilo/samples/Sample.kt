@@ -21,8 +21,20 @@ internal enum class Sample(
     Callout("05", "Callout", "Selection with app-owned UI", SampleSection.Interaction),
     NonMercator("06", "Non-Mercator CRS", "ČÚZK ortofoto in EPSG:5514", SampleSection.Interaction),
     Drawing("07", "Drawing", "Point, line and polygon editing", SampleSection.Interaction),
-    ExtremeVectorRendering(
+    VectorRendering(
         "08",
+        "Vector rendering",
+        "50k vertices with FPS and pipeline timings",
+        SampleSection.Performance,
+    ),
+    LodVectorRendering(
+        "09",
+        "LOD vector rendering",
+        "50k vertices with Douglas-Peucker LOD",
+        SampleSection.Performance,
+    ),
+    ExtremeVectorRendering(
+        "10",
         "Extreme vector rendering",
         "100k vertices with FPS and pipeline timings",
         SampleSection.Performance,

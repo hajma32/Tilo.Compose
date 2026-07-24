@@ -1,5 +1,7 @@
 package tilo.compose.render
 
+import androidx.compose.ui.graphics.Matrix
+import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
 import kotlin.math.PI
 import kotlin.math.cos
@@ -19,6 +21,9 @@ internal class WorldToScreenTransform private constructor(
     private val translateX: Double,
     private val translateY: Double,
 ) {
+    val pixelScale: Float
+        get() = kotlin.math.hypot(scaleCos, scaleSin).toFloat()
+
     fun screenX(
         worldX: Double,
         worldY: Double,
@@ -28,6 +33,16 @@ internal class WorldToScreenTransform private constructor(
         worldX: Double,
         worldY: Double,
     ): Double = -worldX * scaleSin - worldY * scaleCos + translateY
+
+    fun localToScreenMatrix(origin: Point): Matrix =
+        Matrix().also { matrix ->
+            matrix[0, 0] = scaleCos.toFloat()
+            matrix[0, 1] = -scaleSin.toFloat()
+            matrix[1, 0] = -scaleSin.toFloat()
+            matrix[1, 1] = -scaleCos.toFloat()
+            matrix[3, 0] = screenX(origin.x, origin.y).toFloat()
+            matrix[3, 1] = screenY(origin.x, origin.y).toFloat()
+        }
 
     companion object {
         fun from(map: MapState): WorldToScreenTransform {

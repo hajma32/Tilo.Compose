@@ -29,6 +29,7 @@ import tilo.compose.render.RenderLabel
 import tilo.compose.render.RenderPerformanceLogger
 import tilo.compose.render.TilePlaceholderColors
 import tilo.compose.render.drawFeatureGeometry
+import tilo.compose.render.drawCachedGeometry
 import tilo.compose.render.drawPlacedLabels
 import tilo.compose.render.drawTiles
 import kotlin.math.pow
@@ -144,16 +145,17 @@ internal fun DrawScope.drawRenderScene(
             }
 
             is VectorRenderSceneLayer -> {
-                vectorCommandCount += layer.commands.size
+                vectorCommandCount += layer.cachedGeometry?.commandCount ?: layer.commands.size
                 vectorDrawMillis +=
                     measureMillis(profilingEnabled) {
                         withLayerOpacity(layer.opacity) {
                             val stats =
-                                drawFeatureGeometry(
-                                    commands = layer.commands,
-                                    map = map,
-                                    pointIconPainters = layer.pointIconPainters,
-                                )
+                                layer.cachedGeometry?.let { cached -> drawCachedGeometry(cached, map) }
+                                    ?: drawFeatureGeometry(
+                                        commands = layer.commands,
+                                        map = map,
+                                        pointIconPainters = layer.pointIconPainters,
+                                    )
                             vectorStyleBatchCount += stats.styleBatchCount
                             vectorRenderBatchCount += stats.renderBatchCount
                         }

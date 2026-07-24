@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.tile.Tile
 import tilo.compose.render.ExperimentalTiloRenderingApi
+import tilo.compose.render.CachedGeometry
 import tilo.compose.render.RenderCommand
 
 @ExperimentalTiloRenderingApi
@@ -36,6 +37,7 @@ class VectorRenderSceneLayer(
     override val id: String,
     override val zIndex: Int,
     val commands: List<RenderCommand>,
+    internal val cachedGeometry: CachedGeometry? = null,
     val pointIconPainters: Map<String, Painter> = emptyMap(),
     override val opacity: Double = 1.0,
 ) : RenderSceneLayer {

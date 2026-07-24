@@ -12,6 +12,7 @@ import androidx.compose.ui.text.TextMeasurer
 import tilo.compose.core.map.MapState
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.LabelBitmapCache
+import tilo.compose.render.RenderPerformanceLogger
 
 @ExperimentalTiloRenderingApi
 interface RenderBackend {
@@ -28,6 +29,7 @@ interface RenderBackend {
         offscreenLabelDrawScope: CanvasDrawScope,
         textMeasurer: TextMeasurer,
         labelBitmapCache: LabelBitmapCache,
+        performanceLogger: RenderPerformanceLogger?,
     ) {
         Box(modifier = modifier)
     }

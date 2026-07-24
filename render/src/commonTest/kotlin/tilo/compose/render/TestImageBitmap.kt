@@ -48,10 +48,12 @@ internal fun testMap(
     width: Int = 256,
     height: Int = 256,
     pixelRatio: Double = 1.0,
+    bearing: Double = 0.0,
 ): MapState =
     MapState(
         center = center,
         zoom = zoom,
+        bearing = bearing,
         viewport = Viewport(width = width, height = height, pixelRatio = pixelRatio),
     )
 

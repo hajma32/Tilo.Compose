@@ -15,6 +15,8 @@ import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 import tilo.compose.render.backend.VectorBitmapSnapshot
 import kotlin.math.abs
 import kotlin.math.pow
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 internal data class VectorFrame(
     val commandsByLayer: Map<String, List<RenderCommand>>,
@@ -43,6 +45,7 @@ internal class VectorRenderPipeline(
         layoutDirection: LayoutDirection,
         selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
         reusableBitmapsByLayer: Map<String, VectorBitmapRenderSceneLayer> = emptyMap(),
+        performanceLogger: RenderPerformanceLogger? = null,
     ): VectorFrame =
         withContext(dispatcher) {
             val commandsByLayer = mutableMapOf<String, List<RenderCommand>>()
@@ -50,10 +53,16 @@ internal class VectorRenderPipeline(
             val cacheKeysByLayer = mutableMapOf<String, VectorLayerCacheKey>()
 
             vectorLayers.forEach { layer ->
+                val layerStart = performanceLogger?.let { TimeSource.Monotonic.markNow() }
                 val selectedFeatureKeys = selectedFeatures.keysForLayer(layer.id)
                 cacheKeysByLayer[layer.id] = layer.cacheKey(selectedFeatureKeys, map.zoom)
+                val queryStart = performanceLogger?.let { TimeSource.Monotonic.markNow() }
                 val features = layer.source.getFeatures(map)
+                val queryMillis = queryStart?.elapsedMillis() ?: 0.0
+                val projectionStart = performanceLogger?.let { TimeSource.Monotonic.markNow() }
                 val projected = transformFeaturesToMapProjection(features, layer.projection, map)
+                val projectionMillis = projectionStart?.elapsedMillis() ?: 0.0
+                val commandStart = performanceLogger?.let { TimeSource.Monotonic.markNow() }
                 val commands =
                     CommandBuilder.build(
                         map = map,
@@ -62,6 +71,9 @@ internal class VectorRenderPipeline(
                         selectedFeatureKeys = selectedFeatureKeys,
                         layerStyle = layer.style,
                     )
+                val commandBuildMillis = commandStart?.elapsedMillis() ?: 0.0
+                var bitmapMillis = 0.0
+                var reusedBitmap = false
 
                 when (val strategy = layer.renderStrategy) {
                     VectorRenderStrategy.Immediate -> {
@@ -72,9 +84,13 @@ internal class VectorRenderPipeline(
                         val labels = commands.filterIsInstance<RenderLabel>()
                         val geometry = commands.filterNot { it is RenderLabel }
                         commandsByLayer[layer.id] = labels
-                        val bitmapLayer =
+                        val bitmapStart = performanceLogger?.let { TimeSource.Monotonic.markNow() }
+                        val reusableBitmap =
                             reusableBitmapsByLayer[layer.id]
                                 ?.takeIf { it.snapshot.canCover(map, strategy) }
+                        reusedBitmap = reusableBitmap != null
+                        val bitmapLayer =
+                            reusableBitmap
                                 ?: bitmapRenderer.render(
                                     layer = layer,
                                     commands = geometry,
@@ -83,11 +99,27 @@ internal class VectorRenderPipeline(
                                     density = density,
                                     layoutDirection = layoutDirection,
                                 )
+                        bitmapMillis = bitmapStart?.elapsedMillis() ?: 0.0
                         bitmapLayer?.let {
                             bitmapLayersByLayer[layer.id] = bitmapLayer
                         }
                     }
                 }
+                val totalMillis = layerStart?.elapsedMillis() ?: 0.0
+                performanceLogger?.log(
+                    VectorLayerPerformanceEvent(
+                        layerId = layer.id,
+                        featureCount = features.size,
+                        commandCount = commands.size,
+                        vertexCount = commands.vertexCount(),
+                        queryMillis = queryMillis,
+                        projectionMillis = projectionMillis,
+                        commandBuildMillis = commandBuildMillis,
+                        bitmapMillis = bitmapMillis,
+                        reusedBitmap = reusedBitmap,
+                        totalMillis = totalMillis,
+                    ),
+                )
             }
 
             VectorFrame(
@@ -162,3 +194,18 @@ private fun Set<FeatureSelectionRef>.keysForLayer(layerId: String): Set<String> 
         .filter { it.layerId == layerId }
         .map { it.featureKey }
         .toSet()
+
+private fun TimeMark.elapsedMillis(): Double =
+    elapsedNow().inWholeNanoseconds / NANOS_PER_MILLISECOND
+
+private fun List<RenderCommand>.vertexCount(): Int =
+    sumOf { command ->
+        when (command) {
+            is RenderPoint -> 1
+            is RenderLineString -> command.points.size
+            is RenderPolygon -> command.rings.sumOf { ring -> ring.size }
+            is RenderLabel -> 0
+        }
+    }
+
+private const val NANOS_PER_MILLISECOND = 1_000_000.0

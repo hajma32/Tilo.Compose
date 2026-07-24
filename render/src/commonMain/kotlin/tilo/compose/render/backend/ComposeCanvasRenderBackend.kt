@@ -19,18 +19,21 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import tilo.compose.core.map.MapState
+import tilo.compose.render.CanvasFramePerformanceEvent
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.LabelBitmapCache
 import tilo.compose.render.LabelLayoutEngine
 import tilo.compose.render.LabelLayoutItem
 import tilo.compose.render.PlacedLabel
 import tilo.compose.render.RenderLabel
+import tilo.compose.render.RenderPerformanceLogger
 import tilo.compose.render.TilePlaceholderColors
 import tilo.compose.render.drawFeatureGeometry
 import tilo.compose.render.drawPlacedLabels
 import tilo.compose.render.drawTiles
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.time.TimeSource
 
 @ExperimentalTiloRenderingApi
 object ComposeCanvasRenderBackend : RenderBackend {
@@ -46,6 +49,7 @@ object ComposeCanvasRenderBackend : RenderBackend {
         offscreenLabelDrawScope: CanvasDrawScope,
         textMeasurer: TextMeasurer,
         labelBitmapCache: LabelBitmapCache,
+        performanceLogger: RenderPerformanceLogger?,
     ) {
         val placeholderColors = tilePlaceholderColorsFor(MaterialTheme.colorScheme.surface)
         Canvas(modifier = modifier) {
@@ -58,6 +62,7 @@ object ComposeCanvasRenderBackend : RenderBackend {
                 textMeasurer = textMeasurer,
                 labelBitmapCache = labelBitmapCache,
                 placeholderColors = placeholderColors,
+                performanceLogger = performanceLogger,
             )
         }
     }
@@ -72,7 +77,11 @@ internal fun DrawScope.drawRenderScene(
     textMeasurer: TextMeasurer,
     labelBitmapCache: LabelBitmapCache,
     placeholderColors: TilePlaceholderColors = TilePlaceholderColors.Light,
+    performanceLogger: RenderPerformanceLogger? = null,
 ) {
+    val profilingEnabled = performanceLogger != null
+    val frameStart = performanceLogger?.let { TimeSource.Monotonic.markNow() }
+    val labelCollectionStart = performanceLogger?.let { TimeSource.Monotonic.markNow() }
     val labels =
         scene.layers.flatMapIndexed { layerOrder, layer ->
             if (layer is VectorRenderSceneLayer) {
@@ -87,6 +96,8 @@ internal fun DrawScope.drawRenderScene(
                 emptyList()
             }
         }
+    val labelCollectionMillis = labelCollectionStart?.elapsedMillis() ?: 0.0
+    val labelLayoutStart = performanceLogger?.let { TimeSource.Monotonic.markNow() }
     val placedLabelsByLayer =
         labelLayoutEngine
             .layout(
@@ -96,58 +107,115 @@ internal fun DrawScope.drawRenderScene(
                 textMeasurer = textMeasurer,
                 labelBitmapCache = labelBitmapCache,
             ).groupBy(PlacedLabel::layerOrder)
+    val labelLayoutMillis = labelLayoutStart?.elapsedMillis() ?: 0.0
+    var rasterDrawMillis = 0.0
+    var vectorDrawMillis = 0.0
+    var labelDrawMillis = 0.0
+    var vectorCommandCount = 0
+    var vectorStyleBatchCount = 0
+    var vectorRenderBatchCount = 0
 
     scene.layers.forEachIndexed { layerOrder, layer ->
         when (layer) {
             is RasterRenderSceneLayer -> {
-                if (tileDecoder != null) {
-                    withLayerOpacity(layer.opacity) {
-                        if (layer.placeholderTiles.isNotEmpty()) {
-                            drawTiles(
-                                tiles = layer.placeholderTiles,
-                                tileDecoder = tileDecoder,
-                                map = map,
-                                decodedImages = List(layer.placeholderTiles.size) { null },
-                                placeholderColors = placeholderColors,
-                            )
+                rasterDrawMillis +=
+                    measureMillis(profilingEnabled) {
+                        if (tileDecoder != null) {
+                            withLayerOpacity(layer.opacity) {
+                                if (layer.placeholderTiles.isNotEmpty()) {
+                                    drawTiles(
+                                        tiles = layer.placeholderTiles,
+                                        tileDecoder = tileDecoder,
+                                        map = map,
+                                        decodedImages = List(layer.placeholderTiles.size) { null },
+                                        placeholderColors = placeholderColors,
+                                    )
+                                }
+                                drawTiles(
+                                    tiles = layer.tiles,
+                                    tileDecoder = tileDecoder,
+                                    map = map,
+                                    decodedImages = layer.decodedImages,
+                                    placeholderColors = placeholderColors,
+                                )
+                            }
                         }
-                        drawTiles(
-                            tiles = layer.tiles,
-                            tileDecoder = tileDecoder,
-                            map = map,
-                            decodedImages = layer.decodedImages,
-                            placeholderColors = placeholderColors,
-                        )
                     }
-                }
             }
 
             is VectorRenderSceneLayer -> {
-                withLayerOpacity(layer.opacity) {
-                    drawFeatureGeometry(
-                        commands = layer.commands,
-                        map = map,
-                        pointIconPainters = layer.pointIconPainters,
-                    )
-                }
+                vectorCommandCount += layer.commands.size
+                vectorDrawMillis +=
+                    measureMillis(profilingEnabled) {
+                        withLayerOpacity(layer.opacity) {
+                            val stats =
+                                drawFeatureGeometry(
+                                    commands = layer.commands,
+                                    map = map,
+                                    pointIconPainters = layer.pointIconPainters,
+                                )
+                            vectorStyleBatchCount += stats.styleBatchCount
+                            vectorRenderBatchCount += stats.renderBatchCount
+                        }
+                    }
             }
 
             is VectorBitmapRenderSceneLayer -> {
-                withLayerOpacity(layer.opacity) {
-                    drawVectorBitmapLayer(layer = layer, map = map)
-                }
+                vectorDrawMillis +=
+                    measureMillis(profilingEnabled) {
+                        withLayerOpacity(layer.opacity) {
+                            drawVectorBitmapLayer(layer = layer, map = map)
+                        }
+                    }
             }
         }
         placedLabelsByLayer[layerOrder]?.let { placedLabels ->
-            drawPlacedLabels(
-                labels = placedLabels,
-                offscreenDrawScope = offscreenLabelDrawScope,
-                textMeasurer = textMeasurer,
-                labelBitmapCache = labelBitmapCache,
-            )
+            labelDrawMillis +=
+                measureMillis(profilingEnabled) {
+                    drawPlacedLabels(
+                        labels = placedLabels,
+                        offscreenDrawScope = offscreenLabelDrawScope,
+                        textMeasurer = textMeasurer,
+                        labelBitmapCache = labelBitmapCache,
+                    )
+                }
         }
     }
+    val totalMillis = frameStart?.elapsedMillis() ?: 0.0
+    performanceLogger?.log(
+        CanvasFramePerformanceEvent(
+            labelCount = labels.size,
+            placedLabelCount = placedLabelsByLayer.values.sumOf { placedLabels -> placedLabels.size },
+            vectorCommandCount = vectorCommandCount,
+            vectorStyleBatchCount = vectorStyleBatchCount,
+            vectorRenderBatchCount = vectorRenderBatchCount,
+            labelCollectionMillis = labelCollectionMillis,
+            labelLayoutMillis = labelLayoutMillis,
+            rasterDrawMillis = rasterDrawMillis,
+            vectorDrawMillis = vectorDrawMillis,
+            labelDrawMillis = labelDrawMillis,
+            totalMillis = totalMillis,
+        ),
+    )
 }
+
+private inline fun measureMillis(
+    enabled: Boolean,
+    block: () -> Unit,
+): Double {
+    if (!enabled) {
+        block()
+        return 0.0
+    }
+    val start = TimeSource.Monotonic.markNow()
+    block()
+    return start.elapsedMillis()
+}
+
+private fun kotlin.time.TimeMark.elapsedMillis(): Double =
+    elapsedNow().inWholeNanoseconds / NANOS_PER_MILLISECOND
+
+private const val NANOS_PER_MILLISECOND = 1_000_000.0
 
 internal fun tilePlaceholderColorsFor(surfaceColor: Color): TilePlaceholderColors =
     if (surfaceColor.luminance() < 0.5f) TilePlaceholderColors.Dark else TilePlaceholderColors.Light

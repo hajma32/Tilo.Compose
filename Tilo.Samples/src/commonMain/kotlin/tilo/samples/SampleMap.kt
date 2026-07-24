@@ -20,6 +20,7 @@ internal fun SampleMap(
             Sample.Callout -> CalloutSample()
             Sample.NonMercator -> NonMercatorSample()
             Sample.Drawing -> DrawingSample()
+            Sample.ExtremeVectorRendering -> ExtremeVectorRenderingSample()
         }
     }
 }

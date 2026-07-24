@@ -66,6 +66,7 @@ fun MapRenderer(
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
     onMapChanged: (() -> Unit)? = null,
+    performanceLogger: RenderPerformanceLogger? = null,
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
@@ -121,6 +122,7 @@ fun MapRenderer(
             tileDecoder = tileDecoder,
             backend = backend,
             onRenderError = onRenderError,
+            performanceLogger = performanceLogger,
         ),
     )
 
@@ -245,6 +247,7 @@ fun MapRenderer(
                                 layoutDirection = input.layoutDirection,
                                 selectedFeatures = input.selectedFeatures,
                                 reusableBitmapsByLayer = vectorBitmapsByLayer,
+                                performanceLogger = input.performanceLogger,
                             )
                         commandsByLayer = vectorFrame.commandsByLayer
                         vectorBitmapsByLayer = vectorFrame.bitmapLayersByLayer
@@ -403,6 +406,7 @@ fun MapRenderer(
         offscreenLabelDrawScope = offscreenLabelDrawScope,
         textMeasurer = textMeasurer,
         labelBitmapCache = labelBitmapCache,
+        performanceLogger = performanceLogger,
     )
 }
 
@@ -466,6 +470,7 @@ private data class RenderLoopInput(
     val tileDecoder: (ByteArray) -> ImageBitmap?,
     val backend: RenderBackend,
     val onRenderError: ((Throwable) -> Unit)?,
+    val performanceLogger: RenderPerformanceLogger?,
 )
 
 internal data class OverviewRenderRequest(

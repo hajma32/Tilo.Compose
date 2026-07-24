@@ -57,6 +57,7 @@ import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.MapRenderer
+import tilo.compose.render.RenderPerformanceLogger
 import tilo.compose.render.ResolvedLayerTree
 
 private const val OPEN_STREET_MAP_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1285,6 +1286,7 @@ fun TiloMap(
     attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
     scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
     cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
+    renderPerformanceLogger: RenderPerformanceLogger? = null,
     invalidationKey: Any? = null,
     layers: MapLayerBuilder.() -> Unit,
 ) {
@@ -1297,6 +1299,7 @@ fun TiloMap(
             onFeatureSelect = onFeatureSelect,
             onRenderError = onRenderError,
             selectedFeatures = selectedFeatures,
+            renderPerformanceLogger = renderPerformanceLogger,
             invalidationKey = invalidationKey,
         )
         BottomMapOverlays(
@@ -1390,6 +1393,7 @@ private fun MapRendererLayer(
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
     onRenderError: ((Throwable) -> Unit)?,
     selectedFeatures: Set<FeatureSelectionRef>,
+    renderPerformanceLogger: RenderPerformanceLogger?,
     invalidationKey: Any?,
 ) {
     val cameraControlRevision = cameraState.cameraControlRevision
@@ -1401,6 +1405,7 @@ private fun MapRendererLayer(
         onFeatureSelect = onFeatureSelect,
         onRenderError = onRenderError,
         selectedFeatures = selectedFeatures,
+        performanceLogger = renderPerformanceLogger,
         invalidationKey = invalidationKey to cameraControlRevision,
         onMapChanged = cameraState::markChanged,
     )

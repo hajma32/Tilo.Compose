@@ -5,6 +5,7 @@ internal enum class SampleSection(
 ) {
     Basics("MAP BASICS"),
     Interaction("INTERACTION"),
+    Performance("PERFORMANCE"),
 }
 
 internal enum class Sample(
@@ -20,4 +21,10 @@ internal enum class Sample(
     Callout("05", "Callout", "Selection with app-owned UI", SampleSection.Interaction),
     NonMercator("06", "Non-Mercator CRS", "ČÚZK ortofoto in EPSG:5514", SampleSection.Interaction),
     Drawing("07", "Drawing", "Point, line and polygon editing", SampleSection.Interaction),
+    ExtremeVectorRendering(
+        "08",
+        "Extreme vector rendering",
+        "100k vertices with FPS and pipeline timings",
+        SampleSection.Performance,
+    ),
 }

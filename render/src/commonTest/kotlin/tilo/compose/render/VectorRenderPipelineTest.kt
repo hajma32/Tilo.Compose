@@ -20,10 +20,35 @@ import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 import tilo.compose.render.backend.VectorBitmapSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class VectorRenderPipelineTest {
+    @Test
+    fun performanceLoggerReceivesStructuredLayerTiming() =
+        runTest {
+            val events = mutableListOf<RenderPerformanceEvent>()
+            val layer = TestVectorLayer(id = "places", source = MutableSource())
+
+            VectorRenderPipeline(StandardTestDispatcher(testScheduler))
+                .buildFrame(
+                    vectorLayers = listOf(layer),
+                    map = testMap(),
+                    density = Density(1f),
+                    layoutDirection = LayoutDirection.Ltr,
+                    performanceLogger = RenderPerformanceLogger(events::add),
+                )
+
+            val event = assertIs<VectorLayerPerformanceEvent>(events.single())
+            assertEquals("places", event.layerId)
+            assertEquals(1, event.featureCount)
+            assertEquals(1, event.commandCount)
+            assertEquals(1, event.vertexCount)
+            assertTrue(event.totalMillis >= 0.0)
+        }
+
     /**
      * Verifies that an immediate vector layer produces commands without bitmap work.
      *

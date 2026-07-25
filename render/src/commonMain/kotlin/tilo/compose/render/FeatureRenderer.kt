@@ -40,11 +40,12 @@ internal fun DrawScope.drawFeatureGeometry(
     map: MapState,
     pointIconPainters: Map<String, Painter> = emptyMap(),
 ) {
-    commands.forEach { command ->
+    val worldToScreen = WorldToScreenTransform.from(map)
+    for (command in commands) {
         when (command) {
-            is RenderPoint -> drawPoint(command, map, pointIconPainters)
-            is RenderLineString -> drawLineString(command, map)
-            is RenderPolygon -> drawPolygon(command, map)
+            is RenderPoint -> drawPoint(command, worldToScreen, pointIconPainters)
+            is RenderLineString -> drawLineString(command, worldToScreen)
+            is RenderPolygon -> drawPolygon(command, worldToScreen)
             is RenderLabel -> Unit
         }
     }
@@ -52,11 +53,14 @@ internal fun DrawScope.drawFeatureGeometry(
 
 private fun DrawScope.drawPoint(
     command: RenderPoint,
-    map: MapState,
+    worldToScreen: WorldToScreenTransform,
     pointIconPainters: Map<String, Painter>,
 ) {
-    val screenPoint = map.worldToScreen(command.point)
-    val center = Offset(screenPoint.x.toFloat(), screenPoint.y.toFloat())
+    val center =
+        Offset(
+            worldToScreen.screenX(command.point.x, command.point.y).toFloat(),
+            worldToScreen.screenY(command.point.x, command.point.y).toFloat(),
+        )
     val size = styleUnitToPx(command.style.size).coerceAtLeast(1f)
 
     command.style.fill?.let { fill ->
@@ -85,10 +89,10 @@ private fun DrawScope.drawPoint(
 
 private fun DrawScope.drawLineString(
     command: RenderLineString,
-    map: MapState,
+    worldToScreen: WorldToScreenTransform,
 ) {
     if (command.points.size < 2) return
-    val path = command.points.toOpenPath(map)
+    val path = command.points.toOpenPath(worldToScreen)
     command.style.casing?.let { casing ->
         drawPath(
             path = path,
@@ -107,15 +111,15 @@ private fun DrawScope.drawLineString(
 
 private fun DrawScope.drawPolygon(
     command: RenderPolygon,
-    map: MapState,
+    worldToScreen: WorldToScreenTransform,
 ) {
-    val path = command.rings.toPath(map)
+    val path = command.rings.toPath(worldToScreen)
     if (path.isEmpty) return
 
     command.style.fill?.let { fill ->
         drawPath(path = path, color = fill.color.toColor(fill.opacity))
         fill.pattern?.let { pattern ->
-            drawFillPattern(pattern = pattern, path = path, bounds = command.rings.screenBounds(map))
+            drawFillPattern(pattern = pattern, path = path, bounds = command.rings.screenBounds(worldToScreen))
         }
     }
 
@@ -218,29 +222,41 @@ private fun pointPath(
     }
 }
 
-private fun List<tilo.compose.core.geometry.Point>.toOpenPath(map: MapState): Path {
+private fun List<tilo.compose.core.geometry.Point>.toOpenPath(worldToScreen: WorldToScreenTransform): Path {
     val path = Path()
-    val first = map.worldToScreen(first())
-    path.moveTo(first.x.toFloat(), first.y.toFloat())
-    drop(1).forEach { point ->
-        val screen = map.worldToScreen(point)
-        path.lineTo(screen.x.toFloat(), screen.y.toFloat())
+    val first = first()
+    path.moveTo(
+        worldToScreen.screenX(first.x, first.y).toFloat(),
+        worldToScreen.screenY(first.x, first.y).toFloat(),
+    )
+    for (index in 1 until size) {
+        val point = this[index]
+        path.lineTo(
+            worldToScreen.screenX(point.x, point.y).toFloat(),
+            worldToScreen.screenY(point.x, point.y).toFloat(),
+        )
     }
     return path
 }
 
-private fun List<List<tilo.compose.core.geometry.Point>>.toPath(map: MapState): Path {
+private fun List<List<tilo.compose.core.geometry.Point>>.toPath(worldToScreen: WorldToScreenTransform): Path {
     val path =
         Path().apply {
             fillType = PathFillType.EvenOdd
         }
-    forEach { ring ->
-        if (ring.isEmpty()) return@forEach
-        val first = map.worldToScreen(ring.first())
-        path.moveTo(first.x.toFloat(), first.y.toFloat())
-        ring.drop(1).forEach { point ->
-            val screen = map.worldToScreen(point)
-            path.lineTo(screen.x.toFloat(), screen.y.toFloat())
+    for (ring in this) {
+        if (ring.isEmpty()) continue
+        val first = ring.first()
+        path.moveTo(
+            worldToScreen.screenX(first.x, first.y).toFloat(),
+            worldToScreen.screenY(first.x, first.y).toFloat(),
+        )
+        for (index in 1 until ring.size) {
+            val point = ring[index]
+            path.lineTo(
+                worldToScreen.screenX(point.x, point.y).toFloat(),
+                worldToScreen.screenY(point.x, point.y).toFloat(),
+            )
         }
         path.close()
     }
@@ -343,23 +359,29 @@ private fun LineJoin.toComposeJoin(): StrokeJoin =
 
 private fun DrawScope.toPathEffect(dash: DashPattern?): PathEffect? {
     dash ?: return null
-    val validIntervals = dash.intervals.map { styleUnitToPx(it).coerceAtLeast(0.1f) }
-    if (validIntervals.size < 2) return null
-    return PathEffect.dashPathEffect(validIntervals.toFloatArray(), styleUnitToPx(dash.phase))
+    if (dash.intervals.size < 2) return null
+    val validIntervals = FloatArray(dash.intervals.size)
+    for (index in dash.intervals.indices) {
+        validIntervals[index] = styleUnitToPx(dash.intervals[index]).coerceAtLeast(0.1f)
+    }
+    return PathEffect.dashPathEffect(validIntervals, styleUnitToPx(dash.phase))
 }
 
-private fun List<List<tilo.compose.core.geometry.Point>>.screenBounds(map: MapState): ScreenBounds {
+private fun List<List<tilo.compose.core.geometry.Point>>.screenBounds(
+    worldToScreen: WorldToScreenTransform,
+): ScreenBounds {
     var left = Float.POSITIVE_INFINITY
     var top = Float.POSITIVE_INFINITY
     var right = Float.NEGATIVE_INFINITY
     var bottom = Float.NEGATIVE_INFINITY
-    forEach { ring ->
-        ring.forEach { point ->
-            val screen = map.worldToScreen(point)
-            left = min(left, screen.x.toFloat())
-            top = min(top, screen.y.toFloat())
-            right = max(right, screen.x.toFloat())
-            bottom = max(bottom, screen.y.toFloat())
+    for (ring in this) {
+        for (point in ring) {
+            val screenX = worldToScreen.screenX(point.x, point.y).toFloat()
+            val screenY = worldToScreen.screenY(point.x, point.y).toFloat()
+            left = min(left, screenX)
+            top = min(top, screenY)
+            right = max(right, screenX)
+            bottom = max(bottom, screenY)
         }
     }
     return ScreenBounds(left = left, top = top, right = right, bottom = bottom)

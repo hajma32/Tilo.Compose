@@ -21,7 +21,7 @@ internal fun transformFeaturesToMapProjection(
     map: MapState,
 ): List<Feature> {
     val source = featuresSourceProjection ?: return features
-    if (source === map.projection) return features
+    if (source === map.projection || source.id == map.projection.id) return features
 
     return features.map { feature ->
         feature.copy(

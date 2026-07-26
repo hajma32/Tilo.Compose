@@ -13,8 +13,10 @@ import tilo.compose.core.feature.LabelTextAlign
 import tilo.compose.core.transform.Epsg5514ToWgs84Transformation
 import tilo.compose.draw.DrawState
 import tilo.compose.dsl.TiloMap
+import tilo.compose.dsl.MapRenderMetrics
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.rememberMapCameraState
+import tilo.compose.dsl.rememberMapDiagnosticsState
 import tilo.compose.dsl.rememberRasterLayerState
 import tilo.compose.dsl.webMercator
 import tilo.compose.render.RenderPoint
@@ -25,6 +27,7 @@ import tilo.spatial.SpatialRect
 val androidPublishedApi: List<Any> =
     listOf(
         MapDebugMetrics::class,
+        MapRenderMetrics::class,
         RenderPoint::class,
         Epsg5514ToWgs84Transformation,
         DrawState::class,
@@ -57,9 +60,11 @@ fun PublishedOsmMap() {
             projection = webMercator(),
         )
     val osmState = rememberRasterLayerState()
+    val diagnostics = rememberMapDiagnosticsState()
 
     TiloMap(
         cameraState = camera,
+        diagnosticsState = diagnostics,
         modifier = Modifier.fillMaxSize(),
     ) {
         osmLayer(state = osmState)

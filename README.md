@@ -125,9 +125,9 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 | Layer controls | ✅ Done | Atomic nested groups, ordering, visibility, cascading opacity, min/max zoom, source identity, and attribution are implemented. |
 | Camera control | ✅ Done | Programmatic and animated pan/zoom/rotation, focus-preserving gestures, default zoom/compass UI, and north-resetting `fitBounds` are implemented. |
 | iOS validation | ✅ Done | Device and simulator targets compile, native PROJ transformations have runtime simulator tests, and CI runs the iOS simulator test suites plus a sample framework build. |
+| Performance tooling | ✅ Done | The opt-in debug overlay reports zoom, FPS, frame times, skipped frames, visible and loaded tiles, cache activity, processed features, bitmap reuse, and placed or rejected labels. |
 | Vector performance | 🟡 Partial | Immediate and cached-bitmap render modes exist; v1 still needs batching by style/geometry and stronger diagnostics. |
 | Loading and errors | 🟡 Partial | WMS, XYZ/OSM, and tile-store declarations share observable initialization state, recoverable tile errors, and explicit retry; offline state and richer diagnostics remain. |
-| Performance tooling | 🟡 Partial | The opt-in debug overlay reports zoom, FPS, frame times, and skipped frames; tile/cache/feature/label counters remain. |
 | Testing strategy | 🟡 Partial | CI runs unit tests, quality gates, Android emulator pixel contracts, iOS simulator suites, and publication verification against a coordinate-only consumer; reusable screenshot/golden baselines and broader platform coverage remain. |
 | Documentation | 🟡 Partial | The web Learn guide and API reference are published; broader public KDoc coverage and cross-module Dokka links remain. |
 | API stability and adoption | 🟡 Partial | Renderer internals and experimental boundaries are established, with alpha compatibility notes published per release; a formal stability policy and wider adoption feedback remain. |

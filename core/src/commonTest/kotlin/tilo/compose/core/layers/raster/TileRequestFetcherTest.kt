@@ -129,6 +129,17 @@ class TileRequestFetcherTest {
                     ?.single(),
             )
             assertEquals(1, fetchCount)
+
+            assertEquals(
+                TileFetchMetrics(
+                    cacheEntries = 1,
+                    maxCacheEntries = 200,
+                    cacheHits = 1,
+                    cacheMisses = 1,
+                    sourceFetches = 1,
+                ),
+                fetcher.metrics(),
+            )
         }
 
     /**
@@ -195,6 +206,12 @@ class TileRequestFetcherTest {
             fetcher.fetchTiles(listOf(request(2)))
 
             assertEquals(mapOf(1 to 1, 2 to 2, 3 to 1), fetchCount)
+            val metrics = fetcher.metrics()
+            assertEquals(2, metrics.cacheEntries)
+            assertEquals(1, metrics.cacheHits)
+            assertEquals(4, metrics.cacheMisses)
+            assertEquals(2, metrics.cacheEvictions)
+            assertEquals(4, metrics.sourceFetches)
         }
 
     /**
@@ -225,6 +242,9 @@ class TileRequestFetcherTest {
             fetcher.fetchTiles(listOf(request(1)))
 
             assertEquals(2, fetchCount)
+            assertEquals(0, fetcher.metrics().cacheEntries)
+            assertEquals(2, fetcher.metrics().cacheMisses)
+            assertEquals(2, fetcher.metrics().cacheEvictions)
         }
 
     /**
@@ -368,6 +388,10 @@ class TileRequestFetcherTest {
             assertEquals(1, visible.await().size)
             assertEquals(1, prefetch.await().size)
             assertEquals(1, overview.await().size)
+            assertEquals(3, fetcher.metrics().cacheMisses)
+            assertEquals(1, fetcher.metrics().sourceFetches)
+            assertEquals(2, fetcher.metrics().coalescedRequests)
+            assertEquals(0, fetcher.metrics().inFlightRequests)
         }
 
     /**
@@ -441,6 +465,7 @@ class TileRequestFetcherTest {
 
             assertFalse(queuedFetchStarted)
             assertEquals(1, active.await().size)
+            assertEquals(1, fetcher.metrics().sourceFetches)
         }
 
     /**

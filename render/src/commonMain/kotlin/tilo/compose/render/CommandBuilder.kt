@@ -38,39 +38,68 @@ internal object CommandBuilder {
         layerId: String? = null,
         selectedFeatureKeys: Set<String> = emptySet(),
         layerStyle: FeatureLayerStyle = FeatureLayerStyle(),
-    ): List<RenderCommand> {
+    ): List<RenderCommand> =
+        buildWithMetrics(
+            map = map,
+            features = features,
+            layerId = layerId,
+            selectedFeatureKeys = selectedFeatureKeys,
+            layerStyle = layerStyle,
+        ).commands
+
+    internal fun buildWithMetrics(
+        map: MapState,
+        features: List<Feature>,
+        layerId: String? = null,
+        selectedFeatureKeys: Set<String> = emptySet(),
+        layerStyle: FeatureLayerStyle = FeatureLayerStyle(),
+    ): CommandBuildResult {
         val visible = visibleBounds(map)
         val resolvedLayerStyle = layerStyle.resolveAtZoom(map.zoom)
+        var visibleFeatureCount = 0
+        var geometryCommandCount = 0
+        var labelCommandCount = 0
 
-        return buildList {
-            features.forEach { feature ->
-                val featureBounds = feature.geometry.bounds()
-                if (!visible.intersects(featureBounds)) return@forEach
+        val commands =
+            buildList {
+                features.forEach { feature ->
+                    val featureBounds = feature.geometry.bounds()
+                    if (!visible.intersects(featureBounds)) return@forEach
+                    visibleFeatureCount += 1
 
-                val baseId = feature.key
-                val isSelected = layerId != null && feature.key in selectedFeatureKeys
-                val style = feature.resolvedStyle(isSelected, resolvedLayerStyle)
+                    val baseId = feature.key
+                    val isSelected = layerId != null && feature.key in selectedFeatureKeys
+                    val style = feature.resolvedStyle(isSelected, resolvedLayerStyle)
 
-                addAll(geometryToCommands(baseId, feature.geometry, style.geometry))
+                    val geometryCommands = geometryToCommands(baseId, feature.geometry, style.geometry)
+                    geometryCommandCount += geometryCommands.size
+                    addAll(geometryCommands)
 
-                feature.label?.takeIf { resolvedLayerStyle.labelsVisible && it.isNotBlank() }?.let { label ->
-                    labelPlacement(feature.geometry, map)?.let { placement ->
-                        add(
-                            RenderLabel(
-                                id = "$baseId:label",
-                                text = label,
-                                anchor = placement.anchor,
-                                style = style.label,
-                                labelPriority = feature.labelPriority,
-                                selected = isSelected,
-                                rotationDegrees = placement.rotationDegrees,
-                                followsLine = placement.followsLine,
-                            ),
-                        )
+                    feature.label?.takeIf { resolvedLayerStyle.labelsVisible && it.isNotBlank() }?.let { label ->
+                        labelPlacement(feature.geometry, map)?.let { placement ->
+                            labelCommandCount += 1
+                            add(
+                                RenderLabel(
+                                    id = "$baseId:label",
+                                    text = label,
+                                    anchor = placement.anchor,
+                                    style = style.label,
+                                    labelPriority = feature.labelPriority,
+                                    selected = isSelected,
+                                    rotationDegrees = placement.rotationDegrees,
+                                    followsLine = placement.followsLine,
+                                ),
+                            )
+                        }
                     }
                 }
             }
-        }
+        return CommandBuildResult(
+            commands = commands,
+            visibleFeatureCount = visibleFeatureCount,
+            geometryCommandCount = geometryCommandCount,
+            labelCommandCount = labelCommandCount,
+        )
     }
 
     private fun visibleBounds(map: MapState): BoundingBox {
@@ -247,6 +276,13 @@ internal object CommandBuilder {
         return angle
     }
 }
+
+internal data class CommandBuildResult(
+    val commands: List<RenderCommand>,
+    val visibleFeatureCount: Int,
+    val geometryCommandCount: Int,
+    val labelCommandCount: Int,
+)
 
 private data class LabelPlacement(
     val anchor: Point,

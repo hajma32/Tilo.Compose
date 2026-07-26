@@ -26,6 +26,8 @@ import tilo.compose.core.feature.LabelFontStyle
 import tilo.compose.core.feature.LabelFontWeight
 import tilo.compose.core.feature.LabelStyle
 import tilo.compose.core.feature.LabelTextAlign
+import tilo.compose.dsl.MapDiagnosticsState
+import tilo.compose.dsl.MapLabelMetrics
 import kotlin.math.ceil
 import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 
@@ -36,16 +38,23 @@ class LabelBitmapCache(
     private val maxEntries: Int = DEFAULT_LABEL_CACHE_SIZE,
 ) {
     private val entries = LinkedHashMap<LabelBitmapKey, LabelCacheEntry>()
+    private var layoutHits = 0L
+    private var layoutMisses = 0L
+    private var bitmapHits = 0L
+    private var bitmapMisses = 0L
+    internal var diagnosticsState: MapDiagnosticsState? = null
 
     internal fun layoutOrPut(
         key: LabelBitmapKey,
         create: () -> LabelBitmapLayout,
     ): LabelBitmapLayout {
         entries.remove(key)?.let { cached ->
+            layoutHits += 1
             entries[key] = cached
             return cached.layout
         }
 
+        layoutMisses += 1
         val layout = create()
         entries[key] = LabelCacheEntry(layout = layout)
         trimToSize()
@@ -60,14 +69,17 @@ class LabelBitmapCache(
         val cached = entries.remove(key)
         if (cached != null) {
             cached.bitmap?.let { bitmap ->
+                bitmapHits += 1
                 entries[key] = cached
                 return bitmap
             }
+            bitmapMisses += 1
             val bitmap = createBitmap(cached.layout)
             entries[key] = cached.copy(bitmap = bitmap)
             return bitmap
         }
 
+        bitmapMisses += 1
         val layout = createLayout()
         val bitmap = createBitmap(layout)
         entries[key] = LabelCacheEntry(layout = layout, bitmap = bitmap)
@@ -80,6 +92,25 @@ class LabelBitmapCache(
             val eldestKey = entries.keys.firstOrNull() ?: return
             entries.remove(eldestKey)
         }
+    }
+
+    internal fun publishDiagnostics(
+        candidates: Int,
+        placed: Int,
+    ) {
+        diagnosticsState?.publishLabels(
+            MapLabelMetrics(
+                candidates = candidates,
+                placed = placed,
+                rejected = (candidates - placed).coerceAtLeast(0),
+                cacheEntries = entries.size,
+                maxCacheEntries = maxEntries,
+                layoutHits = layoutHits,
+                layoutMisses = layoutMisses,
+                bitmapHits = bitmapHits,
+                bitmapMisses = bitmapMisses,
+            ),
+        )
     }
 }
 

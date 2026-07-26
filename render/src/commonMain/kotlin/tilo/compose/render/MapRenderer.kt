@@ -4,6 +4,7 @@ package tilo.compose.render
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,11 @@ import tilo.compose.core.map.Viewport
 import tilo.compose.core.selection.FeatureSelection
 import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.Tile
+import tilo.compose.dsl.MapDiagnosticsState
+import tilo.compose.dsl.MapFeatureMetrics
+import tilo.compose.dsl.MapTileCacheMetrics
+import tilo.compose.dsl.MapTileMetrics
+import tilo.compose.dsl.tileFetchMetricsOrNull
 import tilo.compose.render.backend.ComposeCanvasRenderBackend
 import tilo.compose.render.backend.RasterRenderSceneLayer
 import tilo.compose.render.backend.RenderBackend
@@ -66,12 +72,76 @@ fun MapRenderer(
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
     onMapChanged: (() -> Unit)? = null,
+) = MapRendererImpl(
+    map = map,
+    layers = layers,
+    tileDecoder = tileDecoder,
+    modifier = modifier,
+    backend = backend,
+    onTapWorld = onTapWorld,
+    onFeatureSelect = onFeatureSelect,
+    onRenderError = onRenderError,
+    selectedFeatures = selectedFeatures,
+    invalidationKey = invalidationKey,
+    onMapChanged = onMapChanged,
+    diagnosticsState = null,
+)
+
+/** Opt-in diagnostics overload of [MapRenderer]. */
+@Composable
+@ExperimentalTiloRenderingApi
+fun MapRenderer(
+    map: MapState,
+    layers: List<Layer>,
+    diagnosticsState: MapDiagnosticsState,
+    tileDecoder: (ByteArray) -> ImageBitmap? = ::decodeTileImageBitmap,
+    modifier: Modifier = Modifier,
+    backend: RenderBackend = ComposeCanvasRenderBackend,
+    onTapWorld: ((Point) -> Unit)? = null,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    onRenderError: ((Throwable) -> Unit)? = null,
+    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
+    invalidationKey: Any? = null,
+    onMapChanged: (() -> Unit)? = null,
+) = MapRendererImpl(
+    map = map,
+    layers = layers,
+    tileDecoder = tileDecoder,
+    modifier = modifier,
+    backend = backend,
+    onTapWorld = onTapWorld,
+    onFeatureSelect = onFeatureSelect,
+    onRenderError = onRenderError,
+    selectedFeatures = selectedFeatures,
+    invalidationKey = invalidationKey,
+    onMapChanged = onMapChanged,
+    diagnosticsState = diagnosticsState,
+)
+
+@Composable
+@Suppress("LongMethod")
+private fun MapRendererImpl(
+    map: MapState,
+    layers: List<Layer>,
+    tileDecoder: (ByteArray) -> ImageBitmap?,
+    modifier: Modifier,
+    backend: RenderBackend,
+    onTapWorld: ((Point) -> Unit)?,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
+    onRenderError: ((Throwable) -> Unit)?,
+    selectedFeatures: Set<FeatureSelectionRef>,
+    invalidationKey: Any?,
+    onMapChanged: (() -> Unit)?,
+    diagnosticsState: MapDiagnosticsState?,
 ) {
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val textMeasurer = rememberTextMeasurer(cacheSize = LABEL_TEXT_LAYOUT_CACHE_SIZE)
     val offscreenLabelDrawScope = remember { CanvasDrawScope() }
     val labelBitmapCache = remember { LabelBitmapCache() }
+    SideEffect {
+        labelBitmapCache.diagnosticsState = diagnosticsState
+    }
     val rasterPipeline = remember { RasterRenderPipeline() }
     val vectorPipeline = remember { VectorRenderPipeline() }
     val featureHitTester = remember { FeatureHitTester() }
@@ -179,6 +249,7 @@ fun MapRenderer(
         vectorLayerCacheSignature,
         selectedFeatures,
         invalidationKey,
+        diagnosticsState,
     ) {
         if (map.viewport.width <= 0 || map.viewport.height <= 0) return@LaunchedEffect
         val renderMap =
@@ -194,7 +265,7 @@ fun MapRenderer(
         overviewRequests.emit(overviewRequestTracker.next(renderMap))
     }
 
-    LaunchedEffect(activeLayers) {
+    LaunchedEffect(activeLayers, diagnosticsState) {
         renderRequests.collectLatestRenderRequest { renderMap ->
             val input = renderLoopInput
             supervisorScope {
@@ -251,6 +322,15 @@ fun MapRenderer(
                         lastVectorCommandsByLayer = commandsByLayer
                         lastVectorBitmapsByLayer = vectorBitmapsByLayer
                         lastVectorCacheKeysByLayer = vectorFrame.cacheKeysByLayer
+                        diagnosticsState?.publishFeatures(
+                            MapFeatureMetrics(
+                                returned = vectorFrame.metrics.returnedFeatures,
+                                visible = vectorFrame.metrics.visibleFeatures,
+                                geometryCommands = vectorFrame.metrics.geometryCommands,
+                                bitmapLayersReused = vectorFrame.metrics.bitmapLayersReused,
+                                bitmapLayersRebuilt = vectorFrame.metrics.bitmapLayersRebuilt,
+                            ),
+                        )
                         publishScene()
                     }
                 }
@@ -274,6 +354,16 @@ fun MapRenderer(
                             }
                             lastRasterFrame = renderableRasterFrame
                         }
+                        diagnosticsState?.publishTiles(
+                            MapTileMetrics(
+                                planned = placeholderFrame.tilesByLayer.totalItemCount(),
+                                loaded = rasterFrame.tilesByLayer.countItems { tile -> tile.bytes != null },
+                                missing = rasterFrame.tilesByLayer.countItems { tile -> tile.bytes == null },
+                                decoded = rasterFrame.decodedImagesByLayer.countItems { image -> image != null },
+                                displayed = diagnosticsState.metrics.tiles.displayed,
+                                cache = input.tileLayers.aggregateTileCacheMetrics(),
+                            ),
+                        )
                         publishScene()
                     }
                 }
@@ -394,6 +484,9 @@ fun MapRenderer(
             placeholderFrame = livePlaceholderFrame,
             effectiveOpacitiesByLayerId = effectiveOpacitiesByLayerId,
         )
+    SideEffect {
+        diagnosticsState?.publishDisplayedTiles(displayScene.displayedTileCount())
+    }
 
     backend.Content(
         modifier = interactionModifier,
@@ -693,6 +786,28 @@ internal fun RasterFrame.withRenderableTilesOnly(): RasterFrame {
 }
 
 private fun RasterFrame.hasTiles(): Boolean = tilesByLayer.values.any { tiles -> tiles.isNotEmpty() }
+
+private fun RenderScene.displayedTileCount(): Int =
+    layers.filterIsInstance<RasterRenderSceneLayer>().sumOf { layer -> layer.tiles.size }
+
+private fun <T> Map<String, List<T>>.totalItemCount(): Int = values.sumOf(List<T>::size)
+
+private fun <T> Map<String, List<T>>.countItems(predicate: (T) -> Boolean): Int =
+    values.sumOf { items -> items.count(predicate) }
+
+private suspend fun List<TileLayer>.aggregateTileCacheMetrics(): MapTileCacheMetrics {
+    val snapshots = mapNotNull { layer -> layer.tileFetchMetricsOrNull() }
+    return MapTileCacheMetrics(
+        entries = snapshots.sumOf { it.cacheEntries },
+        maxEntries = snapshots.sumOf { it.maxCacheEntries },
+        hits = snapshots.sumOf { it.cacheHits },
+        misses = snapshots.sumOf { it.cacheMisses },
+        evictions = snapshots.sumOf { it.cacheEvictions },
+        sourceFetches = snapshots.sumOf { it.sourceFetches },
+        coalescedRequests = snapshots.sumOf { it.coalescedRequests },
+        inFlightRequests = snapshots.sumOf { it.inFlightRequests },
+    )
+}
 
 @Suppress("TooGenericExceptionCaught") // Render branches isolate any backend failure while preserving cancellation.
 internal suspend fun runRenderBranch(

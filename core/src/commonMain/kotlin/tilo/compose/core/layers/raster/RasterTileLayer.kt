@@ -67,6 +67,9 @@ open class RasterTileLayer(
         fetcher.close()
     }
 
+    /** Returns a point-in-time snapshot of this layer's tile fetch and cache activity. */
+    suspend fun tileFetchMetrics(): TileFetchMetrics = fetcher.metrics()
+
     override suspend fun loadTiles(map: MapState): List<Tile> {
         validateProjection(map)
         return fetcher.fetchTiles(requestPlan(map).visible)

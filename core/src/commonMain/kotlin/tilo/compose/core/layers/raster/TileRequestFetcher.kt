@@ -45,9 +45,14 @@ internal class TileRequestFetcher(
     private val cacheMutex = Mutex()
     private val cache = mutableMapOf<String, ByteArray>()
     private val accessOrder = ArrayDeque<String>()
+    private var cacheHits = 0L
+    private var cacheMisses = 0L
+    private var cacheEvictions = 0L
 
     private val inFlightMutex = Mutex()
     private val inFlight = mutableMapOf<String, InFlightRequest>()
+    private var sourceFetches = 0L
+    private var coalescedRequests = 0L
 
     suspend fun fetchTiles(requests: List<TileRequest>): List<Tile> =
         coroutineScope {
@@ -63,9 +68,39 @@ internal class TileRequestFetcher(
         fetchScope.cancel()
     }
 
+    suspend fun metrics(): TileFetchMetrics {
+        val cacheSnapshot =
+            cacheMutex.withLock {
+                CacheMetricsSnapshot(
+                    entries = cache.size,
+                    hits = cacheHits,
+                    misses = cacheMisses,
+                    evictions = cacheEvictions,
+                )
+            }
+        val requestSnapshot =
+            inFlightMutex.withLock {
+                RequestMetricsSnapshot(
+                    sourceFetches = sourceFetches,
+                    coalescedRequests = coalescedRequests,
+                    inFlightRequests = inFlight.size,
+                )
+            }
+        return TileFetchMetrics(
+            cacheEntries = cacheSnapshot.entries,
+            maxCacheEntries = config.maxCacheEntries,
+            cacheHits = cacheSnapshot.hits,
+            cacheMisses = cacheSnapshot.misses,
+            cacheEvictions = cacheSnapshot.evictions,
+            sourceFetches = requestSnapshot.sourceFetches,
+            coalescedRequests = requestSnapshot.coalescedRequests,
+            inFlightRequests = requestSnapshot.inFlightRequests,
+        )
+    }
+
     private suspend fun fetchTile(request: TileRequest): Tile {
         val key = cacheKey(request)
-        val cached = cacheGet(key)
+        val cached = cacheGet(key, recordLookup = true)
         if (cached != null) {
             return Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = cached)
         }
@@ -74,12 +109,13 @@ internal class TileRequestFetcher(
             inFlightMutex.withLock {
                 // Another request may have populated the cache after the optimistic lookup
                 // above but before this coroutine acquired the in-flight lock.
-                cacheGet(key)?.let { bytes ->
+                cacheGet(key, recordLookup = false)?.let { bytes ->
                     return Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = bytes)
                 }
                 val existing = inFlight[key]?.takeUnless { it.deferred.isCancelled }
                 if (existing != null) {
                     existing.waiters += 1
+                    coalescedRequests += 1
                     existing
                 } else {
                     InFlightRequest().also { created ->
@@ -88,6 +124,7 @@ internal class TileRequestFetcher(
                                 fetchSemaphore.withPermit {
                                     inFlightMutex.withLock {
                                         created.started = true
+                                        sourceFetches += 1
                                     }
                                     readBytes(request)?.also { bytes ->
                                         cachePut(key, bytes)
@@ -157,9 +194,16 @@ internal class TileRequestFetcher(
         }
     }
 
-    private suspend fun cacheGet(key: String): ByteArray? =
+    private suspend fun cacheGet(
+        key: String,
+        recordLookup: Boolean,
+    ): ByteArray? =
         cacheMutex.withLock {
-            cache[key]?.also {
+            val cached = cache[key]
+            if (recordLookup) {
+                if (cached == null) cacheMisses += 1 else cacheHits += 1
+            }
+            cached?.also {
                 accessOrder.remove(key)
                 accessOrder.addLast(key)
             }
@@ -178,8 +222,22 @@ internal class TileRequestFetcher(
         cache[key] = bytes
         while (accessOrder.size > config.maxCacheEntries) {
             cache.remove(accessOrder.removeFirst())
+            cacheEvictions += 1
         }
     }
+
+    private data class CacheMetricsSnapshot(
+        val entries: Int,
+        val hits: Long,
+        val misses: Long,
+        val evictions: Long,
+    )
+
+    private data class RequestMetricsSnapshot(
+        val sourceFetches: Long,
+        val coalescedRequests: Long,
+        val inFlightRequests: Int,
+    )
 
     private class InFlightRequest {
         lateinit var deferred: Deferred<ByteArray?>

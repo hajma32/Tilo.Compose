@@ -113,6 +113,28 @@ class CommandBuilderTest {
     }
 
     @Test
+    fun metricsDistinguishFeaturesGeometryPartsAndLabels() {
+        val result =
+            CommandBuilder.buildWithMetrics(
+                map = testMap(width = 100, height = 100),
+                features =
+                    listOf(
+                        Feature(
+                            key = "multi",
+                            geometry = MultiPoint(listOf(Point(0.0, 0.0), Point(1.0, 1.0))),
+                            label = "Two points",
+                        ),
+                        Feature(key = "outside", geometry = Point(100.0, 0.0), label = "Outside"),
+                    ),
+            )
+
+        assertEquals(1, result.visibleFeatureCount)
+        assertEquals(2, result.geometryCommandCount)
+        assertEquals(1, result.labelCommandCount)
+        assertEquals(3, result.commands.size)
+    }
+
+    @Test
     fun rotatedViewportCullingUsesAllFourCorners() {
         val commands =
             CommandBuilder.build(

@@ -47,7 +47,7 @@ jobs:
         run: ./gradlew --no-daemon :draw:jvmTest :geocore:jvmTest :spatial-index:jvmTest
 
       - name: Run Android unit tests
-        run: ./gradlew --no-daemon :core:testDebugUnitTest :render:testDebugUnitTest
+        run: ./gradlew --no-daemon :core:testDebugUnitTest :render:testDebugUnitTest :ui:testDebugUnitTest
 
   android-instrumented:
     name: Android emulator tests

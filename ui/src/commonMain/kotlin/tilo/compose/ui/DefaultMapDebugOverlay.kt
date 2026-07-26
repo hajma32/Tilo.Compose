@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.isActive
 import tilo.compose.dsl.MapCameraState
+import tilo.compose.dsl.MapDiagnosticsState
 
 /** Frame statistics sampled by [DefaultMapDebugOverlay]. */
 data class MapDebugMetrics(
@@ -60,6 +61,45 @@ fun BoxScope.DefaultMapDebugOverlay(
     sampleWindowMillis: Long = 1_000L,
     alignment: Alignment = Alignment.TopStart,
     modifier: Modifier = Modifier,
+) = DefaultMapDebugOverlayImpl(
+    cameraState = cameraState,
+    diagnosticsState = null,
+    enabled = enabled,
+    targetFrameRate = targetFrameRate,
+    sampleWindowMillis = sampleWindowMillis,
+    alignment = alignment,
+    modifier = modifier,
+)
+
+/** Displays frame statistics and renderer diagnostics published by a `TiloMap`. */
+@Composable
+fun BoxScope.DefaultMapDebugOverlay(
+    cameraState: MapCameraState,
+    diagnosticsState: MapDiagnosticsState,
+    enabled: Boolean = true,
+    targetFrameRate: Int = 60,
+    sampleWindowMillis: Long = 1_000L,
+    alignment: Alignment = Alignment.TopStart,
+    modifier: Modifier = Modifier,
+) = DefaultMapDebugOverlayImpl(
+    cameraState = cameraState,
+    diagnosticsState = diagnosticsState,
+    enabled = enabled,
+    targetFrameRate = targetFrameRate,
+    sampleWindowMillis = sampleWindowMillis,
+    alignment = alignment,
+    modifier = modifier,
+)
+
+@Composable
+private fun BoxScope.DefaultMapDebugOverlayImpl(
+    cameraState: MapCameraState,
+    diagnosticsState: MapDiagnosticsState?,
+    enabled: Boolean,
+    targetFrameRate: Int,
+    sampleWindowMillis: Long,
+    alignment: Alignment,
+    modifier: Modifier,
 ) {
     require(targetFrameRate in 1..1_000) { "targetFrameRate must be between 1 and 1000" }
     require(sampleWindowMillis in 1L..60_000L) { "sampleWindowMillis must be between 1 and 60000" }
@@ -100,6 +140,38 @@ fun BoxScope.DefaultMapDebugOverlay(
         DebugLine("Frame avg", "${metrics.averageFrameTimeMillis.format(1)} ms")
         DebugLine("Frame max", "${metrics.maxFrameTimeMillis.format(1)} ms")
         DebugLine("Skipped", metrics.skippedFrames.toString())
+        diagnosticsState?.metrics?.let { renderMetrics ->
+            val tiles = renderMetrics.tiles
+            val tileCache = tiles.cache
+            val features = renderMetrics.features
+            val labels = renderMetrics.labels
+            DebugLine("Tiles", "${tiles.loaded}/${tiles.planned} loaded, ${tiles.decoded} decoded")
+            DebugLine("Displayed", tiles.displayed.toString())
+            DebugLine("Missing", tiles.missing.toString())
+            DebugLine(
+                "Tile cache",
+                "${tileCache.entries}/${tileCache.maxEntries}, ${hitRate(tileCache.hits, tileCache.misses)} hit",
+            )
+            DebugLine(
+                "Fetch",
+                "${tileCache.sourceFetches} source, ${tileCache.coalescedRequests} shared, ${tileCache.inFlightRequests} active",
+            )
+            DebugLine("Features", "${features.visible}/${features.returned} visible")
+            DebugLine("Geometry", "${features.geometryCommands} commands")
+            DebugLine(
+                "Bitmap",
+                "${features.bitmapLayersReused} reused, ${features.bitmapLayersRebuilt} rebuilt",
+            )
+            DebugLine("Labels", "${labels.placed}/${labels.candidates} placed")
+            DebugLine("Rejected", labels.rejected.toString())
+            DebugLine(
+                "Label cache",
+                "${labels.cacheEntries}/${labels.maxCacheEntries}, ${hitRate(
+                    labels.bitmapHits,
+                    labels.bitmapMisses,
+                )} hit",
+            )
+        }
     }
 }
 
@@ -188,6 +260,15 @@ private fun Double.format(decimalPlaces: Int): String {
     if (decimalPlaces == 0) return "$sign$whole"
     val fraction = (absolute % factor.toLong()).toString().padStart(decimalPlaces, '0')
     return "$sign$whole.$fraction"
+}
+
+internal fun hitRate(
+    hits: Long,
+    misses: Long,
+): String {
+    val total = hits + misses
+    if (total <= 0L) return "0%"
+    return "${(hits * 100.0 / total).format(0)}%"
 }
 
 private const val NANOS_PER_MILLISECOND = 1_000_000L

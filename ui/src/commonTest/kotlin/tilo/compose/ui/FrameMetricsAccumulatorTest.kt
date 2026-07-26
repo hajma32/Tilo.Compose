@@ -24,4 +24,11 @@ class FrameMetricsAccumulatorTest {
         assertEquals(33.33, metrics.maxFrameTimeMillis, absoluteTolerance = 0.01)
         assertEquals(1, metrics.skippedFrames)
     }
+
+    @Test
+    fun cacheHitRateHandlesEmptyAndPopulatedCounters() {
+        assertEquals("0%", hitRate(hits = 0, misses = 0))
+        assertEquals("75%", hitRate(hits = 3, misses = 1))
+        assertEquals("33%", hitRate(hits = 1, misses = 2))
+    }
 }

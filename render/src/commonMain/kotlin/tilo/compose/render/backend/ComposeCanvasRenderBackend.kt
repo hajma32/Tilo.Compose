@@ -147,6 +147,10 @@ internal fun DrawScope.drawRenderScene(
             )
         }
     }
+    labelBitmapCache.publishDiagnostics(
+        candidates = labels.size,
+        placed = placedLabelsByLayer.values.sumOf { placedLabels -> placedLabels.size },
+    )
 }
 
 internal fun tilePlaceholderColorsFor(surfaceColor: Color): TilePlaceholderColors =

@@ -20,6 +20,16 @@ internal data class VectorFrame(
     val commandsByLayer: Map<String, List<RenderCommand>>,
     val bitmapLayersByLayer: Map<String, VectorBitmapRenderSceneLayer>,
     val cacheKeysByLayer: Map<String, VectorLayerCacheKey>,
+    val metrics: VectorFrameMetrics = VectorFrameMetrics(),
+)
+
+internal data class VectorFrameMetrics(
+    val returnedFeatures: Int = 0,
+    val visibleFeatures: Int = 0,
+    val geometryCommands: Int = 0,
+    val labelCommands: Int = 0,
+    val bitmapLayersReused: Int = 0,
+    val bitmapLayersRebuilt: Int = 0,
 )
 
 internal data class VectorLayerCacheKey(
@@ -48,20 +58,31 @@ internal class VectorRenderPipeline(
             val commandsByLayer = mutableMapOf<String, List<RenderCommand>>()
             val bitmapLayersByLayer = mutableMapOf<String, VectorBitmapRenderSceneLayer>()
             val cacheKeysByLayer = mutableMapOf<String, VectorLayerCacheKey>()
+            var returnedFeatures = 0
+            var visibleFeatures = 0
+            var geometryCommands = 0
+            var labelCommands = 0
+            var bitmapLayersReused = 0
+            var bitmapLayersRebuilt = 0
 
             vectorLayers.forEach { layer ->
                 val selectedFeatureKeys = selectedFeatures.keysForLayer(layer.id)
                 cacheKeysByLayer[layer.id] = layer.cacheKey(selectedFeatureKeys, map.zoom)
                 val features = layer.source.getFeatures(map)
+                returnedFeatures += features.size
                 val projected = transformFeaturesToMapProjection(features, layer.projection, map)
-                val commands =
-                    CommandBuilder.build(
+                val buildResult =
+                    CommandBuilder.buildWithMetrics(
                         map = map,
                         features = projected,
                         layerId = layer.id,
                         selectedFeatureKeys = selectedFeatureKeys,
                         layerStyle = layer.style,
                     )
+                val commands = buildResult.commands
+                visibleFeatures += buildResult.visibleFeatureCount
+                geometryCommands += buildResult.geometryCommandCount
+                labelCommands += buildResult.labelCommandCount
 
                 when (val strategy = layer.renderStrategy) {
                     VectorRenderStrategy.Immediate -> {
@@ -75,14 +96,18 @@ internal class VectorRenderPipeline(
                         val bitmapLayer =
                             reusableBitmapsByLayer[layer.id]
                                 ?.takeIf { it.snapshot.canCover(map, strategy) }
-                                ?: bitmapRenderer.render(
-                                    layer = layer,
-                                    commands = geometry,
-                                    map = map,
-                                    strategy = strategy,
-                                    density = density,
-                                    layoutDirection = layoutDirection,
-                                )
+                                ?.also { bitmapLayersReused += 1 }
+                                ?: run {
+                                    bitmapLayersRebuilt += 1
+                                    bitmapRenderer.render(
+                                        layer = layer,
+                                        commands = geometry,
+                                        map = map,
+                                        strategy = strategy,
+                                        density = density,
+                                        layoutDirection = layoutDirection,
+                                    )
+                                }
                         bitmapLayer?.let {
                             bitmapLayersByLayer[layer.id] = bitmapLayer
                         }
@@ -94,6 +119,15 @@ internal class VectorRenderPipeline(
                 commandsByLayer = commandsByLayer,
                 bitmapLayersByLayer = bitmapLayersByLayer,
                 cacheKeysByLayer = cacheKeysByLayer,
+                metrics =
+                    VectorFrameMetrics(
+                        returnedFeatures = returnedFeatures,
+                        visibleFeatures = visibleFeatures,
+                        geometryCommands = geometryCommands,
+                        labelCommands = labelCommands,
+                        bitmapLayersReused = bitmapLayersReused,
+                        bitmapLayersRebuilt = bitmapLayersRebuilt,
+                    ),
             )
         }
 

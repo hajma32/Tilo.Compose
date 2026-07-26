@@ -1287,6 +1287,66 @@ fun TiloMap(
     cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
     invalidationKey: Any? = null,
     layers: MapLayerBuilder.() -> Unit,
+) = TiloMapImpl(
+    cameraState = cameraState,
+    modifier = modifier,
+    onTapWorld = onTapWorld,
+    onFeatureSelect = onFeatureSelect,
+    onRenderError = onRenderError,
+    selectedFeatures = selectedFeatures,
+    attributionContent = attributionContent,
+    scaleBarContent = scaleBarContent,
+    cameraControlsContent = cameraControlsContent,
+    invalidationKey = invalidationKey,
+    diagnosticsState = null,
+    layers = layers,
+)
+
+/** Compose map surface with opt-in rendering diagnostics published to [diagnosticsState]. */
+@Composable
+@ExperimentalTiloApi
+fun TiloMap(
+    cameraState: MapCameraState,
+    diagnosticsState: MapDiagnosticsState,
+    modifier: Modifier = Modifier,
+    onTapWorld: ((Point) -> Unit)? = null,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    onRenderError: ((Throwable) -> Unit)? = null,
+    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
+    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
+    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
+    invalidationKey: Any? = null,
+    layers: MapLayerBuilder.() -> Unit,
+) = TiloMapImpl(
+    cameraState = cameraState,
+    modifier = modifier,
+    onTapWorld = onTapWorld,
+    onFeatureSelect = onFeatureSelect,
+    onRenderError = onRenderError,
+    selectedFeatures = selectedFeatures,
+    attributionContent = attributionContent,
+    scaleBarContent = scaleBarContent,
+    cameraControlsContent = cameraControlsContent,
+    invalidationKey = invalidationKey,
+    diagnosticsState = diagnosticsState,
+    layers = layers,
+)
+
+@Composable
+private fun TiloMapImpl(
+    cameraState: MapCameraState,
+    modifier: Modifier,
+    onTapWorld: ((Point) -> Unit)?,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
+    onRenderError: ((Throwable) -> Unit)?,
+    selectedFeatures: Set<FeatureSelectionRef>,
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)?,
+    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)?,
+    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)?,
+    invalidationKey: Any?,
+    diagnosticsState: MapDiagnosticsState?,
+    layers: MapLayerBuilder.() -> Unit,
 ) {
     val builtLayers = rememberManagedMapLayers(layers)
     Box(modifier = modifier) {
@@ -1298,6 +1358,7 @@ fun TiloMap(
             onRenderError = onRenderError,
             selectedFeatures = selectedFeatures,
             invalidationKey = invalidationKey,
+            diagnosticsState = diagnosticsState,
         )
         BottomMapOverlays(
             cameraState = cameraState,
@@ -1391,17 +1452,33 @@ private fun MapRendererLayer(
     onRenderError: ((Throwable) -> Unit)?,
     selectedFeatures: Set<FeatureSelectionRef>,
     invalidationKey: Any?,
+    diagnosticsState: MapDiagnosticsState?,
 ) {
     val cameraControlRevision = cameraState.cameraControlRevision
-    MapRenderer(
-        map = cameraState.mapState,
-        layers = layers,
-        modifier = Modifier.fillMaxSize(),
-        onTapWorld = onTapWorld,
-        onFeatureSelect = onFeatureSelect,
-        onRenderError = onRenderError,
-        selectedFeatures = selectedFeatures,
-        invalidationKey = invalidationKey to cameraControlRevision,
-        onMapChanged = cameraState::markChanged,
-    )
+    if (diagnosticsState == null) {
+        MapRenderer(
+            map = cameraState.mapState,
+            layers = layers,
+            modifier = Modifier.fillMaxSize(),
+            onTapWorld = onTapWorld,
+            onFeatureSelect = onFeatureSelect,
+            onRenderError = onRenderError,
+            selectedFeatures = selectedFeatures,
+            invalidationKey = invalidationKey to cameraControlRevision,
+            onMapChanged = cameraState::markChanged,
+        )
+    } else {
+        MapRenderer(
+            map = cameraState.mapState,
+            layers = layers,
+            diagnosticsState = diagnosticsState,
+            modifier = Modifier.fillMaxSize(),
+            onTapWorld = onTapWorld,
+            onFeatureSelect = onFeatureSelect,
+            onRenderError = onRenderError,
+            selectedFeatures = selectedFeatures,
+            invalidationKey = invalidationKey to cameraControlRevision,
+            onMapChanged = cameraState::markChanged,
+        )
+    }
 }

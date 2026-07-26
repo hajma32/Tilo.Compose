@@ -4,6 +4,7 @@ package tilo.compose.dsl
 
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.raster.RasterTileLayer
+import tilo.compose.core.layers.raster.TileFetchMetrics
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.tile.TileCoordinate
 
@@ -140,7 +141,16 @@ internal data class PresentedTileLayer(
         require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
         require(minZoom == null || maxZoom == null || minZoom <= maxZoom) { "minZoom must not be greater than maxZoom" }
     }
+
+    suspend fun tileFetchMetrics(): TileFetchMetrics = runtime.tileFetchMetrics()
 }
+
+internal suspend fun TileLayer.tileFetchMetricsOrNull(): TileFetchMetrics? =
+    when (this) {
+        is PresentedTileLayer -> tileFetchMetrics()
+        is RasterTileLayer -> tileFetchMetrics()
+        else -> null
+    }
 
 /**
  * Owns raster runtimes across recompositions of one TiloMap instance.

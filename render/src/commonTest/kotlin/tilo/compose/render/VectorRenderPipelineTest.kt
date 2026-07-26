@@ -45,6 +45,11 @@ class VectorRenderPipelineTest {
 
             assertEquals(listOf("feature:point"), frame.commandsByLayer.getValue("places").map(RenderCommand::id))
             assertEquals(0, bitmapRenders)
+            assertEquals(1, frame.metrics.returnedFeatures)
+            assertEquals(1, frame.metrics.visibleFeatures)
+            assertEquals(1, frame.metrics.geometryCommands)
+            assertEquals(0, frame.metrics.bitmapLayersReused)
+            assertEquals(0, frame.metrics.bitmapLayersRebuilt)
         }
 
     /**
@@ -74,6 +79,8 @@ class VectorRenderPipelineTest {
 
             var frame = pipeline.buildFrame(listOf(layer), map, Density(1f), LayoutDirection.Ltr)
             assertEquals(1, renderCount)
+            assertEquals(1, frame.metrics.bitmapLayersRebuilt)
+            assertEquals(0, frame.metrics.bitmapLayersReused)
 
             // Equivalent recomposition and a pan inside bitmap padding reuse the same bitmap.
             val sameKeys = mapOf(layer.id to layer.cacheKey())
@@ -87,6 +94,8 @@ class VectorRenderPipelineTest {
                     reusableBitmapsByLayer = frame.bitmapLayersByLayer.validFor(sameKeys, sameKeys),
                 )
             assertEquals(1, renderCount)
+            assertEquals(1, frame.metrics.bitmapLayersReused)
+            assertEquals(0, frame.metrics.bitmapLayersRebuilt)
 
             // Crossing the zoom threshold is a viewport invalidation.
             map.zoom = 5.31

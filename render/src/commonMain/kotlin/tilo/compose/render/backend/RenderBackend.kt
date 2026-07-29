@@ -13,6 +13,12 @@ import tilo.compose.core.map.MapState
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.LabelBitmapCache
 
+/**
+ * Experimental extension point for presenting an immutable [RenderScene].
+ *
+ * Implementations may observe scenes in [onScene] and render them in [Content]. The supplied
+ * map state and caches belong to the map renderer and must not be closed by the backend.
+ */
 @ExperimentalTiloRenderingApi
 interface RenderBackend {
     val id: String

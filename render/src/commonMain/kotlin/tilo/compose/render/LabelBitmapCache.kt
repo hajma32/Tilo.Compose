@@ -33,6 +33,11 @@ import androidx.compose.ui.graphics.Canvas as GraphicsCanvas
 
 private const val DEFAULT_LABEL_CACHE_SIZE = 2_048
 
+/**
+ * Bounded least-recently-used cache for measured label layouts and rasterized label bitmaps.
+ *
+ * A cache belongs to one renderer lifecycle. `maxEntries` limits combined layout/bitmap entries.
+ */
 @ExperimentalTiloRenderingApi
 class LabelBitmapCache(
     private val maxEntries: Int = DEFAULT_LABEL_CACHE_SIZE,

@@ -68,6 +68,12 @@ fun BoxScope.DefaultZoomControls(
     )
 }
 
+/**
+ * Draws zoom buttons backed by an application-provided suspending operation.
+ *
+ * Starting a new zoom cancels the previous operation, making this overload suitable for
+ * animated camera implementations as well as immediate callbacks.
+ */
 @Composable
 fun BoxScope.DefaultZoomControls(
     zoomStep: Double = 1.0,

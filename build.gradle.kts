@@ -2,9 +2,20 @@ import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import io.gitlab.arturbosch.detekt.Detekt
 import io.gitlab.arturbosch.detekt.extensions.DetektExtension
 import org.gradle.api.publish.PublishingExtension
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.api.tasks.bundling.Zip
+import org.jetbrains.dokka.gradle.DokkaExtension
+import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
 import org.jlleitschuh.gradle.ktlint.KtlintExtension
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -15,11 +26,27 @@ plugins {
     alias(libs.plugins.composeMultiplatform) apply false
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
-    alias(libs.plugins.dokka) apply false
+    alias(libs.plugins.dokka)
     alias(libs.plugins.mavenPublish) apply false
     // code quality plugins (available for subprojects)
     id("org.jlleitschuh.gradle.ktlint") version "14.0.1" apply false
     id("io.gitlab.arturbosch.detekt") version "1.23.8" apply false
+}
+
+dokka {
+    dokkaPublications.html {
+        moduleName.set("Tilo Compose")
+        failOnWarning.set(true)
+    }
+}
+
+dependencies {
+    dokka(project(":spatial-index"))
+    dokka(project(":geocore"))
+    dokka(project(":core"))
+    dokka(project(":render"))
+    dokka(project(":ui"))
+    dokka(project(":draw"))
 }
 
 data class PublishedModule(
@@ -27,6 +54,117 @@ data class PublishedModule(
     val displayName: String,
     val description: String,
 )
+
+abstract class VerifyPublicApiDocumentation : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceDirectories: ConfigurableFileCollection
+
+    @TaskAction
+    fun verify() {
+        val declaration =
+            Regex(
+                """^(?!(?:private|internal)\b)(?:(?:public|expect|actual|data|sealed|enum|value|annotation|fun|infix|operator|suspend|tailrec)\s+)*(?:class|interface|object|fun|typealias)\b""",
+            )
+        val undocumented = mutableListOf<String>()
+
+        sourceDirectories.asFileTree
+            .matching { include("**/*.kt") }
+            .sortedBy { it.invariantSeparatorsPath }
+            .forEach { sourceFile ->
+                val lines = sourceFile.readLines()
+                lines.forEachIndexed { index, line ->
+                    if (!declaration.containsMatchIn(line)) return@forEachIndexed
+
+                    var previous = index - 1
+                    while (previous >= 0) {
+                        while (previous >= 0 && lines[previous].isBlank()) previous--
+                        if (previous < 0) break
+                        if (lines[previous].trimStart().startsWith("@")) {
+                            previous--
+                            continue
+                        }
+                        if (lines[previous].trim() == ")") {
+                            var depth = 1
+                            previous--
+                            while (previous >= 0 && depth > 0) {
+                                depth += lines[previous].count { it == ')' }
+                                depth -= lines[previous].count { it == '(' }
+                                previous--
+                            }
+                            continue
+                        }
+                        break
+                    }
+
+                    var commentStart = previous
+                    if (previous >= 0 && lines[previous].trimEnd().endsWith("*/")) {
+                        while (commentStart >= 0 && !lines[commentStart].trimStart().startsWith("/*")) {
+                            commentStart--
+                        }
+                    }
+                    if (commentStart < 0 || !lines[commentStart].trimStart().startsWith("/**")) {
+                        undocumented += "${sourceFile.invariantSeparatorsPath}:${index + 1}: ${line.trim()}"
+                    }
+                }
+            }
+
+        check(undocumented.isEmpty()) {
+            "Public common API declarations must have KDoc:\n${undocumented.joinToString("\n")}"
+        }
+    }
+}
+
+abstract class VerifyDokkaLinks : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val documentationDirectory: DirectoryProperty
+
+    @TaskAction
+    fun verify() {
+        val root = documentationDirectory.get().asFile
+        val htmlFiles = root.walkTopDown().filter { it.isFile && it.extension == "html" }.toList()
+        val expectedModules = setOf("spatial-index", "geocore", "core", "render", "ui", "draw")
+        val missingModules = expectedModules.filterNot { root.resolve(it).isDirectory }
+        val unresolvedTiloLinks = mutableListOf<String>()
+        val missingTargets = mutableListOf<String>()
+        val hrefPattern = Regex("""href=[\"']([^\"']+)[\"']""")
+
+        htmlFiles.forEach { htmlFile ->
+            val html = htmlFile.readText()
+            if ("data-unresolved-link=\"tilo." in html) {
+                unresolvedTiloLinks += htmlFile.relativeTo(root).invariantSeparatorsPath
+            }
+            hrefPattern.findAll(html).forEach hrefLoop@{ match ->
+                val href = match.groupValues[1].substringBefore('#').substringBefore('?')
+                if (
+                    href.isEmpty() || href.startsWith("/") || href.contains("://") ||
+                    href.startsWith("mailto:") || href.startsWith("javascript:")
+                ) {
+                    return@hrefLoop
+                }
+                val target = htmlFile.parentFile.toPath().resolve(href).normalize().toFile()
+                if (!target.exists()) {
+                    missingTargets += "${htmlFile.relativeTo(root).invariantSeparatorsPath} -> $href"
+                }
+            }
+        }
+
+        check(missingModules.isEmpty() && unresolvedTiloLinks.isEmpty() && missingTargets.isEmpty()) {
+            buildString {
+                if (missingModules.isNotEmpty()) appendLine("Missing Dokka modules: ${missingModules.joinToString()}")
+                if (unresolvedTiloLinks.isNotEmpty()) {
+                    appendLine("Unresolved Tilo API links:")
+                    appendLine(unresolvedTiloLinks.joinToString("\n"))
+                }
+                if (missingTargets.isNotEmpty()) {
+                    appendLine("Broken relative links:")
+                    appendLine(missingTargets.joinToString("\n"))
+                }
+            }.trimEnd()
+        }
+    }
+}
 
 val publishedModules =
     mapOf(
@@ -140,6 +278,25 @@ subprojects {
         }
     }
 
+    pluginManager.withPlugin("org.jetbrains.dokka") {
+        extensions.configure<DokkaExtension> {
+            dokkaSourceSets.configureEach {
+                documentedVisibilities.set(setOf(VisibilityModifier.Public))
+                sourceLink {
+                    localDirectory.set(project.layout.projectDirectory.dir("src"))
+                    val remoteSourceDirectory =
+                        when (project.name) {
+                            "geocore" -> "https://github.com/hajma32/Tilo.GeoCore/tree/main/src"
+                            "spatial-index" -> "https://github.com/hajma32/Tilo.SpatialIndex/tree/main/src"
+                            else -> "https://github.com/hajma32/Tilo.Compose/tree/main/${project.name}/src"
+                        }
+                    remoteUrl.set(URI(remoteSourceDirectory))
+                    remoteLineSuffix.set("#L")
+                }
+            }
+        }
+    }
+
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
     extensions.configure<KtlintExtension> {
         version.set("1.5.0")
@@ -190,6 +347,30 @@ tasks.register("qualityCheck") {
     description = "Runs deterministic Kotlin formatting and static-analysis gates for every project."
     dependsOn(subprojects.map { project -> "${project.path}:ktlintCheck" })
     dependsOn(subprojects.map { project -> "${project.path}:detekt" })
+}
+
+val publishedCommonMainSources =
+    publishedModules.keys.map { moduleName ->
+        project(moduleName).layout.projectDirectory.dir("src/commonMain/kotlin")
+    }
+
+tasks.register<VerifyPublicApiDocumentation>("verifyPublicApiDocumentation") {
+    group = "verification"
+    description = "Checks that every public top-level common API declaration has KDoc."
+    sourceDirectories.from(publishedCommonMainSources)
+}
+
+tasks.register<VerifyDokkaLinks>("verifyDokkaLinks") {
+    group = "verification"
+    description = "Checks module presence, Tilo symbol resolution, and relative links in Dokka HTML."
+    dependsOn("dokkaGenerate")
+    documentationDirectory.set(layout.buildDirectory.dir("dokka/html"))
+}
+
+tasks.register("documentationCheck") {
+    group = "verification"
+    description = "Verifies public API KDoc and generates linked multi-module documentation."
+    dependsOn("verifyPublicApiDocumentation", "verifyDokkaLinks")
 }
 
 tasks.register<Delete>("cleanTiloTestRepository") {

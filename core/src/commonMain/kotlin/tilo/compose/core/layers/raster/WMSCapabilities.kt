@@ -8,6 +8,7 @@ import tilo.compose.core.net.sharedHttpClient
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.TileGrid
 
+/** Metadata advertised by a named WMS layer in a GetCapabilities response. */
 data class WMSLayerCapabilities(
     val name: String,
     val title: String? = null,
@@ -15,6 +16,12 @@ data class WMSLayerCapabilities(
     val boundingBoxes: Map<String, BoundingBox> = emptyMap(),
 )
 
+/**
+ * Parsed subset of a WMS GetCapabilities document used to configure tile layers.
+ *
+ * Bounding boxes are retained per advertised CRS so [tileGridFor] can derive a
+ * tile matrix for one layer or the combined extent of multiple layers.
+ */
 data class WMSCapabilities(
     val version: String,
     val getMapUrl: String?,
@@ -177,6 +184,7 @@ data class WMSCapabilities(
 
 private fun String.toWMSLayerNames(): List<String> = split(',').map(String::trim).filter(String::isNotEmpty)
 
+/** Downloads and parses the WMS capabilities metadata needed by Tilo's raster pipeline. */
 class WMSCapabilitiesLoader(
     private val fetchCapabilities: suspend (String) -> String = ::fetchWMSCapabilitiesXml,
 ) {

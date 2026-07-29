@@ -40,6 +40,9 @@ jobs:
       - name: Run Kotlin quality gates
         run: ./gradlew --no-daemon qualityCheck
 
+      - name: Verify API documentation
+        run: ./gradlew --no-daemon documentationCheck
+
       - name: Compile Android targets
         run: ./gradlew --no-daemon :core:compileDebugKotlinAndroid :render:compileDebugKotlinAndroid :tilo-samples:compileDebugKotlinAndroid
 

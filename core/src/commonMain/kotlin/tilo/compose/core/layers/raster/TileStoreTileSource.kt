@@ -25,9 +25,9 @@ enum class TileRowScheme {
  * Raster source backed by an app-owned z/x/y tile store.
  *
  * This class deliberately does not open files or SQLite databases itself. Apps
- * or platform adapters provide [readTile], which makes S-JTSK/Krovak, Web
+ * or platform adapters provide the `readTile` callback, which makes S-JTSK/Krovak, Web
  * Mercator and project-specific tile stores equally valid as long as
- * [projection] and [grid] describe the stored tiles.
+ * the supplied projection and grid describe the stored tiles.
  */
 class TileStoreTileSource(
     override val projection: Projection,

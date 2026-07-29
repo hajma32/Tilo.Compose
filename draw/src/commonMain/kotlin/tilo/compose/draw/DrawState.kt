@@ -9,6 +9,12 @@ import androidx.compose.runtime.setValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
 
+/**
+ * Observable owner of an interactive drawing draft and its undo/redo history.
+ *
+ * Feed map taps to [onMapTap] while [isDrawing] is true and render [draftFeatures] through
+ * `drawLayer`. Saving invokes the application callback and clears the current draft.
+ */
 class DrawState internal constructor(
     initialMode: DrawMode = DrawMode.Point,
     private val featureFactory: DrawingFeatureFactory,
@@ -145,6 +151,12 @@ class DrawState internal constructor(
     }
 }
 
+/**
+ * Creates drawing state outside composition.
+ *
+ * The returned state is independent of Compose lifecycle management; the caller owns and
+ * retains it for as long as the drawing session should survive.
+ */
 fun createDrawState(
     initialMode: DrawMode = DrawMode.Point,
     style: DrawStyle = DefaultDrawStyle(),
@@ -158,6 +170,12 @@ fun createDrawState(
         onChange = onChange,
     )
 
+/**
+ * Remembers drawing state for [initialMode] and [style] in the current composition.
+ *
+ * Updated callbacks are observed without discarding draft history. Changing the initial mode
+ * or style intentionally creates a fresh state.
+ */
 @Composable
 fun rememberDrawState(
     initialMode: DrawMode = DrawMode.Point,

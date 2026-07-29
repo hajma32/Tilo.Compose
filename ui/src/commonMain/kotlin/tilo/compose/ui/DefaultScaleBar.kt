@@ -38,6 +38,7 @@ import tilo.compose.core.scale.ScaleBar
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.drawLabelTextWithHalo
 
+/** Draws a two-segment scale bar at the bottom start of its containing map box. */
 @OptIn(ExperimentalTextApi::class)
 @Composable
 fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {

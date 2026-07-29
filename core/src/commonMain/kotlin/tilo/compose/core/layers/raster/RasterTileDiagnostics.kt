@@ -14,7 +14,7 @@ enum class RasterTileFailureKind {
 /**
  * Structured debug details for one recoverable raster tile failure.
  *
- * [message] and [cause] may contain low-level transport or source details and
+ * `message` and `cause` may contain low-level transport or source details and
  * should not be shown directly as user-facing copy.
  */
 data class RasterTileFailure(

@@ -7,11 +7,14 @@ import tilo.compose.core.scale.ScaleBar
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.MapCameraState
 
+/** Returns the default content slot for displaying active layer attributions. */
 fun defaultAttributionContent(): @Composable BoxScope.(List<Attribution>) -> Unit =
     { attributions -> DefaultAttributionOverlay(attributions) }
 
+/** Returns the default content slot for displaying the current map scale. */
 fun defaultScaleBarContent(): @Composable BoxScope.(ScaleBar) -> Unit = { scaleBar -> DefaultScaleBar(scaleBar) }
 
+/** Returns animated zoom controls for the camera slot in `TiloMap`. */
 @ExperimentalTiloApi
 fun defaultZoomControlsContent(
     style: CameraControlsStyle = CameraControlsStyle(),

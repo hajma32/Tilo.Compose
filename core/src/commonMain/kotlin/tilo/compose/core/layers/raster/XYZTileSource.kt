@@ -8,8 +8,8 @@ import tilo.compose.core.tile.TileRequest
 /**
  * URL-template raster source using `{z}`, `{x}`, `{y}` placeholders.
  *
- * XYZ slippy-map sources are Web Mercator by default. Pass [projection] and
- * [grid] explicitly for custom grids that use the same address shape.
+ * XYZ slippy-map sources are Web Mercator by default. Pass the projection and
+ * grid explicitly for custom grids that use the same address shape.
  */
 class XYZTileSource internal constructor(
     private val urlTemplate: String,

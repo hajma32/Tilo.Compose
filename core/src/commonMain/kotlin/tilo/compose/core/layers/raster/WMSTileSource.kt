@@ -29,7 +29,7 @@ enum class WMSAxisOrder {
 /**
  * OGC WMS GetMap raster source.
  *
- * The requested [crs] must match [projection]. Raster reprojection is
+ * The requested `crs` must match the supplied projection. Raster reprojection is
  * intentionally left to the service or to a custom source implementation.
  */
 class WMSTileSource internal constructor(

@@ -32,6 +32,7 @@ import tilo.compose.render.drawTiles
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
+/** Default [RenderBackend] that paints raster and vector scene layers on a Compose canvas. */
 @ExperimentalTiloRenderingApi
 object ComposeCanvasRenderBackend : RenderBackend {
     override val id: String = "compose-canvas"

@@ -10,6 +10,7 @@ import tilo.compose.core.tile.Tile
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.RenderCommand
 
+/** Ordered raster or vector content resolved for one render frame. */
 @ExperimentalTiloRenderingApi
 sealed interface RenderSceneLayer {
     val id: String
@@ -17,6 +18,7 @@ sealed interface RenderSceneLayer {
     val opacity: Double
 }
 
+/** Raster tiles and their optional decoded images at one position in the scene stack. */
 @ExperimentalTiloRenderingApi
 data class RasterRenderSceneLayer(
     override val id: String,
@@ -31,6 +33,7 @@ data class RasterRenderSceneLayer(
     }
 }
 
+/** Immediate vector commands and layer-local point icon painters. */
 @ExperimentalTiloRenderingApi
 class VectorRenderSceneLayer(
     override val id: String,
@@ -44,6 +47,7 @@ class VectorRenderSceneLayer(
     }
 }
 
+/** Cached vector bitmap plus the camera snapshot at which it was rendered. */
 @ExperimentalTiloRenderingApi
 data class VectorBitmapRenderSceneLayer(
     override val id: String,
@@ -57,6 +61,7 @@ data class VectorBitmapRenderSceneLayer(
     }
 }
 
+/** Camera and viewport values required to place a cached vector bitmap in a later frame. */
 @ExperimentalTiloRenderingApi
 data class VectorBitmapSnapshot(
     val center: Point,
@@ -68,6 +73,7 @@ data class VectorBitmapSnapshot(
     val bearing: Double = 0.0,
 )
 
+/** Immutable, back-to-front ordered input passed to a [RenderBackend]. */
 @ExperimentalTiloRenderingApi
 data class RenderScene(
     val layers: List<RenderSceneLayer>,

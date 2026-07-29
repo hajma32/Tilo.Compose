@@ -10,8 +10,8 @@ import tilo.compose.core.tile.TileRequestPlan
 /**
  * Generic raster layer for tile sources that already match the map CRS.
  *
- * Rendering remains CRS-agnostic: the layer plans tiles in [grid] world
- * coordinates, asks [source] for bytes, and returns tiles with bounds for the
+ * Rendering remains CRS-agnostic: the layer plans tiles in its grid's world
+ * coordinates, asks its source for bytes, and returns tiles with bounds for the
  * renderer to place. No raster reprojection is performed client-side.
  *
  * A directly constructed layer is owned by its caller and must be [close]d
@@ -20,7 +20,7 @@ import tilo.compose.core.tile.TileRequestPlan
  * construct raster layers manage their own instances.
  * Nearby-tile prefetching and coarse overview loading are disabled by default;
  * callers must opt in through the corresponding margin and zoom-offset options.
- * [onError] is invoked once for each source request that throws; cancellation
+ * `onError` is invoked once for each source request that throws; cancellation
  * still propagates normally and an unavailable (`null`) tile is not an error.
  */
 open class RasterTileLayer(

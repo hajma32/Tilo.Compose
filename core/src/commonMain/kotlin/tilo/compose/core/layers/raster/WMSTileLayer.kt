@@ -11,8 +11,8 @@ import tilo.compose.core.tile.TileGrid
  * Tiles are expected to be served in the same CRS as the map itself.
  * No client-side tile reprojection is performed.
  *
- * [crs] is the WMS SRS/CRS value, e.g. "EPSG:5514".
- * WMS 1.3.0 uses `CRS` and honors [axisOrder]; older versions use `SRS` and
+ * `crs` is the WMS SRS/CRS value, e.g. "EPSG:5514".
+ * WMS 1.3.0 uses `CRS` and honors `axisOrder`; older versions use `SRS` and
  * x/y BBOX order.
  * Prefetching and coarse overview loading are opt-in.
  * The caller owns directly constructed instances and must close them after use.

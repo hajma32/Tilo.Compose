@@ -8,10 +8,10 @@ import tilo.compose.core.tile.TileGrid
 /**
  * XYZ (slippy-map) tile layer.
  *
- * [urlTemplate] uses `{z}`, `{x}`, `{y}` placeholders, e.g.:
+ * `urlTemplate` uses `{z}`, `{x}`, `{y}` placeholders, e.g.:
  * `"https://tile.openstreetmap.org/{z}/{x}/{y}.png"`.
  *
- * For TMS row addressing set [tms] = true.
+ * For TMS row addressing set `tms = true`.
  * Prefetching and coarse overview loading are opt-in.
  * The caller owns directly constructed instances and must close them after use.
  */

@@ -5,6 +5,7 @@ import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
 import tilo.compose.core.projection.Projection
 
+/** Creates an immediate vector layer that displays the current draft from [state]. */
 fun drawLayer(
     state: DrawState,
     id: String = "draw-layer",
@@ -36,6 +37,7 @@ private fun createDrawLayer(
         renderStrategy = VectorRenderStrategy.Immediate,
     )
 
+/** Adds the current draft from [state] to this layer sink. */
 fun LayerSink.drawLayer(
     state: DrawState,
     id: String = "draw-layer",

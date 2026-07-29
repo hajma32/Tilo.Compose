@@ -11,12 +11,14 @@ import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.feature.PolygonStyle
 import tilo.compose.core.feature.StrokeStyle
 
+/** Point, line, and polygon presentation used for an in-progress drawing. */
 interface DrawStyle {
     val point: PointStyle
     val line: LineStyle
     val polygon: PolygonStyle
 }
 
+/** Orange drawing style with a contrasting white outline on every geometry type. */
 data class DefaultDrawStyle(
     override val point: PointStyle =
         PointStyle(

@@ -69,7 +69,7 @@ private val OPEN_STREET_MAP_ATTRIBUTION =
 /**
  * Immutable camera snapshot suitable for viewport-dependent data loading.
  *
- * [bounds] and [resolution] use the map projection's coordinate units. A snapshot is not ready
+ * `bounds` and `resolution` use the map projection's coordinate units. A snapshot is not ready
  * until the map has received a non-empty viewport from layout.
  */
 @ExperimentalTiloApi

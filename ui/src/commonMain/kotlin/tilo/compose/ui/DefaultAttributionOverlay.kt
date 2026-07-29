@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import tilo.compose.core.layers.Attribution
 
+/** Displays active provider credits at the bottom end of a map and opens linked credits on tap. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BoxScope.DefaultAttributionOverlay(attributions: List<Attribution>) {

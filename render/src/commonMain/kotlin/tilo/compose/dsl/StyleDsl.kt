@@ -93,6 +93,7 @@ fun extraLargeLabelStyle(block: LabelStyleBuilder.() -> Unit = {}): LabelStyle =
 fun featureLayerStyle(block: FeatureLayerStyleBuilder.() -> Unit = {}): FeatureLayerStyle =
     FeatureLayerStyleBuilder().apply(block).build()
 
+/** DSL builder for base, selected, and zoom-dependent feature-layer styles. */
 @ExperimentalTiloApi
 @TiloDsl
 class FeatureLayerStyleBuilder {

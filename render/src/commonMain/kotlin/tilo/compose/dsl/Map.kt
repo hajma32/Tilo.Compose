@@ -584,7 +584,7 @@ class MapLayerBuilder private constructor(
                     attributions = resolvedAttributions,
                     state = state,
                     onError = onError,
-                    create = { reportError ->
+                    create = { reportError, reportDiagnostic ->
                         val capabilities = context.loadWMSCapabilities(capabilitiesUrl)
                         capabilities.createTileLayer(
                             id = id,
@@ -606,6 +606,7 @@ class MapLayerBuilder private constructor(
                             overviewPrefetchMargin = overviewPrefetchMargin,
                             attributions = emptyList(),
                             onError = reportError,
+                            onDiagnostic = reportDiagnostic,
                         )
                     },
                 ),
@@ -781,7 +782,9 @@ class MapLayerBuilder private constructor(
                         overviewPrefetchMargin = overviewPrefetchMargin,
                         attributions = resolvedAttributions,
                         onError = diagnostics::tileFailed,
+                        onDiagnostic = diagnostics::onDiagnostic,
                     ),
+                diagnostics = diagnostics,
                 update = { update ->
                     if (update is RasterLayerUpdate.Source) {
                         diagnostics.update(update.state, update.onError)
@@ -853,7 +856,7 @@ class MapLayerBuilder private constructor(
             update = RasterLayerUpdate.TileStore(readTile, state, onError),
         ) {
             val reader = MutableTileReader(readTile)
-            val diagnostics = MutableRasterLayerDiagnostics(state, onError)
+            val diagnostics = MutableRasterLayerDiagnostics(state, onError, localSource = true)
             StoredRasterLayer(
                 layer =
                     RasterTileLayer(
@@ -878,7 +881,9 @@ class MapLayerBuilder private constructor(
                         overviewPrefetchMargin = overviewPrefetchMargin,
                         attributions = resolvedAttributions,
                         onError = diagnostics::tileFailed,
+                        onDiagnostic = diagnostics::onDiagnostic,
                     ),
+                diagnostics = diagnostics,
                 update = { update ->
                     if (update is RasterLayerUpdate.TileStore) {
                         reader.delegate = update.readTile
@@ -1078,8 +1083,9 @@ class MapLayerBuilder private constructor(
                 val key = ManagedRasterLayerKey(layerId = id, configuration = configuration)
                 context.managedRasterKeys += key
                 context.managedRasterUpdates[key] = update
+                val stored = store.getOrCreateStored(key, create)
                 PresentedTileLayer(
-                    runtime = store.getOrCreate(key, create),
+                    runtime = stored.layer,
                     id = id,
                     zIndex = zIndex,
                     visible = visible,
@@ -1087,6 +1093,7 @@ class MapLayerBuilder private constructor(
                     minZoom = minZoom,
                     maxZoom = maxZoom,
                     attributions = attributions,
+                    diagnostics = stored.diagnostics,
                 )
             }
         items += MapLayerItem.LayerValue(layer)

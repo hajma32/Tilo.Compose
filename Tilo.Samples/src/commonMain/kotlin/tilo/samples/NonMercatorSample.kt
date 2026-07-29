@@ -15,6 +15,7 @@ import tilo.compose.core.feature.PointShape
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 import tilo.compose.dsl.ExperimentalTiloApi
+import tilo.compose.dsl.RasterLayerAvailability
 import tilo.compose.dsl.RasterLayerStatus
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.attribution
@@ -71,7 +72,12 @@ internal fun BoxScope.NonMercatorSample() {
         when (wmsState.status) {
             RasterLayerStatus.Idle -> "Preparing ČÚZK WMS…"
             RasterLayerStatus.Loading -> "Reading ČÚZK WMS capabilities…"
-            RasterLayerStatus.Ready -> "Live ČÚZK ortofoto · EPSG:5514"
+            RasterLayerStatus.Ready ->
+                when (wmsState.availability) {
+                    RasterLayerAvailability.Offline -> "ČÚZK WMS is offline · retry available"
+                    RasterLayerAvailability.Degraded -> "ČÚZK WMS has partial tile failures"
+                    else -> "Live ČÚZK ortofoto · EPSG:5514"
+                }
             is RasterLayerStatus.Failed -> "ČÚZK WMS is unavailable"
         },
     )

@@ -34,6 +34,7 @@ class XYZTileLayer(
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,
     opacity: Double = 1.0,
+    onDiagnostic: (suspend (RasterTileDiagnosticEvent) -> Unit)? = null,
 ) : RasterTileLayer(
         id = id,
         source =
@@ -56,4 +57,5 @@ class XYZTileLayer(
         attributions = attributions,
         fetchConfig = fetchConfig,
         onError = onError,
+        onDiagnostic = onDiagnostic,
     )

@@ -10,4 +10,9 @@ data class TileFetchMetrics(
     val sourceFetches: Long = 0,
     val coalescedRequests: Long = 0,
     val inFlightRequests: Int = 0,
+    val succeeded: Long = 0,
+    val missing: Long = 0,
+    val failed: Long = 0,
+    val suppressedByBackoff: Long = 0,
+    val failureBackoffEntries: Int = 0,
 )

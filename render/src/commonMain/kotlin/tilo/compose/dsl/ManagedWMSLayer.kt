@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import tilo.compose.core.layers.Attribution
+import tilo.compose.core.layers.raster.RasterTileDiagnosticEvent
 import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileLayer
 
@@ -31,7 +32,10 @@ internal class ManagedWMSLayerDeclaration(
     val attributions: List<Attribution>,
     val state: RasterLayerState?,
     val onError: ((Throwable) -> Unit)?,
-    val create: suspend (onError: (Throwable) -> Unit) -> RasterTileLayer,
+    val create: suspend (
+        onError: (Throwable) -> Unit,
+        onDiagnostic: suspend (RasterTileDiagnosticEvent) -> Unit,
+    ) -> RasterTileLayer,
 )
 
 /** Owns one asynchronously created WMS runtime for a stable source configuration. */
@@ -73,7 +77,7 @@ internal fun rememberManagedWMSLayer(declaration: ManagedWMSLayerDeclaration): T
     LaunchedEffect(runtime) {
         diagnostics.loading()
         try {
-            runtime.replace(declaration.create(diagnostics::tileFailed))
+            runtime.replace(declaration.create(diagnostics::tileFailed, diagnostics::onDiagnostic))
             diagnostics.ready()
         } catch (error: CancellationException) {
             throw error
@@ -93,6 +97,7 @@ internal fun rememberManagedWMSLayer(declaration: ManagedWMSLayerDeclaration): T
             minZoom = declaration.minZoom,
             maxZoom = declaration.maxZoom,
             attributions = declaration.attributions,
+            diagnostics = diagnostics,
         )
     }
 }

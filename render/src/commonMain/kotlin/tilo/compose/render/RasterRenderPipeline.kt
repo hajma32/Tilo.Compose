@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.map.MapState
 import tilo.compose.core.tile.Tile
+import tilo.compose.core.tile.TileCoordinate
 
 internal data class RasterFrame(
     val tilesByLayer: Map<String, List<Tile>>,
@@ -45,10 +46,11 @@ internal class RasterRenderPipeline(
     suspend fun buildVisibleFrame(
         tileLayers: List<TileLayer>,
         map: MapState,
+        onDecodeFailure: (suspend (String, TileCoordinate, Throwable) -> Unit)? = null,
         tileDecoder: ((ByteArray) -> ImageBitmap?)?,
     ): RasterFrame {
         val tilesByLayer = fetchVisibleTiles(tileLayers, map)
-        val decodedImagesByLayer = decodeImages(tilesByLayer, tileDecoder)
+        val decodedImagesByLayer = decodeImages(tilesByLayer, tileDecoder, onDecodeFailure)
         return RasterFrame(
             tilesByLayer = tilesByLayer,
             decodedImagesByLayer = decodedImagesByLayer,
@@ -59,10 +61,11 @@ internal class RasterRenderPipeline(
     suspend fun buildOverviewFrame(
         tileLayers: List<TileLayer>,
         map: MapState,
+        onDecodeFailure: (suspend (String, TileCoordinate, Throwable) -> Unit)? = null,
         tileDecoder: ((ByteArray) -> ImageBitmap?)?,
     ): RasterFrame {
         val tilesByLayer = fetchOverviewTiles(tileLayers, map)
-        val decodedImagesByLayer = decodeImages(tilesByLayer, tileDecoder)
+        val decodedImagesByLayer = decodeImages(tilesByLayer, tileDecoder, onDecodeFailure)
         return RasterFrame(
             tilesByLayer = tilesByLayer,
             decodedImagesByLayer = decodedImagesByLayer,
@@ -119,6 +122,7 @@ internal class RasterRenderPipeline(
     private suspend fun decodeImages(
         tilesByLayer: Map<String, List<Tile>>,
         tileDecoder: ((ByteArray) -> ImageBitmap?)?,
+        onDecodeFailure: (suspend (String, TileCoordinate, Throwable) -> Unit)?,
     ): Map<String, List<ImageBitmap?>> =
         withContext(dispatcher) {
             buildMap {
@@ -126,27 +130,63 @@ internal class RasterRenderPipeline(
                     put(
                         layerId,
                         tiles.map { tile ->
-                            decodeTile(tile.bytes, tileDecoder)
+                            decodeTile(layerId, tile, tileDecoder, onDecodeFailure)
                         },
                     )
                 }
             }
         }
 
-    private fun decodeTile(
-        bytes: ByteArray?,
+    // Injected platform decoders have no shared exception type, so this boundary must isolate Exception.
+    // Follow-up: Replace the nullable/throwing decoder API with a typed result and narrow this boundary.
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun decodeTile(
+        layerId: String,
+        tile: Tile,
         tileDecoder: ((ByteArray) -> ImageBitmap?)?,
+        onDecodeFailure: (suspend (String, TileCoordinate, Throwable) -> Unit)?,
     ): ImageBitmap? {
+        val bytes = tile.bytes
         if (bytes == null || tileDecoder == null) return null
-        return try {
-            tileDecoder(bytes)
+        val image =
+            try {
+                tileDecoder(bytes)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                reportDecodeFailure(onDecodeFailure, layerId, tile.coordinate, error)
+                return null
+            }
+        if (image == null) {
+            reportDecodeFailure(
+                onDecodeFailure,
+                layerId,
+                tile.coordinate,
+                TileImageDecodeException("Tile image decoder returned no image"),
+            )
+        }
+        return image
+    }
+
+    private suspend fun reportDecodeFailure(
+        callback: (suspend (String, TileCoordinate, Throwable) -> Unit)?,
+        layerId: String,
+        coordinate: TileCoordinate,
+        error: Throwable,
+    ) {
+        try {
+            callback?.invoke(layerId, coordinate, error)
         } catch (error: CancellationException) {
             throw error
-        } catch (_: Throwable) {
-            null
+        } catch (_: Exception) {
+            // Decode diagnostics are observational and must not fail the raster frame.
         }
     }
 }
+
+private class TileImageDecodeException(
+    message: String,
+) : IllegalArgumentException(message)
 
 internal fun List<TileLayer>.sourceIdentitiesByLayer(): Map<String, Any> =
     associate { layer -> layer.id to layer.sourceIdentity }

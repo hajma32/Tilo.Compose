@@ -4,6 +4,9 @@ package tilo.compose.dsl
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
@@ -13,7 +16,12 @@ import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.LayerGroup
+import tilo.compose.core.layers.raster.RasterTileBatchSummary
+import tilo.compose.core.layers.raster.RasterTileDiagnosticEvent
+import tilo.compose.core.layers.raster.RasterTileFailure
+import tilo.compose.core.layers.raster.RasterTileFailureKind
 import tilo.compose.core.layers.raster.RasterTileLayer
+import tilo.compose.core.layers.raster.RasterTileRequestPurpose
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.raster.TileRowScheme
 import tilo.compose.core.layers.raster.TileStoreTileSource
@@ -241,7 +249,7 @@ class MapLayerBuilderTest {
             )
 
             val declaration = builder.managedWMSDeclarations.single()
-            val runtime = declaration.create {}
+            val runtime = declaration.create({}, {})
             try {
                 val layer = builder.build(mapOf(declaration.key to runtime)).single() as TileLayer
                 assertEquals(capabilitiesUrl, loadedUrl)
@@ -408,6 +416,7 @@ class MapLayerBuilderTest {
             val firstReportCount = firstReports
 
             val secondBuilder = MapLayerBuilder.managed(store)
+            state.retry()
             secondBuilder.tileStoreLayer(
                 id = "base",
                 projection = IdentityProjection,
@@ -427,6 +436,112 @@ class MapLayerBuilderTest {
             assertTrue(secondReports > 0)
             store.close()
             assertEquals(RasterLayerStatus.Idle, state.status)
+        }
+
+    @Test
+    fun structuredRasterDiagnosticsDriveOfflineRecoveryAndLocalEmptyState() =
+        runTest {
+            val coordinate = TileCoordinate(z = 1, x = 2, y = 3)
+            val networkError = IllegalStateException("offline")
+            val networkState = RasterLayerState()
+            val networkDiagnostics = MutableRasterLayerDiagnostics(networkState, onError = null)
+            networkDiagnostics.ready()
+            networkDiagnostics.onDiagnostic(
+                RasterTileDiagnosticEvent.Failure(
+                    RasterTileFailure(
+                        kind = RasterTileFailureKind.NetworkUnavailable,
+                        coordinate = coordinate,
+                        message = "offline",
+                        cause = networkError,
+                    ),
+                ),
+            )
+            networkDiagnostics.onDiagnostic(
+                RasterTileDiagnosticEvent.BatchCompleted(
+                    RasterTileBatchSummary(
+                        requested = 1,
+                        succeeded = 0,
+                        missing = 0,
+                        failed = 1,
+                        networkFailures = 1,
+                    ),
+                ),
+            )
+
+            assertEquals(RasterLayerAvailability.Offline, networkState.availability)
+            assertEquals(RasterTileFailureKind.NetworkUnavailable, networkState.diagnostics.lastFailure?.kind)
+            assertEquals(1, networkState.diagnostics.failed)
+            assertEquals(networkError, networkState.lastTileError)
+
+            networkState.clearTileError()
+
+            networkDiagnostics.onDiagnostic(
+                RasterTileDiagnosticEvent.BatchCompleted(
+                    RasterTileBatchSummary(requested = 1, succeeded = 1, missing = 0, failed = 0),
+                ),
+            )
+            assertEquals(RasterLayerAvailability.Available, networkState.availability)
+            assertEquals(null, networkState.lastTileError)
+
+            networkDiagnostics.onDiagnostic(
+                RasterTileDiagnosticEvent.BatchCompleted(
+                    RasterTileBatchSummary(
+                        purpose = RasterTileRequestPurpose.Prefetch,
+                        requested = 1,
+                        succeeded = 0,
+                        missing = 0,
+                        failed = 1,
+                        networkFailures = 1,
+                    ),
+                ),
+            )
+            assertEquals(RasterLayerAvailability.Available, networkState.availability)
+
+            val localState = RasterLayerState()
+            val localDiagnostics =
+                MutableRasterLayerDiagnostics(localState, onError = null, localSource = true)
+            localDiagnostics.ready()
+            localDiagnostics.onDiagnostic(
+                RasterTileDiagnosticEvent.BatchCompleted(
+                    RasterTileBatchSummary(requested = 1, succeeded = 1, missing = 0, failed = 0),
+                ),
+            )
+            localDiagnostics.onDiagnostic(
+                RasterTileDiagnosticEvent.BatchCompleted(
+                    RasterTileBatchSummary(requested = 2, succeeded = 0, missing = 2, failed = 0),
+                ),
+            )
+            assertEquals(RasterLayerAvailability.Empty, localState.availability)
+        }
+
+    @Test
+    fun concurrentRasterBatchesDoNotLoseDiagnosticCounts() =
+        runTest {
+            val state = RasterLayerState()
+            val diagnostics = MutableRasterLayerDiagnostics(state, onError = null)
+            diagnostics.ready()
+
+            coroutineScope {
+                repeat(100) {
+                    launch(Dispatchers.Default) {
+                        diagnostics.onDiagnostic(
+                            RasterTileDiagnosticEvent.BatchCompleted(
+                                RasterTileBatchSummary(
+                                    purpose = RasterTileRequestPurpose.Prefetch,
+                                    requested = 1,
+                                    succeeded = 1,
+                                    missing = 0,
+                                    failed = 0,
+                                ),
+                            ),
+                        )
+                    }
+                }
+            }
+
+            assertEquals(100, state.diagnostics.requested)
+            assertEquals(100, state.diagnostics.succeeded)
+            assertEquals(RasterLayerAvailability.Unknown, state.availability)
         }
 
     @Test

@@ -88,6 +88,7 @@ data class WMSCapabilities(
         fetchConfig: TileFetchConfig = TileFetchConfig(),
         onError: ((Throwable) -> Unit)? = null,
         opacity: Double = 1.0,
+        onDiagnostic: (suspend (RasterTileDiagnosticEvent) -> Unit)? = null,
     ): WMSTileLayer =
         createTileLayer(
             id = id,
@@ -112,6 +113,7 @@ data class WMSCapabilities(
             attributions = attributions,
             fetchConfig = fetchConfig,
             onError = onError,
+            onDiagnostic = onDiagnostic,
         )
 
     /** Creates a caller-owned layer that must be closed after its last use. */
@@ -138,6 +140,7 @@ data class WMSCapabilities(
         fetchConfig: TileFetchConfig = TileFetchConfig(),
         onError: ((Throwable) -> Unit)? = null,
         opacity: Double = 1.0,
+        onDiagnostic: (suspend (RasterTileDiagnosticEvent) -> Unit)? = null,
     ): WMSTileLayer {
         val resolvedBaseUrl =
             requireNotNull(baseUrl) {
@@ -167,6 +170,7 @@ data class WMSCapabilities(
             attributions = attributions,
             fetchConfig = fetchConfig,
             onError = onError,
+            onDiagnostic = onDiagnostic,
         )
     }
 }

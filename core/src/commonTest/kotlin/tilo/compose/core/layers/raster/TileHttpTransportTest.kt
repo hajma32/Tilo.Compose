@@ -60,6 +60,30 @@ class TileHttpTransportTest {
             }
         }
 
+    /** HTTP status and payload failures remain distinct from a legitimately missing tile. */
+    @Test
+    fun diagnosticTransportClassifiesUnavailableResponses() =
+        runTest {
+            suspend fun result(
+                status: HttpStatusCode,
+                body: ByteArray,
+            ): TileReadResult {
+                val client = clientResponding(status, body)
+                return try {
+                    KtorTileHttpTransport(client).readImageResult("https://tiles.test/tile")
+                } finally {
+                    client.close()
+                }
+            }
+
+            assertEquals(TileReadResult.Missing, result(HttpStatusCode.NotFound, png))
+            val httpFailure = result(HttpStatusCode.InternalServerError, png) as TileReadResult.Failure
+            assertEquals(RasterTileFailureKind.HttpStatus, httpFailure.kind)
+            assertEquals(500, httpFailure.httpStatus)
+            val invalid = result(HttpStatusCode.OK, "not an image".encodeToByteArray()) as TileReadResult.Failure
+            assertEquals(RasterTileFailureKind.InvalidPayload, invalid.kind)
+        }
+
     /**
      * Verifies that coroutine cancellation is not converted into a missing tile.
      *

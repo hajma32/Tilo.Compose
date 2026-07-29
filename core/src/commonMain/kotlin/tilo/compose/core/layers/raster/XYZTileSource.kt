@@ -17,7 +17,7 @@ class XYZTileSource internal constructor(
     override val grid: TileGrid = TileGrid.defaultFor(projection),
     private val tms: Boolean = false,
     private val transport: TileHttpTransport,
-) : RasterTileSource {
+) : DiagnosticRasterTileSource {
     constructor(
         urlTemplate: String,
         projection: Projection = Epsg3857Projection,
@@ -28,6 +28,11 @@ class XYZTileSource internal constructor(
     override fun cacheKey(request: TileRequest): String = buildUrl(request)
 
     override suspend fun readTile(request: TileRequest): ByteArray? = transport.readImage(buildUrl(request))
+
+    override suspend fun readTileResult(request: TileRequest): TileReadResult =
+        (transport as? DiagnosticTileHttpTransport)?.readImageResult(buildUrl(request))
+            ?: transport.readImage(buildUrl(request))?.let(TileReadResult::Success)
+            ?: TileReadResult.Missing
 
     private fun buildUrl(request: TileRequest): String {
         val (z, x, y) = request.coordinate

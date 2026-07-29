@@ -43,7 +43,7 @@ class WMSTileSource internal constructor(
     private val version: String = "1.1.1",
     private val axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(crs),
     private val transport: TileHttpTransport,
-) : RasterTileSource {
+) : DiagnosticRasterTileSource {
     constructor(
         projection: Projection = Epsg4326Projection,
         grid: TileGrid = TileGrid.defaultFor(projection),
@@ -65,6 +65,11 @@ class WMSTileSource internal constructor(
     override fun cacheKey(request: TileRequest): String = buildUrl(request)
 
     override suspend fun readTile(request: TileRequest): ByteArray? = transport.readImage(buildUrl(request))
+
+    override suspend fun readTileResult(request: TileRequest): TileReadResult =
+        (transport as? DiagnosticTileHttpTransport)?.readImageResult(buildUrl(request))
+            ?: transport.readImage(buildUrl(request))?.let(TileReadResult::Success)
+            ?: TileReadResult.Missing
 
     /**
      * Builds the WMS GetMap URL. Bounds are already in the source CRS.

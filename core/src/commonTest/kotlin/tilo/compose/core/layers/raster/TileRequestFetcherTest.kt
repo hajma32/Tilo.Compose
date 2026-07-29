@@ -16,6 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -29,6 +30,15 @@ class TileRequestFetcherTest {
         }
         assertFailsWith<IllegalArgumentException> {
             TileFetchConfig(concurrency = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            TileFetchConfig(failureBackoffMillis = -1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            TileFetchConfig(failureBackoffMillis = 2, maxFailureBackoffMillis = 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            TileFetchConfig(maxFailureEntries = -1)
         }
     }
 
@@ -137,6 +147,7 @@ class TileRequestFetcherTest {
                     cacheHits = 1,
                     cacheMisses = 1,
                     sourceFetches = 1,
+                    succeeded = 1,
                 ),
                 fetcher.metrics(),
             )
@@ -172,6 +183,139 @@ class TileRequestFetcherTest {
                     ?.single(),
             )
             assertEquals(2, fetchCount)
+        }
+
+    /** A failed key is temporarily suppressed and becomes eligible after its backoff. */
+    @Test
+    fun recoverableFailureUsesBoundedPerTileBackoff() =
+        runTest {
+            var now = 0L
+            var fetchCount = 0
+            val events = mutableListOf<RasterTileDiagnosticEvent>()
+            val fetcher =
+                TileRequestFetcher(
+                    config = TileFetchConfig(failureBackoffMillis = 100, maxFailureBackoffMillis = 200),
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                    onDiagnostic = events::add,
+                    cacheKey = { "same" },
+                    fetchBytes = {
+                        fetchCount += 1
+                        error("offline")
+                    },
+                    nowMillis = { now },
+                )
+
+            assertNull(fetcher.fetchTiles(listOf(request(1))).single().bytes)
+            assertNull(fetcher.fetchTiles(listOf(request(1))).single().bytes)
+            assertEquals(1, fetchCount)
+            assertEquals(1, fetcher.metrics().suppressedByBackoff)
+
+            now = 100
+            assertNull(fetcher.fetchTiles(listOf(request(1))).single().bytes)
+            assertEquals(2, fetchCount)
+            assertEquals(2, events.filterIsInstance<RasterTileDiagnosticEvent.Failure>().size)
+        }
+
+    /** Failure backoff metadata uses a bounded LRU independent of visited tile count. */
+    @Test
+    fun failureBackoffEvictsLeastRecentlyUsedKey() =
+        runTest {
+            var fetchCount = 0
+            val fetcher =
+                TileRequestFetcher(
+                    config = TileFetchConfig(maxFailureEntries = 2),
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                    onDiagnostic = {},
+                    cacheKey = { request -> request.coordinate.x.toString() },
+                    fetchBytes = {
+                        fetchCount += 1
+                        error("offline")
+                    },
+                )
+
+            fetcher.fetchTiles(listOf(request(1)))
+            fetcher.fetchTiles(listOf(request(2)))
+            fetcher.fetchTiles(listOf(request(3)))
+            fetcher.fetchTiles(listOf(request(1)))
+
+            assertEquals(4, fetchCount)
+        }
+
+    /**
+     * Guards the offline traversal work budget without relying on flaky wall-clock thresholds.
+     *
+     * A long sequence of distinct failures must retain only the configured hot window. Revisiting
+     * that window performs no source work, while an evicted coordinate remains retryable.
+     */
+    @Test
+    fun offlineTraversalKeepsFailureBookkeepingWithinWorkBudget() =
+        runTest {
+            val retainedFailures = 32
+            val visitedTiles = 512
+            var fetchCount = 0
+            val fetcher =
+                TileRequestFetcher(
+                    config =
+                        TileFetchConfig(
+                            maxFailureEntries = retainedFailures,
+                            failureBackoffMillis = 60_000,
+                            maxFailureBackoffMillis = 60_000,
+                        ),
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                    cacheKey = { request -> request.coordinate.x.toString() },
+                    fetchBytes = {
+                        fetchCount += 1
+                        error("offline")
+                    },
+                )
+
+            repeat(visitedTiles) { x ->
+                fetcher.fetchTiles(listOf(request(x)))
+            }
+
+            val afterTraversal = fetcher.metrics()
+            assertEquals(visitedTiles, fetchCount)
+            assertEquals(retainedFailures, afterTraversal.failureBackoffEntries)
+
+            repeat(retainedFailures) { offset ->
+                fetcher.fetchTiles(listOf(request(visitedTiles - retainedFailures + offset)))
+            }
+            assertEquals(visitedTiles, fetchCount)
+            assertEquals(retainedFailures.toLong(), fetcher.metrics().suppressedByBackoff)
+
+            fetcher.fetchTiles(listOf(request(0)))
+            assertEquals(visitedTiles + 1, fetchCount)
+            assertEquals(retainedFailures, fetcher.metrics().failureBackoffEntries)
+        }
+
+    /** An observational diagnostics callback cannot turn a tile outcome into a batch failure. */
+    @Test
+    fun diagnosticCallbackFailureIsIsolated() =
+        runTest {
+            val successFetcher =
+                TileRequestFetcher(
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                    onDiagnostic = { error("observer failed") },
+                    cacheKey = { "success" },
+                    fetchBytes = { byteArrayOf(7) },
+                )
+            val failureFetcher =
+                TileRequestFetcher(
+                    dispatcher = StandardTestDispatcher(testScheduler),
+                    onDiagnostic = { error("observer failed") },
+                    cacheKey = { "failure" },
+                    fetchBytes = { error("source failed") },
+                )
+
+            assertEquals(
+                7,
+                successFetcher
+                    .fetchTiles(listOf(request(1)))
+                    .single()
+                    .bytes
+                    ?.single(),
+            )
+            assertNull(failureFetcher.fetchTiles(listOf(request(1))).single().bytes)
         }
 
     /**

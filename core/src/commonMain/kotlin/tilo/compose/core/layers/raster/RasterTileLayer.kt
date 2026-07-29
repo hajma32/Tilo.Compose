@@ -39,6 +39,7 @@ open class RasterTileLayer(
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,
     override val opacity: Double = 1.0,
+    onDiagnostic: (suspend (RasterTileDiagnosticEvent) -> Unit)? = null,
 ) : TileLayer,
     AutoCloseable {
     init {
@@ -58,8 +59,10 @@ open class RasterTileLayer(
         TileRequestFetcher(
             config = fetchConfig,
             onError = onError,
+            onDiagnostic = onDiagnostic,
             cacheKey = source::cacheKey,
             fetchBytes = source::readTile,
+            fetchResult = (source as? DiagnosticRasterTileSource)?.let { it::readTileResult },
         )
 
     /** Cancels owned tile requests. The layer must not be used after this call. */
@@ -72,19 +75,22 @@ open class RasterTileLayer(
 
     override suspend fun loadTiles(map: MapState): List<Tile> {
         validateProjection(map)
-        return fetcher.fetchTiles(requestPlan(map).visible)
+        return fetcher.fetchTiles(requestPlan(map).visible, RasterTileRequestPurpose.Visible)
     }
 
     override suspend fun loadOverviewTiles(map: MapState): List<Tile> {
         validateProjection(map)
         if (overviewZoomOffset <= 0 || maxOverviewTiles <= 0) return emptyList()
-        return fetcher.fetchTiles(overviewRequestPlan(map).visible)
+        return fetcher.fetchTiles(overviewRequestPlan(map).visible, RasterTileRequestPurpose.Overview)
     }
 
     override suspend fun prefetchOverviewTiles(map: MapState) {
         validateProjection(map)
         if (overviewZoomOffset <= 0 || maxOverviewTiles <= 0 || overviewPrefetchMargin <= 0) return
-        fetcher.fetchTiles(overviewRequestPlan(map, prefetchMargin = overviewPrefetchMargin).prefetch)
+        fetcher.fetchTiles(
+            overviewRequestPlan(map, prefetchMargin = overviewPrefetchMargin).prefetch,
+            RasterTileRequestPurpose.Prefetch,
+        )
     }
 
     override fun planTiles(map: MapState): List<Tile> {
@@ -96,7 +102,7 @@ open class RasterTileLayer(
 
     override suspend fun prefetchTiles(map: MapState) {
         validateProjection(map)
-        fetcher.fetchTiles(requestPlan(map).prefetch)
+        fetcher.fetchTiles(requestPlan(map).prefetch, RasterTileRequestPurpose.Prefetch)
     }
 
     private fun requestPlan(map: MapState): TileRequestPlan {

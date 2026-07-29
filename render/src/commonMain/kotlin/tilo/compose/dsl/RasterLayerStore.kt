@@ -2,7 +2,11 @@
 
 package tilo.compose.dsl
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import tilo.compose.core.layers.Attribution
+import tilo.compose.core.layers.raster.RasterTileDiagnosticEvent
+import tilo.compose.core.layers.raster.RasterTileFailure
 import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileFetchMetrics
 import tilo.compose.core.layers.raster.TileLayer
@@ -16,6 +20,7 @@ internal data class ManagedRasterLayerKey(
 
 internal class StoredRasterLayer(
     val layer: RasterTileLayer,
+    val diagnostics: MutableRasterLayerDiagnostics? = null,
     private val update: (RasterLayerUpdate) -> Unit = {},
     private val retire: () -> Unit = {},
 ) {
@@ -47,10 +52,19 @@ internal sealed interface RasterLayerUpdate {
 internal class MutableRasterLayerDiagnostics(
     state: RasterLayerState?,
     onError: ((Throwable) -> Unit)?,
+    private val localSource: Boolean,
 ) {
+    constructor(
+        state: RasterLayerState?,
+        onError: ((Throwable) -> Unit)?,
+    ) : this(state = state, onError = onError, localSource = false)
+
     private var state = state
     private var onError = onError
     private var phase: RasterLayerPhase = RasterLayerPhase.Idle
+    private var snapshot = RasterLayerDiagnostics()
+    private var availability = RasterLayerAvailability.Unknown
+    private val mutex = Mutex()
 
     fun update(
         state: RasterLayerState?,
@@ -60,6 +74,8 @@ internal class MutableRasterLayerDiagnostics(
             this.state?.idle()
             this.state = state
             publishPhase()
+            publishDiagnostics()
+            state?.publishTileError(snapshot.lastFailure?.cause)
         }
         this.onError = onError
     }
@@ -90,6 +106,54 @@ internal class MutableRasterLayerDiagnostics(
         onError?.invoke(error)
     }
 
+    suspend fun onDiagnostic(event: RasterTileDiagnosticEvent) {
+        mutex.withLock {
+            if (phase == RasterLayerPhase.Retired) return
+            when (event) {
+                is RasterTileDiagnosticEvent.Failure -> {
+                    snapshot = snapshot.copy(lastFailure = event.failure)
+                    state?.publishTileError(event.failure.cause)
+                }
+                is RasterTileDiagnosticEvent.BatchCompleted -> {
+                    val summary = event.summary
+                    snapshot =
+                        snapshot.copy(
+                            requested = snapshot.requested + summary.requested,
+                            succeeded = snapshot.succeeded + summary.succeeded,
+                            missing = snapshot.missing + summary.missing,
+                            failed = snapshot.failed + summary.failed,
+                        )
+                    if (summary.purpose == tilo.compose.core.layers.raster.RasterTileRequestPurpose.Visible) {
+                        availability = nextAvailability(availability, summary, localSource)
+                    }
+                }
+            }
+            publishDiagnostics()
+        }
+    }
+
+    suspend fun decodeFailed(
+        failure: RasterTileFailure,
+        affectsAvailability: Boolean,
+    ) {
+        val errorCallback =
+            mutex.withLock {
+                if (phase == RasterLayerPhase.Retired) return
+                snapshot =
+                    snapshot.copy(
+                        decodeFailures = snapshot.decodeFailures + 1,
+                        lastFailure = failure,
+                    )
+                if (affectsAvailability) availability = RasterLayerAvailability.Degraded
+                publishDiagnostics()
+                state?.publishTileError(failure.cause)
+                onError
+            }
+        failure.cause?.let { error -> errorCallback?.invoke(error) }
+    }
+
+    suspend fun snapshot(): RasterLayerDiagnostics = mutex.withLock { snapshot }
+
     fun retire() {
         if (phase == RasterLayerPhase.Retired) return
         phase = RasterLayerPhase.Retired
@@ -110,7 +174,26 @@ internal class MutableRasterLayerDiagnostics(
             is RasterLayerPhase.Failed -> state?.initializationFailed(currentPhase.error)
         }
     }
+
+    private fun publishDiagnostics() {
+        state?.publishDiagnostics(snapshot, availability)
+    }
 }
+
+private fun nextAvailability(
+    current: RasterLayerAvailability,
+    summary: tilo.compose.core.layers.raster.RasterTileBatchSummary,
+    localSource: Boolean,
+): RasterLayerAvailability =
+    when {
+        summary.failed > 0 && summary.succeeded > 0 -> RasterLayerAvailability.Degraded
+        summary.failed > 0 && summary.networkFailures > 0 -> RasterLayerAvailability.Offline
+        summary.failed > 0 -> RasterLayerAvailability.Degraded
+        summary.succeeded > 0 -> RasterLayerAvailability.Available
+        localSource && summary.requested > 0 && summary.missing == summary.requested -> RasterLayerAvailability.Empty
+        summary.requested > 0 -> RasterLayerAvailability.Available
+        else -> current
+    }
 
 private sealed interface RasterLayerPhase {
     data object Idle : RasterLayerPhase
@@ -136,6 +219,7 @@ internal data class PresentedTileLayer(
     override val minZoom: Double?,
     override val maxZoom: Double?,
     override val attributions: List<Attribution>,
+    private val diagnostics: MutableRasterLayerDiagnostics? = null,
 ) : TileLayer by runtime {
     init {
         require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
@@ -143,6 +227,15 @@ internal data class PresentedTileLayer(
     }
 
     suspend fun tileFetchMetrics(): TileFetchMetrics = runtime.tileFetchMetrics()
+
+    suspend fun reportDecodeFailure(
+        failure: RasterTileFailure,
+        affectsAvailability: Boolean,
+    ) {
+        diagnostics?.decodeFailed(failure, affectsAvailability)
+    }
+
+    suspend fun rasterDiagnostics(): RasterLayerDiagnostics? = diagnostics?.snapshot()
 }
 
 internal suspend fun TileLayer.tileFetchMetricsOrNull(): TileFetchMetrics? =
@@ -166,6 +259,11 @@ internal class RasterLayerStore {
         key: ManagedRasterLayerKey,
         create: () -> StoredRasterLayer,
     ): RasterTileLayer = layers.getOrPut(key, create).layer
+
+    fun getOrCreateStored(
+        key: ManagedRasterLayerKey,
+        create: () -> StoredRasterLayer,
+    ): StoredRasterLayer = layers.getOrPut(key, create)
 
     fun retain(
         activeKeys: Set<ManagedRasterLayerKey>,

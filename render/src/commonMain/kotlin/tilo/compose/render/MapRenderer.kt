@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalTiloRenderingApi::class)
+@file:OptIn(ExperimentalTiloRenderingApi::class, tilo.compose.dsl.ExperimentalTiloApi::class)
 
 package tilo.compose.render
 
@@ -30,6 +30,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Layer
+import tilo.compose.core.layers.raster.RasterTileFailure
+import tilo.compose.core.layers.raster.RasterTileFailureKind
+import tilo.compose.core.layers.raster.TileFetchMetrics
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.layers.vector.VectorRenderStrategy
@@ -40,8 +43,11 @@ import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.Tile
 import tilo.compose.dsl.MapDiagnosticsState
 import tilo.compose.dsl.MapFeatureMetrics
+import tilo.compose.dsl.MapRasterLayerMetrics
 import tilo.compose.dsl.MapTileCacheMetrics
 import tilo.compose.dsl.MapTileMetrics
+import tilo.compose.dsl.PresentedTileLayer
+import tilo.compose.dsl.RasterLayerDiagnostics
 import tilo.compose.dsl.tileFetchMetricsOrNull
 import tilo.compose.render.backend.ComposeCanvasRenderBackend
 import tilo.compose.render.backend.RasterRenderSceneLayer
@@ -342,6 +348,14 @@ private fun MapRendererImpl(
                                 tileLayers = input.tileLayers,
                                 map = renderMap,
                                 tileDecoder = input.tileDecoder,
+                                onDecodeFailure = { layerId, coordinate, error ->
+                                    input.tileLayers.reportDecodeFailure(
+                                        layerId = layerId,
+                                        coordinate = coordinate,
+                                        error = error,
+                                        affectsAvailability = true,
+                                    )
+                                },
                             )
                         tilesByLayer = rasterFrame.tilesByLayer
                         decodedImagesByLayer = rasterFrame.decodedImagesByLayer
@@ -354,16 +368,20 @@ private fun MapRendererImpl(
                             }
                             lastRasterFrame = renderableRasterFrame
                         }
-                        diagnosticsState?.publishTiles(
-                            MapTileMetrics(
-                                planned = placeholderFrame.tilesByLayer.totalItemCount(),
-                                loaded = rasterFrame.tilesByLayer.countItems { tile -> tile.bytes != null },
-                                missing = rasterFrame.tilesByLayer.countItems { tile -> tile.bytes == null },
-                                decoded = rasterFrame.decodedImagesByLayer.countItems { image -> image != null },
-                                displayed = diagnosticsState.metrics.tiles.displayed,
-                                cache = input.tileLayers.aggregateTileCacheMetrics(),
-                            ),
-                        )
+                        diagnosticsState?.let { diagnostics ->
+                            val metricSnapshots = input.tileLayers.rasterMetricSnapshots()
+                            diagnostics.publishTiles(
+                                MapTileMetrics(
+                                    planned = placeholderFrame.tilesByLayer.totalItemCount(),
+                                    loaded = rasterFrame.tilesByLayer.countItems { tile -> tile.bytes != null },
+                                    missing = rasterFrame.tilesByLayer.countItems { tile -> tile.bytes == null },
+                                    decoded = rasterFrame.decodedImagesByLayer.countItems { image -> image != null },
+                                    displayed = diagnostics.metrics.tiles.displayed,
+                                    cache = metricSnapshots.aggregateTileCacheMetrics(),
+                                    layers = metricSnapshots.perLayerMetrics(),
+                                ),
+                            )
+                        }
                         publishScene()
                     }
                 }
@@ -389,6 +407,14 @@ private fun MapRendererImpl(
                             tileLayers = input.tileLayers,
                             map = overviewMap,
                             tileDecoder = input.tileDecoder,
+                            onDecodeFailure = { layerId, coordinate, error ->
+                                input.tileLayers.reportDecodeFailure(
+                                    layerId = layerId,
+                                    coordinate = coordinate,
+                                    error = error,
+                                    affectsAvailability = false,
+                                )
+                            },
                         ).withRenderableTilesOnly()
                 if (!overviewFrame.hasTiles()) return@runRenderBranch
                 if (!overviewRequestTracker.isLatest(request)) return@runRenderBranch
@@ -795,17 +821,64 @@ private fun <T> Map<String, List<T>>.totalItemCount(): Int = values.sumOf(List<T
 private fun <T> Map<String, List<T>>.countItems(predicate: (T) -> Boolean): Int =
     values.sumOf { items -> items.count(predicate) }
 
-private suspend fun List<TileLayer>.aggregateTileCacheMetrics(): MapTileCacheMetrics {
-    val snapshots = mapNotNull { layer -> layer.tileFetchMetricsOrNull() }
-    return MapTileCacheMetrics(
-        entries = snapshots.sumOf { it.cacheEntries },
-        maxEntries = snapshots.sumOf { it.maxCacheEntries },
-        hits = snapshots.sumOf { it.cacheHits },
-        misses = snapshots.sumOf { it.cacheMisses },
-        evictions = snapshots.sumOf { it.cacheEvictions },
-        sourceFetches = snapshots.sumOf { it.sourceFetches },
-        coalescedRequests = snapshots.sumOf { it.coalescedRequests },
-        inFlightRequests = snapshots.sumOf { it.inFlightRequests },
+private data class RasterMetricSnapshot(
+    val layerId: String,
+    val fetch: TileFetchMetrics,
+    val diagnostics: RasterLayerDiagnostics?,
+)
+
+private suspend fun List<TileLayer>.rasterMetricSnapshots(): List<RasterMetricSnapshot> =
+    mapNotNull { layer ->
+        val fetch = layer.tileFetchMetricsOrNull() ?: return@mapNotNull null
+        RasterMetricSnapshot(
+            layerId = layer.id,
+            fetch = fetch,
+            diagnostics = (layer as? PresentedTileLayer)?.rasterDiagnostics(),
+        )
+    }
+
+private fun List<RasterMetricSnapshot>.aggregateTileCacheMetrics(): MapTileCacheMetrics =
+    MapTileCacheMetrics(
+        entries = sumOf { it.fetch.cacheEntries },
+        maxEntries = sumOf { it.fetch.maxCacheEntries },
+        hits = sumOf { it.fetch.cacheHits },
+        misses = sumOf { it.fetch.cacheMisses },
+        evictions = sumOf { it.fetch.cacheEvictions },
+        sourceFetches = sumOf { it.fetch.sourceFetches },
+        coalescedRequests = sumOf { it.fetch.coalescedRequests },
+        inFlightRequests = sumOf { it.fetch.inFlightRequests },
+    )
+
+private fun List<RasterMetricSnapshot>.perLayerMetrics(): Map<String, MapRasterLayerMetrics> =
+    associate { snapshot ->
+        snapshot.layerId to
+            MapRasterLayerMetrics(
+                succeeded = snapshot.fetch.succeeded,
+                missing = snapshot.fetch.missing,
+                failed = snapshot.fetch.failed,
+                suppressedByBackoff = snapshot.fetch.suppressedByBackoff,
+                failureBackoffEntries = snapshot.fetch.failureBackoffEntries,
+                decodeFailures = snapshot.diagnostics?.decodeFailures ?: 0,
+                lastFailure = snapshot.diagnostics?.lastFailure,
+            )
+    }
+
+private suspend fun List<TileLayer>.reportDecodeFailure(
+    layerId: String,
+    coordinate: tilo.compose.core.tile.TileCoordinate,
+    error: Throwable,
+    affectsAvailability: Boolean,
+) {
+    val failure =
+        RasterTileFailure(
+            kind = RasterTileFailureKind.Decode,
+            coordinate = coordinate,
+            message = error.message ?: "Tile image decoding failed",
+            cause = error,
+        )
+    (firstOrNull { it.id == layerId } as? PresentedTileLayer)?.reportDecodeFailure(
+        failure,
+        affectsAvailability,
     )
 }
 

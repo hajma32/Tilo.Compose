@@ -156,6 +156,14 @@ private fun BoxScope.DefaultMapDebugOverlayImpl(
                 "Fetch",
                 "${tileCache.sourceFetches} source, ${tileCache.coalescedRequests} shared, ${tileCache.inFlightRequests} active",
             )
+            val rasterLayers = tiles.layers.values
+            DebugLine(
+                "Tile errors",
+                "${rasterLayers.sumOf { it.failed }} fetch, " +
+                    "${rasterLayers.sumOf { it.decodeFailures }} decode, " +
+                    "${rasterLayers.sumOf { it.suppressedByBackoff }} backed off, " +
+                    "${rasterLayers.sumOf { it.failureBackoffEntries }} tracked",
+            )
             DebugLine("Features", "${features.visible}/${features.returned} visible")
             DebugLine("Geometry", "${features.geometryCommands} commands")
             DebugLine(

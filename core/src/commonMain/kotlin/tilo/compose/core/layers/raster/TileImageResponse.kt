@@ -4,10 +4,29 @@ import io.ktor.client.call.body
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.isSuccess
 
-internal suspend fun HttpResponse.readTileImageBytesOrNull(): ByteArray? {
-    if (!status.isSuccess()) return null
+internal suspend fun HttpResponse.readTileImageBytesOrNull(): ByteArray? =
+    (readTileImageResult() as? TileReadResult.Success)?.bytes
+
+internal suspend fun HttpResponse.readTileImageResult(): TileReadResult {
+    if (status.value == 404 || status.value == 410 || status.value == 204) {
+        return TileReadResult.Missing
+    }
+    if (!status.isSuccess()) {
+        return TileReadResult.Failure(
+            kind = RasterTileFailureKind.HttpStatus,
+            message = "Tile request returned HTTP ${status.value}",
+            httpStatus = status.value,
+        )
+    }
     val bytes = body<ByteArray>()
-    return bytes.takeIf { it.isSupportedImageBytes() }
+    return if (bytes.isSupportedImageBytes()) {
+        TileReadResult.Success(bytes)
+    } else {
+        TileReadResult.Failure(
+            kind = RasterTileFailureKind.InvalidPayload,
+            message = "Tile response is not a supported image",
+        )
+    }
 }
 
 private fun ByteArray.isSupportedImageBytes(): Boolean =

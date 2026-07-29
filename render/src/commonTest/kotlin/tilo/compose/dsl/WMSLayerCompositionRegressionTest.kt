@@ -291,7 +291,7 @@ class WMSLayerCompositionRegressionTest {
             attributions = emptyList(),
             state = state,
             onError = onError,
-            create = create,
+            create = { reportError, _ -> create(reportError) },
         )
 
     private fun rasterRuntime(readTile: suspend (TileRequest) -> ByteArray?): RasterTileLayer =

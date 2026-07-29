@@ -6,6 +6,7 @@ import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.map.MapState
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.tile.Tile
+import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,18 +32,29 @@ class RasterRenderPipelineTest {
                 )
             val layer = TestTileLayer(load = { tiles })
             val pipeline = RasterRenderPipeline(StandardTestDispatcher(testScheduler))
+            var decodeFailure: Triple<String, TileCoordinate, Throwable>? = null
 
             val frame =
-                pipeline.buildVisibleFrame(listOf(layer), testMap()) { bytes ->
-                    if (bytes.single() == 3.toByte()) error("corrupt image")
-                    goodImage
-                }
+                pipeline.buildVisibleFrame(
+                    tileLayers = listOf(layer),
+                    map = testMap(),
+                    onDecodeFailure = { layerId, coordinate, error ->
+                        decodeFailure = Triple(layerId, coordinate, error)
+                    },
+                    tileDecoder = { bytes ->
+                        if (bytes.single() == 3.toByte()) error("corrupt image")
+                        goodImage
+                    },
+                )
 
             assertEquals(tiles, frame.tilesByLayer.getValue(layer.id))
             val images = frame.decodedImagesByLayer.getValue(layer.id)
             assertSame(goodImage, images[0])
             assertNull(images[1])
             assertNull(images[2])
+            assertEquals(layer.id, decodeFailure?.first)
+            assertEquals(tiles[2].coordinate, decodeFailure?.second)
+            assertEquals("corrupt image", decodeFailure?.third?.message)
         }
 
     /**
@@ -55,14 +67,20 @@ class RasterRenderPipelineTest {
     fun decoderRunsOncePerDownloadedTileAndCanvasUsesPipelineResult() =
         runTest {
             var decodeCount = 0
+            var decodeFailureCount = 0
             val tiles = listOf(testTile(1), testTile(2))
             val layer = TestTileLayer(load = { tiles })
             val pipeline = RasterRenderPipeline(StandardTestDispatcher(testScheduler))
             val frame =
-                pipeline.buildVisibleFrame(listOf(layer), testMap()) {
-                    decodeCount += 1
-                    if (it.single() == 1.toByte()) TestImageBitmap() else null
-                }
+                pipeline.buildVisibleFrame(
+                    tileLayers = listOf(layer),
+                    map = testMap(),
+                    onDecodeFailure = { _, _, _ -> decodeFailureCount += 1 },
+                    tileDecoder = {
+                        decodeCount += 1
+                        if (it.single() == 1.toByte()) TestImageBitmap() else null
+                    },
+                )
 
             val resolved =
                 resolveTileImages(
@@ -75,8 +93,30 @@ class RasterRenderPipelineTest {
                 )
 
             assertEquals(2, decodeCount)
+            assertEquals(1, decodeFailureCount)
             assertEquals(2, resolved.size)
             assertNull(resolved[1].second)
+        }
+
+    @Test
+    fun decodeDiagnosticCallbackFailureIsIsolated() =
+        runTest {
+            var callbackCount = 0
+            val layer = TestTileLayer(load = { listOf(testTile(1)) })
+
+            val frame =
+                RasterRenderPipeline(StandardTestDispatcher(testScheduler)).buildVisibleFrame(
+                    tileLayers = listOf(layer),
+                    map = testMap(),
+                    onDecodeFailure = { _, _, _ ->
+                        callbackCount += 1
+                        error("observer failed")
+                    },
+                    tileDecoder = { null },
+                )
+
+            assertEquals(1, callbackCount)
+            assertNull(frame.decodedImagesByLayer.getValue(layer.id).single())
         }
 
     /**

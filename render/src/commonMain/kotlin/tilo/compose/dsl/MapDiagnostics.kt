@@ -6,6 +6,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import tilo.compose.core.layers.raster.RasterTileFailure
+
+/** Fetch and decode diagnostics for one raster layer. */
+data class MapRasterLayerMetrics(
+    val succeeded: Long = 0,
+    val missing: Long = 0,
+    val failed: Long = 0,
+    val suppressedByBackoff: Long = 0,
+    val failureBackoffEntries: Int = 0,
+    val decodeFailures: Long = 0,
+    val lastFailure: RasterTileFailure? = null,
+)
 
 /** Aggregate tile-cache activity for the raster runtimes currently attached to a map. */
 data class MapTileCacheMetrics(
@@ -27,6 +39,7 @@ data class MapTileMetrics(
     val decoded: Int = 0,
     val displayed: Int = 0,
     val cache: MapTileCacheMetrics = MapTileCacheMetrics(),
+    val layers: Map<String, MapRasterLayerMetrics> = emptyMap(),
 )
 
 /** Vector feature and cached-bitmap work represented by the latest vector frame. */

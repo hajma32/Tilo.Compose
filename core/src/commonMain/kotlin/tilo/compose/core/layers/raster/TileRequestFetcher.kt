@@ -19,15 +19,25 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import tilo.compose.core.tile.Tile
 import tilo.compose.core.tile.TileRequest
+import kotlin.math.min
+import kotlin.time.TimeSource
 
-/** Cache and concurrency limits for a raster layer's tile fetches. */
+/** Cache, concurrency, and recoverable-failure retry limits for raster tile fetches. */
 data class TileFetchConfig(
     val maxCacheEntries: Int = 200,
     val concurrency: Int = 8,
+    val failureBackoffMillis: Long = 1_000,
+    val maxFailureBackoffMillis: Long = 30_000,
+    val maxFailureEntries: Int = maxCacheEntries,
 ) {
     init {
         require(maxCacheEntries >= 0) { "maxCacheEntries must be non-negative" }
         require(concurrency > 0) { "concurrency must be positive" }
+        require(failureBackoffMillis >= 0) { "failureBackoffMillis must be non-negative" }
+        require(maxFailureBackoffMillis >= failureBackoffMillis) {
+            "maxFailureBackoffMillis must not be less than failureBackoffMillis"
+        }
+        require(maxFailureEntries >= 0) { "maxFailureEntries must be non-negative" }
     }
 }
 
@@ -35,8 +45,11 @@ internal class TileRequestFetcher(
     private val config: TileFetchConfig = TileFetchConfig(),
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val onError: ((Throwable) -> Unit)? = null,
+    private val onDiagnostic: (suspend (RasterTileDiagnosticEvent) -> Unit)? = null,
     private val cacheKey: (TileRequest) -> String,
     private val fetchBytes: suspend (TileRequest) -> ByteArray?,
+    private val fetchResult: (suspend (TileRequest) -> TileReadResult)? = null,
+    private val nowMillis: () -> Long = monotonicClock(),
 ) {
     private val fetchScope = CoroutineScope(dispatcher + SupervisorJob())
 
@@ -53,16 +66,40 @@ internal class TileRequestFetcher(
     private val inFlight = mutableMapOf<String, InFlightRequest>()
     private var sourceFetches = 0L
     private var coalescedRequests = 0L
+    private var successfulFetches = 0L
+    private var missingFetches = 0L
+    private var failedFetches = 0L
+    private var suppressedByBackoff = 0L
+    private val failures = mutableMapOf<String, FailureBackoff>()
+    private val failureAccessOrder = ArrayDeque<String>()
 
-    suspend fun fetchTiles(requests: List<TileRequest>): List<Tile> =
-        coroutineScope {
-            requests
-                .map { request ->
-                    async(dispatcher) {
-                        fetchTile(request)
-                    }
-                }.awaitAll()
-        }
+    suspend fun fetchTiles(
+        requests: List<TileRequest>,
+        purpose: RasterTileRequestPurpose = RasterTileRequestPurpose.Visible,
+    ): List<Tile> {
+        val fetched =
+            coroutineScope {
+                requests
+                    .map { request ->
+                        async(dispatcher) {
+                            fetchTile(request)
+                        }
+                    }.awaitAll()
+            }
+        emitDiagnostic(
+            RasterTileDiagnosticEvent.BatchCompleted(
+                RasterTileBatchSummary(
+                    purpose = purpose,
+                    requested = fetched.size,
+                    succeeded = fetched.count { it.outcome == TileOutcome.Success },
+                    missing = fetched.count { it.outcome == TileOutcome.Missing },
+                    failed = fetched.count { it.outcome == TileOutcome.Failed },
+                    networkFailures = fetched.count { it.failureKind == RasterTileFailureKind.NetworkUnavailable },
+                ),
+            ),
+        )
+        return fetched.map(FetchedTile::tile)
+    }
 
     fun close() {
         fetchScope.cancel()
@@ -84,6 +121,11 @@ internal class TileRequestFetcher(
                     sourceFetches = sourceFetches,
                     coalescedRequests = coalescedRequests,
                     inFlightRequests = inFlight.size,
+                    succeeded = successfulFetches,
+                    missing = missingFetches,
+                    failed = failedFetches,
+                    suppressedByBackoff = suppressedByBackoff,
+                    failureBackoffEntries = failures.size,
                 )
             }
         return TileFetchMetrics(
@@ -95,14 +137,19 @@ internal class TileRequestFetcher(
             sourceFetches = requestSnapshot.sourceFetches,
             coalescedRequests = requestSnapshot.coalescedRequests,
             inFlightRequests = requestSnapshot.inFlightRequests,
+            succeeded = requestSnapshot.succeeded,
+            missing = requestSnapshot.missing,
+            failed = requestSnapshot.failed,
+            suppressedByBackoff = requestSnapshot.suppressedByBackoff,
+            failureBackoffEntries = requestSnapshot.failureBackoffEntries,
         )
     }
 
-    private suspend fun fetchTile(request: TileRequest): Tile {
+    private suspend fun fetchTile(request: TileRequest): FetchedTile {
         val key = cacheKey(request)
         val cached = cacheGet(key, recordLookup = true)
         if (cached != null) {
-            return Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = cached)
+            return request.fetched(cached, TileOutcome.Success)
         }
 
         val inFlightRequest =
@@ -110,7 +157,16 @@ internal class TileRequestFetcher(
                 // Another request may have populated the cache after the optimistic lookup
                 // above but before this coroutine acquired the in-flight lock.
                 cacheGet(key, recordLookup = false)?.let { bytes ->
-                    return Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = bytes)
+                    return request.fetched(bytes, TileOutcome.Success)
+                }
+                failures[key]?.takeIf { it.retryAtMillis > nowMillis() }?.let { failure ->
+                    touchFailure(key)
+                    suppressedByBackoff += 1
+                    return request.fetched(
+                        bytes = null,
+                        outcome = TileOutcome.Failed,
+                        failureKind = failure.kind,
+                    )
                 }
                 val existing = inFlight[key]?.takeUnless { it.deferred.isCancelled }
                 if (existing != null) {
@@ -126,9 +182,10 @@ internal class TileRequestFetcher(
                                         created.started = true
                                         sourceFetches += 1
                                     }
-                                    readBytes(request)?.also { bytes ->
-                                        cachePut(key, bytes)
-                                    }
+                                    val result = readResult(request)
+                                    recordResult(key, request, result)
+                                    if (result is TileReadResult.Success) cachePut(key, result.bytes)
+                                    result
                                 }
                             }
                         created.waiters = 1
@@ -138,8 +195,16 @@ internal class TileRequestFetcher(
             }
 
         return try {
-            val bytes = inFlightRequest.deferred.await()
-            Tile(coordinate = request.coordinate, bounds = request.bounds, bytes = bytes)
+            when (val result = inFlightRequest.deferred.await()) {
+                is TileReadResult.Success -> request.fetched(result.bytes, TileOutcome.Success)
+                TileReadResult.Missing -> request.fetched(bytes = null, outcome = TileOutcome.Missing)
+                is TileReadResult.Failure ->
+                    request.fetched(
+                        bytes = null,
+                        outcome = TileOutcome.Failed,
+                        failureKind = result.kind,
+                    )
+            }
         } finally {
             withContext(NonCancellable) {
                 var cleanUpAfterCompletion = false
@@ -169,15 +234,115 @@ internal class TileRequestFetcher(
     // The source callback is an exception boundary: report recoverable failures, but never
     // convert coroutine cancellation or fatal Errors into an unavailable tile.
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun readBytes(request: TileRequest): ByteArray? =
+    private suspend fun readResult(request: TileRequest): TileReadResult =
         try {
-            fetchBytes(request)
+            fetchResult?.invoke(request)
+                ?: fetchBytes(request)?.let(TileReadResult::Success)
+                ?: TileReadResult.Missing
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            onError?.invoke(error)
-            null
+            TileReadResult.Failure(
+                kind = RasterTileFailureKind.Source,
+                message = error.message ?: "Tile source failed",
+                cause = error,
+            )
         }
+
+    private suspend fun recordResult(
+        key: String,
+        request: TileRequest,
+        result: TileReadResult,
+    ) {
+        val failure =
+            inFlightMutex.withLock {
+                when (result) {
+                    is TileReadResult.Success -> {
+                        successfulFetches += 1
+                        removeFailure(key)
+                        null
+                    }
+
+                    TileReadResult.Missing -> {
+                        missingFetches += 1
+                        removeFailure(key)
+                        null
+                    }
+
+                    is TileReadResult.Failure -> {
+                        failedFetches += 1
+                        val previousAttempts = failures[key]?.attempts ?: 0
+                        val attempts = previousAttempts + 1
+                        putFailure(
+                            key,
+                            FailureBackoff(
+                                attempts = attempts,
+                                retryAtMillis = nowMillis() + backoffMillis(attempts),
+                                kind = result.kind,
+                            ),
+                        )
+                        RasterTileFailure(
+                            kind = result.kind,
+                            coordinate = request.coordinate,
+                            message = result.message,
+                            httpStatus = result.httpStatus,
+                            cause = result.cause,
+                        )
+                    }
+                }
+            }
+        if (failure != null) {
+            failure.cause?.let { onError?.invoke(it) }
+            emitDiagnostic(RasterTileDiagnosticEvent.Failure(failure))
+        }
+    }
+
+    private suspend fun emitDiagnostic(event: RasterTileDiagnosticEvent) {
+        val callback = onDiagnostic ?: return
+        try {
+            callback(event)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Diagnostics are observational and must not fail otherwise healthy tile work.
+        }
+    }
+
+    private fun putFailure(
+        key: String,
+        failure: FailureBackoff,
+    ) {
+        if (config.maxFailureEntries == 0) return
+        failures[key] = failure
+        touchFailure(key)
+        while (failureAccessOrder.size > config.maxFailureEntries) {
+            failures.remove(failureAccessOrder.removeFirst())
+        }
+    }
+
+    private fun touchFailure(key: String) {
+        failureAccessOrder.remove(key)
+        failureAccessOrder.addLast(key)
+    }
+
+    private fun removeFailure(key: String) {
+        failures.remove(key)
+        failureAccessOrder.remove(key)
+    }
+
+    private fun backoffMillis(attempts: Int): Long {
+        if (config.failureBackoffMillis == 0L) return 0L
+        var delay = config.failureBackoffMillis
+        repeat((attempts - 1).coerceAtMost(MAX_BACKOFF_SHIFTS)) {
+            delay =
+                if (delay >= config.maxFailureBackoffMillis / 2) {
+                    config.maxFailureBackoffMillis
+                } else {
+                    min(delay * 2, config.maxFailureBackoffMillis)
+                }
+        }
+        return delay
+    }
 
     private fun cleanUpWhenUnused(
         key: String,
@@ -237,11 +402,54 @@ internal class TileRequestFetcher(
         val sourceFetches: Long,
         val coalescedRequests: Long,
         val inFlightRequests: Int,
+        val succeeded: Long,
+        val missing: Long,
+        val failed: Long,
+        val suppressedByBackoff: Long,
+        val failureBackoffEntries: Int,
     )
 
+    private data class FailureBackoff(
+        val attempts: Int,
+        val retryAtMillis: Long,
+        val kind: RasterTileFailureKind,
+    )
+
+    private data class FetchedTile(
+        val tile: Tile,
+        val outcome: TileOutcome,
+        val failureKind: RasterTileFailureKind? = null,
+    )
+
+    private enum class TileOutcome {
+        Success,
+        Missing,
+        Failed,
+    }
+
     private class InFlightRequest {
-        lateinit var deferred: Deferred<ByteArray?>
+        lateinit var deferred: Deferred<TileReadResult>
         var waiters: Int = 0
         var started: Boolean = false
+    }
+
+    private fun TileRequest.fetched(
+        bytes: ByteArray?,
+        outcome: TileOutcome,
+        failureKind: RasterTileFailureKind? = null,
+    ): FetchedTile =
+        FetchedTile(
+            tile = Tile(coordinate = coordinate, bounds = bounds, bytes = bytes),
+            outcome = outcome,
+            failureKind = failureKind,
+        )
+
+    private companion object {
+        const val MAX_BACKOFF_SHIFTS = 30
+
+        fun monotonicClock(): () -> Long {
+            val origin = TimeSource.Monotonic.markNow()
+            return { origin.elapsedNow().inWholeMilliseconds }
+        }
     }
 }

@@ -68,7 +68,7 @@ val publishedModules =
             ),
     )
 val tiloGroup = providers.gradleProperty("tilo.group").get()
-val tiloVersion = providers.gradleProperty("tilo.version").get()
+val tiloVersion = libs.versions.tilo.get()
 val testRepository = layout.buildDirectory.dir("test-maven-repository")
 val androidSdkDirectory =
     providers.environmentVariable("ANDROID_HOME").orElse(
@@ -121,6 +121,9 @@ subprojects {
                     name = "TiloTest"
                     url = testRepository.get().asFile.toURI()
                 }
+            }
+            tasks.matching { it.name == "publishAllPublicationsToTiloTestRepository" }.configureEach {
+                mustRunAfter(":cleanTiloTestRepository")
             }
         }
 
@@ -198,6 +201,7 @@ tasks.register<Delete>("cleanTiloTestRepository") {
 tasks.register("publishTiloToTestRepository") {
     group = "publishing"
     description = "Publishes every supported Tilo artifact to the isolated test repository."
+    dependsOn("cleanTiloTestRepository")
     dependsOn(publishedModules.keys.map { ":$it:publishAllPublicationsToTiloTestRepository" })
 }
 

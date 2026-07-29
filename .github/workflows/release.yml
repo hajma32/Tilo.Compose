@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version already declared as tilo.version in gradle.properties
+        description: Version already declared as tilo in gradle/libs.versions.toml
         required: true
         type: string
 
@@ -91,7 +91,7 @@ jobs:
         env:
           MANUAL_VERSION: ${{ inputs.version }}
         run: |
-          configured_version="$(sed -n 's/^tilo.version=//p' gradle.properties)"
+          configured_version="$(sed -n 's/^tilo = "\(.*\)"$/\1/p' gradle/libs.versions.toml)"
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             requested_version="${GITHUB_REF_NAME#v}"
           else
@@ -99,7 +99,7 @@ jobs:
           fi
 
           if [[ -z "$configured_version" || "$requested_version" != "$configured_version" ]]; then
-            echo "Requested version '$requested_version' does not match tilo.version '$configured_version'." >&2
+            echo "Requested version '$requested_version' does not match catalog version '$configured_version'." >&2
             exit 1
           fi
 

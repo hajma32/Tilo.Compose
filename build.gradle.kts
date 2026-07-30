@@ -293,7 +293,6 @@ subprojects {
                     localDirectory.set(project.layout.projectDirectory.dir("src"))
                     val remoteSourceDirectory =
                         when (project.name) {
-                            "geocore" -> "https://github.com/hajma32/Tilo.GeoCore/tree/main/src"
                             "spatial-index" -> "https://github.com/hajma32/Tilo.SpatialIndex/tree/main/src"
                             else -> "https://github.com/hajma32/Tilo.Compose/tree/main/${project.name}/src"
                         }

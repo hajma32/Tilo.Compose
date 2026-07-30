@@ -1,3 +1,5 @@
+@file:OptIn(tilo.compose.dsl.ExperimentalTiloApi::class)
+
 package tilo.compose.ui
 
 import androidx.compose.foundation.Canvas
@@ -23,13 +25,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.MapCameraState
+import tilo.compose.ui.generated.resources.Res
+import tilo.compose.ui.generated.resources.reset_map_rotation
 
 /** Displays current north orientation and animates the camera back to north when pressed. */
 @Composable
@@ -37,11 +40,22 @@ import tilo.compose.dsl.MapCameraState
 fun BoxScope.DefaultCompassControl(
     cameraState: MapCameraState,
     style: CameraControlsStyle = CameraControlsStyle(),
+) = DefaultCompassControl(cameraState, style, MapUiAccessibility())
+
+/** Displays the compass with configurable accessibility text. */
+@Composable
+@ExperimentalTiloApi
+fun BoxScope.DefaultCompassControl(
+    cameraState: MapCameraState,
+    style: CameraControlsStyle = CameraControlsStyle(),
+    accessibility: MapUiAccessibility,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val layoutDirection = LocalLayoutDirection.current
     val resolvedStyle = style.resolve()
     var animationJob by remember { mutableStateOf<Job?>(null) }
+    val contentDescription =
+        accessibility.resetNorthDescription ?: stringResource(Res.string.reset_map_rotation)
     val topPadding = style.contentPadding.calculateTopPadding() + style.buttonSize * 2 + style.spacing * 2
     val endPadding =
         when (layoutDirection) {
@@ -54,6 +68,9 @@ fun BoxScope.DefaultCompassControl(
             animationJob?.cancel()
             animationJob = coroutineScope.launch { cameraState.animateBearingTo(0.0) }
         },
+        contentDescription = contentDescription,
+        enabled = cameraState.bearing != 0.0,
+        traversalIndex = COMPASS_TRAVERSAL_INDEX,
         modifier =
             Modifier
                 .align(Alignment.TopEnd)
@@ -67,8 +84,7 @@ fun BoxScope.DefaultCompassControl(
             modifier =
                 Modifier
                     .size(resolvedStyle.iconSize)
-                    .rotate(-cameraState.bearing.toFloat())
-                    .semantics { contentDescription = "Reset map rotation to north" },
+                    .rotate(-cameraState.bearing.toFloat()),
         ) {
             drawCompassNeedle(colors)
         }

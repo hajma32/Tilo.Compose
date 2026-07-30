@@ -23,6 +23,7 @@ kotlin {
                 api(libs.compose.foundation)
                 api(libs.compose.ui)
                 implementation(libs.compose.material3)
+                implementation(libs.compose.components.resources)
             }
         }
         val commonTest by getting {
@@ -59,6 +60,10 @@ kotlin {
             dependsOn(iosTest)
         }
     }
+}
+
+compose.resources {
+    packageOfResClass = "tilo.compose.render.generated.resources"
 }
 
 android {

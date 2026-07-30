@@ -132,7 +132,7 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 | API stability and adoption | 🟡 Partial | Renderer internals and experimental boundaries are established, with alpha compatibility notes published per release; a formal stability policy, the first reviewed ABI baseline with CI enforcement, and wider adoption feedback remain.                           |
 | Publication | 🟡 Partial | Six Maven artifacts share verified `eu.tilomaps` coordinates, metadata, sources/docs artifacts, signing support, and a consumer smoke test; release CI now verifies and uploads signed deployments, while the first live Central handoff and portal validation remain. |
 | Event routing | ✅ Done | Interactive overlays own consumed pointer sequences; map transforms suppress taps, double tap only zooms, and single taps dispatch selection before world callbacks.                                                                                                  |
-| Accessibility | ⬜ Planned | Plan semantic descriptions, accessible default controls and keyboard interactions.                                                                                                                                                                                     |
+| Accessibility | ✅ Done | The map and default UI expose resource-backed semantics with locale-aware numbers, accessible 48 dp camera controls, compact focusable attribution links, dynamic focus traversal and focused keyboard navigation, with Android and iOS Compose tests enforced in CI. See [Accessibility](docs/accessibility.md).              |
 
 ## License
 

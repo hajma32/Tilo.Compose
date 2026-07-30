@@ -14,7 +14,7 @@ data class CameraControlsStyle(
     val contentPadding: PaddingValues = PaddingValues(top = 16.dp, end = 12.dp),
     val containerColor: Color = Color.Unspecified,
     val contentColor: Color = Color.Unspecified,
-    val buttonSize: Dp = 44.dp,
+    val buttonSize: Dp = 48.dp,
     val iconSize: Dp = 24.dp,
     val spacing: Dp = 8.dp,
     val shadowElevation: Dp = 4.dp,

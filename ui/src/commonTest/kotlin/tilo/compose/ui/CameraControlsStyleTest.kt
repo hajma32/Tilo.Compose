@@ -16,7 +16,7 @@ class CameraControlsStyleTest {
         assertEquals(12.dp, style.contentPadding.calculateRightPadding(LayoutDirection.Ltr))
         assertEquals(Color.Unspecified, style.containerColor)
         assertEquals(Color.Unspecified, style.contentColor)
-        assertEquals(44.dp, style.buttonSize)
+        assertEquals(48.dp, style.buttonSize)
         assertEquals(24.dp, style.iconSize)
         assertEquals(8.dp, style.spacing)
         assertEquals(4.dp, style.shadowElevation)

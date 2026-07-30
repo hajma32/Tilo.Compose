@@ -292,26 +292,32 @@ class AccessibilityAndroidTest {
         }
 
         rule.onNodeWithContentDescription("Interactive map").requestFocus().performKeyInput { pressKey(Key.Tab) }
-        rule.onNodeWithContentDescription("Zoom in").assertIsFocused().performKeyInput { pressKey(Key.Tab) }
-        rule.onNodeWithContentDescription("Zoom out").assertIsFocused().performKeyInput { pressKey(Key.Tab) }
+        rule
+            .onNodeWithContentDescription("Zoom in")
+            .assert(focusedAfter("Tab from map"))
+            .performKeyInput { pressKey(Key.Tab) }
+        rule
+            .onNodeWithContentDescription("Zoom out")
+            .assert(focusedAfter("Tab from zoom in"))
+            .performKeyInput { pressKey(Key.Tab) }
         rule
             .onNodeWithText("Static credit")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 4.0f))
         rule
             .onNodeWithText("Custom control")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 2.5f))
-            .assertIsFocused()
+            .assert(focusedAfter("Tab from zoom out"))
             .performKeyInput { pressKey(Key.Tab) }
         rule
             .onNodeWithText("Linked credit")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 5.0f))
-            .assertIsFocused()
+            .assert(focusedAfter("Tab from custom control"))
             .performKeyInput {
                 keyDown(Key.ShiftLeft)
                 pressKey(Key.Tab)
                 keyUp(Key.ShiftLeft)
             }
-        rule.onNodeWithText("Custom control").assertIsFocused()
+        rule.onNodeWithText("Custom control").assert(focusedAfter("Shift+Tab from linked credit"))
     }
 
     @Test
@@ -366,21 +372,21 @@ class AccessibilityAndroidTest {
         rule
             .onNodeWithContentDescription("Interactive map")
             .requestFocus()
-            .assertIsFocused()
+            .assert(focusedAfter("explicit map focus request"))
             .performKeyInput { pressKey(Key.Tab) }
         rule
             .onNodeWithContentDescription("Zoom in")
-            .assertIsFocused()
+            .assert(focusedAfter("Tab from map"))
             .performKeyInput { pressKey(Key.Tab) }
         rule
             .onNodeWithContentDescription("Zoom out")
-            .assertIsFocused()
+            .assert(focusedAfter("Tab from zoom in"))
             .performKeyInput { pressKey(Key.Tab) }
         rule
             .onNodeWithContentDescription("Reset map rotation to north")
-            .assertIsFocused()
+            .assert(focusedAfter("Tab from zoom out"))
             .performKeyInput { pressKey(Key.Tab) }
-        rule.onNodeWithText("Provider").assertIsFocused()
+        rule.onNodeWithText("Provider").assert(focusedAfter("Tab from compass"))
 
         val bearingBefore = cameraState.bearing
         rule.onNodeWithText("Provider").performKeyInput { pressKey(Key.Home) }
@@ -396,6 +402,11 @@ class AccessibilityAndroidTest {
     }
 
     private fun buttonRole(): SemanticsMatcher = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+
+    private fun focusedAfter(action: String): SemanticsMatcher =
+        SemanticsMatcher("is focused after $action") { node ->
+            node.config.getOrElse(SemanticsProperties.Focused) { false }
+        }
 
     private fun hasClickLabel(label: String): SemanticsMatcher =
         SemanticsMatcher("has click label '$label'") { node ->

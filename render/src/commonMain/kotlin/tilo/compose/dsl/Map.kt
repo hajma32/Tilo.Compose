@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -1326,10 +1327,44 @@ fun TiloMap(
     invalidationKey: Any? = null,
     gestureConfig: MapGestureConfig,
     layers: MapLayerBuilder.() -> Unit,
+) = TiloMap(
+    cameraState = cameraState,
+    modifier = modifier,
+    accessibility = MapAccessibilityOptions(),
+    onTapWorld = onTapWorld,
+    onFeatureSelect = onFeatureSelect,
+    onRenderError = onRenderError,
+    selectedFeatures = selectedFeatures,
+    attributionContent = attributionContent,
+    scaleBarContent = scaleBarContent,
+    cameraControlsContent = cameraControlsContent,
+    invalidationKey = invalidationKey,
+    gestureConfig = gestureConfig,
+    layers = layers,
+)
+
+/** Compose map surface with configurable accessibility and keyboard behavior. */
+@Composable
+@ExperimentalTiloApi
+fun TiloMap(
+    cameraState: MapCameraState,
+    modifier: Modifier = Modifier,
+    accessibility: MapAccessibilityOptions,
+    onTapWorld: ((Point) -> Unit)? = null,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    onRenderError: ((Throwable) -> Unit)? = null,
+    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
+    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
+    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
+    invalidationKey: Any? = null,
+    gestureConfig: MapGestureConfig = MapGestureConfig.Default,
+    layers: MapLayerBuilder.() -> Unit,
 ) = TiloMapImpl(
     cameraState = cameraState,
     modifier = modifier,
     gestureConfig = gestureConfig,
+    accessibility = accessibility,
     onTapWorld = onTapWorld,
     onFeatureSelect = onFeatureSelect,
     onRenderError = onRenderError,
@@ -1397,6 +1432,7 @@ fun TiloMap(
     cameraState = cameraState,
     modifier = modifier,
     gestureConfig = gestureConfig,
+    accessibility = MapAccessibilityOptions(),
     onTapWorld = onTapWorld,
     onFeatureSelect = onFeatureSelect,
     onRenderError = onRenderError,
@@ -1429,6 +1465,7 @@ fun TiloMap(
     cameraState = cameraState,
     diagnosticsState = diagnosticsState,
     modifier = modifier,
+    accessibility = MapAccessibilityOptions(),
     onTapWorld = onTapWorld,
     onFeatureSelect = onFeatureSelect,
     onRenderError = onRenderError,
@@ -1437,7 +1474,41 @@ fun TiloMap(
     scaleBarContent = scaleBarContent,
     cameraControlsContent = cameraControlsContent,
     invalidationKey = invalidationKey,
-    gestureConfig = MapGestureConfig.Default,
+    layers = layers,
+)
+
+/** Compose map surface with diagnostics plus configurable accessibility and keyboard behavior. */
+@Composable
+@ExperimentalTiloApi
+fun TiloMap(
+    cameraState: MapCameraState,
+    diagnosticsState: MapDiagnosticsState,
+    modifier: Modifier = Modifier,
+    accessibility: MapAccessibilityOptions,
+    onTapWorld: ((Point) -> Unit)? = null,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    onRenderError: ((Throwable) -> Unit)? = null,
+    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
+    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
+    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
+    invalidationKey: Any? = null,
+    gestureConfig: MapGestureConfig = MapGestureConfig.Default,
+    layers: MapLayerBuilder.() -> Unit,
+) = TiloMapImpl(
+    cameraState = cameraState,
+    diagnosticsState = diagnosticsState,
+    modifier = modifier,
+    accessibility = accessibility,
+    onTapWorld = onTapWorld,
+    onFeatureSelect = onFeatureSelect,
+    onRenderError = onRenderError,
+    selectedFeatures = selectedFeatures,
+    attributionContent = attributionContent,
+    scaleBarContent = scaleBarContent,
+    cameraControlsContent = cameraControlsContent,
+    invalidationKey = invalidationKey,
+    gestureConfig = gestureConfig,
     layers = layers,
 )
 
@@ -1446,6 +1517,7 @@ private fun TiloMapImpl(
     cameraState: MapCameraState,
     modifier: Modifier,
     gestureConfig: MapGestureConfig,
+    accessibility: MapAccessibilityOptions,
     onTapWorld: ((Point) -> Unit)?,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
     onRenderError: ((Throwable) -> Unit)?,
@@ -1458,26 +1530,30 @@ private fun TiloMapImpl(
     layers: MapLayerBuilder.() -> Unit,
 ) {
     val builtLayers = rememberManagedMapLayers(layers)
-    Box(modifier = modifier) {
-        MapRendererLayer(
-            cameraState = cameraState,
-            layers = builtLayers,
-            gestureConfig = gestureConfig,
-            onTapWorld = onTapWorld,
-            onFeatureSelect = onFeatureSelect,
-            onRenderError = onRenderError,
-            selectedFeatures = selectedFeatures,
-            invalidationKey = invalidationKey,
-            diagnosticsState = diagnosticsState,
-        )
-        BottomMapOverlays(
-            cameraState = cameraState,
-            layers = builtLayers,
-            attributionContent = attributionContent,
-            scaleBarContent = scaleBarContent,
-        )
-        if (cameraControlsContent != null) {
-            cameraControlsContent(cameraState)
+    val focusTraversal = remember { MapFocusTraversal() }
+    CompositionLocalProvider(LocalTiloMapFocusTraversal provides focusTraversal) {
+        Box(modifier = modifier) {
+            MapRendererLayer(
+                cameraState = cameraState,
+                accessibility = accessibility,
+                layers = builtLayers,
+                gestureConfig = gestureConfig,
+                onTapWorld = onTapWorld,
+                onFeatureSelect = onFeatureSelect,
+                onRenderError = onRenderError,
+                selectedFeatures = selectedFeatures,
+                invalidationKey = invalidationKey,
+                diagnosticsState = diagnosticsState,
+            )
+            BottomMapOverlays(
+                cameraState = cameraState,
+                layers = builtLayers,
+                attributionContent = attributionContent,
+                scaleBarContent = scaleBarContent,
+            )
+            if (cameraControlsContent != null) {
+                cameraControlsContent(cameraState)
+            }
         }
     }
 }
@@ -1556,6 +1632,7 @@ private fun BoxScope.BottomMapOverlays(
 @Composable
 private fun MapRendererLayer(
     cameraState: MapCameraState,
+    accessibility: MapAccessibilityOptions,
     layers: List<Layer>,
     gestureConfig: MapGestureConfig,
     onTapWorld: ((Point) -> Unit)?,
@@ -1571,7 +1648,7 @@ private fun MapRendererLayer(
             map = cameraState.mapState,
             layers = layers,
             gestureConfig = gestureConfig,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().mapAccessibility(cameraState, accessibility),
             onTapWorld = onTapWorld,
             onFeatureSelect = onFeatureSelect,
             onRenderError = onRenderError,
@@ -1585,7 +1662,7 @@ private fun MapRendererLayer(
             layers = layers,
             gestureConfig = gestureConfig,
             diagnosticsState = diagnosticsState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().mapAccessibility(cameraState, accessibility),
             onTapWorld = onTapWorld,
             onFeatureSelect = onFeatureSelect,
             onRenderError = onRenderError,

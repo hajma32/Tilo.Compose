@@ -1,3 +1,5 @@
+@file:OptIn(tilo.compose.dsl.ExperimentalTiloApi::class)
+
 package tilo.compose.ui
 
 import androidx.compose.foundation.background
@@ -20,16 +22,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.jetbrains.compose.resources.stringResource
 import tilo.compose.core.layers.Attribution
+import tilo.compose.dsl.tiloMapFocusTarget
+import tilo.compose.ui.generated.resources.Res
+import tilo.compose.ui.generated.resources.open_attribution
 
 /** Displays active provider credits at the bottom end of a map and opens linked credits on tap. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun BoxScope.DefaultAttributionOverlay(attributions: List<Attribution>) {
+fun BoxScope.DefaultAttributionOverlay(attributions: List<Attribution>) =
+    DefaultAttributionOverlay(attributions, MapUiAccessibility())
+
+/** Displays active provider credits with configurable accessibility text. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun BoxScope.DefaultAttributionOverlay(
+    attributions: List<Attribution>,
+    accessibility: MapUiAccessibility,
+) {
     val uriHandler = LocalUriHandler.current
     val shape = RoundedCornerShape(8.dp)
     val containerColor = MaterialTheme.colorScheme.surface
@@ -48,13 +66,23 @@ fun BoxScope.DefaultAttributionOverlay(attributions: List<Attribution>) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        attributions.forEach { attribution ->
+        attributions.forEachIndexed { attributionIndex, attribution ->
+            val traversalIndex = ATTRIBUTION_TRAVERSAL_INDEX + attributionIndex
+            val linkModifier =
+                attribution.url?.let { url ->
+                    val clickLabel =
+                        accessibility.attributionClickLabel?.invoke(attribution)
+                            ?: stringResource(Res.string.open_attribution, attribution.label)
+                    Modifier
+                        .tiloMapFocusTarget(traversalIndex)
+                        .clickable(
+                            onClickLabel = clickLabel,
+                            role = Role.Button,
+                        ) { uriHandler.openUri(url) }
+                } ?: Modifier.semantics { this.traversalIndex = traversalIndex }
             BasicText(
                 text = attribution.label,
-                modifier =
-                    attribution.url?.let { url ->
-                        Modifier.clickable { uriHandler.openUri(url) }
-                    } ?: Modifier,
+                modifier = linkModifier,
                 style = if (attribution.url != null) linkTextStyle else textStyle,
             )
         }

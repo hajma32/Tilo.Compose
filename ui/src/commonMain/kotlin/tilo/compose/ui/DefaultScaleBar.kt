@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -34,17 +36,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.jetbrains.compose.resources.stringResource
 import tilo.compose.core.scale.ScaleBar
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.drawLabelTextWithHalo
+import tilo.compose.ui.generated.resources.Res
+import tilo.compose.ui.generated.resources.map_scale
 
 /** Draws a two-segment scale bar at the bottom start of its containing map box. */
 @OptIn(ExperimentalTextApi::class)
 @Composable
-fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
+fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) = DefaultScaleBar(scaleBar, MapUiAccessibility())
+
+/** Draws a scale bar with configurable accessibility text. */
+@OptIn(ExperimentalTextApi::class)
+@Composable
+fun BoxScope.DefaultScaleBar(
+    scaleBar: ScaleBar,
+    accessibility: MapUiAccessibility,
+) {
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val widthDp = (scaleBar.widthPx / density.density).dp
+    val contentDescription =
+        accessibility.scaleBarDescription?.invoke(scaleBar)
+            ?: stringResource(Res.string.map_scale, scaleBar.label)
     val labels =
         remember(textMeasurer, scaleBar.label, scaleBar.midpointLabel) {
             ScaleBarLabelLayouts(
@@ -61,7 +77,8 @@ fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) {
                     WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom),
                 ).padding(start = 12.dp, bottom = 2.dp)
                 .requiredWidth(widthDp)
-                .height(30.dp),
+                .height(30.dp)
+                .semantics { this.contentDescription = contentDescription },
     ) {
         val barHeight = 12.dp.toPx()
         val radius = 3.dp.toPx()

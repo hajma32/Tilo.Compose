@@ -31,6 +31,15 @@ kotlin {
                 implementation(libs.kotlin.test)
             }
         }
+        val androidInstrumentedTest by getting {
+            dependencies {
+                implementation(libs.kotlin.test)
+                implementation(libs.androidx.testExt.junit)
+                implementation(libs.androidx.test.runner)
+                implementation(libs.compose.uiTest)
+                implementation(libs.androidx.compose.ui.test.junit4)
+            }
+        }
         val iosMain by creating {
             dependsOn(commonMain)
         }
@@ -40,7 +49,16 @@ kotlin {
         val iosSimulatorArm64Main by getting {
             dependsOn(iosMain)
         }
+        val iosSimulatorArm64Test by getting {
+            dependencies {
+                implementation(libs.compose.uiTest)
+            }
+        }
     }
+}
+
+dependencies {
+    add("debugImplementation", libs.androidx.compose.ui.test.manifest)
 }
 
 android {
@@ -55,6 +73,7 @@ android {
             libs.versions.android.minSdk
                 .get()
                 .toInt()
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 }
 

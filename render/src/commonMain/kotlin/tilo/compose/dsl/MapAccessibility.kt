@@ -8,6 +8,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -65,20 +66,30 @@ internal class MapFocusTraversal {
     fun moveFrom(
         token: Any,
         forward: Boolean,
-    ): Boolean {
+    ): Boolean = candidatesFrom(token, forward).any { it.requester.requestFocus() }
+
+    fun neighborRequester(
+        token: Any,
+        forward: Boolean,
+    ): FocusRequester? = candidatesFrom(token, forward).firstOrNull()?.requester
+
+    private fun candidatesFrom(
+        token: Any,
+        forward: Boolean,
+    ): List<RegisteredFocusTarget> {
         val ordered =
             targets.sortedWith(
                 compareBy(RegisteredFocusTarget::traversalIndex, RegisteredFocusTarget::registrationOrder),
             )
         val currentIndex = ordered.indexOfFirst { it.token === token }
-        if (currentIndex < 0) return false
+        if (currentIndex < 0) return emptyList()
         val candidates =
             if (forward) {
                 ordered.subList(currentIndex + 1, ordered.size)
             } else {
                 ordered.subList(0, currentIndex).asReversed()
             }
-        return candidates.any { it.requester.requestFocus() }
+        return candidates
     }
 }
 
@@ -114,7 +125,10 @@ fun Modifier.tiloMapFocusTarget(traversalIndex: Float): Modifier {
             false
         }
     }.focusRequester(requester)
-        .semantics { this.traversalIndex = traversalIndex }
+        .focusProperties {
+            next = traversal.neighborRequester(token, forward = true) ?: FocusRequester.Default
+            previous = traversal.neighborRequester(token, forward = false) ?: FocusRequester.Default
+        }.semantics { this.traversalIndex = traversalIndex }
 }
 
 /**

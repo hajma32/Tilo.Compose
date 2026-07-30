@@ -108,9 +108,20 @@ android {
     }
 }
 
+val projIosArm64Manifest =
+    layout.buildDirectory.file("classes/kotlin/iosArm64/main/cinterop/core-cinterop-proj/default/manifest")
+
 val copyProjLegalNoticesIosArm64 =
     tasks.register<Copy>("copyProjLegalNoticesIosArm64") {
         dependsOn("cinteropProjIosArm64")
+        inputs
+            .file(projIosArm64Manifest)
+            .withPropertyName("projCinteropManifest")
+            .optional()
+        onlyIf("the iOS device PROJ cinterop KLIB was produced") { task ->
+            task.inputs.files.files
+                .any { it.name == "manifest" && it.isFile }
+        }
         from(
             "src/nativeInterop/proj/LICENSE-PROJ.txt",
             "src/nativeInterop/proj/NOTICE-EPSG.txt",
@@ -124,9 +135,20 @@ val copyProjLegalNoticesIosArm64 =
         )
     }
 
+val projIosSimulatorArm64Manifest =
+    layout.buildDirectory.file("classes/kotlin/iosSimulatorArm64/main/cinterop/core-cinterop-proj/default/manifest")
+
 val copyProjLegalNoticesIosSimulatorArm64 =
     tasks.register<Copy>("copyProjLegalNoticesIosSimulatorArm64") {
         dependsOn("cinteropProjIosSimulatorArm64")
+        inputs
+            .file(projIosSimulatorArm64Manifest)
+            .withPropertyName("projCinteropManifest")
+            .optional()
+        onlyIf("the iOS simulator PROJ cinterop KLIB was produced") { task ->
+            task.inputs.files.files
+                .any { it.name == "manifest" && it.isFile }
+        }
         from(
             "src/nativeInterop/proj/LICENSE-PROJ.txt",
             "src/nativeInterop/proj/NOTICE-EPSG.txt",

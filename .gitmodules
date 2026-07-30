@@ -1,6 +1,3 @@
 [submodule "spatial-index"]
 	path = spatial-index
 	url = git@github.com:hajma32/Tilo.SpatialIndex.git
-[submodule "geocore"]
-	path = geocore
-	url = git@github.com:hajma32/Tilo.GeoCore.git

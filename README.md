@@ -138,7 +138,8 @@ labels, selection, default UI overlays, drawing, tile grids, and projections.
 
 MIT License. See [LICENSE](LICENSE).
 
-GeoCore and SpatialIndex are also MIT licensed in their own repositories.
+The GeoCore module is part of this repository. SpatialIndex is also MIT
+licensed in its own repository.
 The Android `core` artifact uses Proj4J and `proj4j-epsg`; the iOS artifact
 bundles [PROJ](https://proj.org/). Both platform distributions include their
 applicable software licenses and the full

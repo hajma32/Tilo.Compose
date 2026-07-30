@@ -208,6 +208,7 @@ val publishedModules =
 val tiloGroup = providers.gradleProperty("tilo.group").get()
 val tiloVersion = libs.versions.tilo.get()
 val testRepository = layout.buildDirectory.dir("test-maven-repository")
+val canCompileAppleTargets = System.getProperty("os.name").startsWith("Mac", ignoreCase = true)
 val androidSdkDirectory =
     providers.environmentVariable("ANDROID_HOME").orElse(
         providers.fileContents(layout.projectDirectory.file("local.properties")).asText.map { contents ->
@@ -282,6 +283,12 @@ subprojects {
         extensions.configure<DokkaExtension> {
             dokkaSourceSets.configureEach {
                 documentedVisibilities.set(setOf(VisibilityModifier.Public))
+                if (
+                    !canCompileAppleTargets &&
+                    listOf("ios", "apple", "native").any { platform -> name.contains(platform, ignoreCase = true) }
+                ) {
+                    suppress.set(true)
+                }
                 sourceLink {
                     localDirectory.set(project.layout.projectDirectory.dir("src"))
                     val remoteSourceDirectory =

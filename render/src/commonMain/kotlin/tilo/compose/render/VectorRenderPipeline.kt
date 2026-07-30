@@ -89,6 +89,11 @@ internal class VectorRenderPipeline(
                         commandsByLayer[layer.id] = commands
                     }
 
+                    is VectorRenderStrategy.ImmediateLod -> {
+                        // Temporary integration fallback until screen-space simplification is implemented.
+                        commandsByLayer[layer.id] = commands
+                    }
+
                     is VectorRenderStrategy.CachedBitmap -> {
                         val labels = commands.filterIsInstance<RenderLabel>()
                         val geometry = commands.filterNot { it is RenderLabel }

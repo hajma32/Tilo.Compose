@@ -38,6 +38,7 @@ import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasStateDescription
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -403,10 +404,13 @@ class AccessibilityAndroidTest {
 
     private fun buttonRole(): SemanticsMatcher = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
 
-    private fun focusedAfter(action: String): SemanticsMatcher =
-        SemanticsMatcher("is focused after $action") { node ->
+    private fun focusedAfter(action: String): SemanticsMatcher {
+        val focusedNodes = rule.onAllNodes(isFocused()).fetchSemanticsNodes()
+        val focusedSnapshot = focusedNodes.joinToString(prefix = "[", postfix = "]") { it.config.toString() }
+        return SemanticsMatcher("is focused after $action; focused nodes: $focusedSnapshot") { node ->
             node.config.getOrElse(SemanticsProperties.Focused) { false }
         }
+    }
 
     private fun hasClickLabel(label: String): SemanticsMatcher =
         SemanticsMatcher("has click label '$label'") { node ->

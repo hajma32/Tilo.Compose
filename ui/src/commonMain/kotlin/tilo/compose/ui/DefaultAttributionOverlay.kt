@@ -23,7 +23,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.TextStyle
@@ -80,9 +79,6 @@ fun BoxScope.DefaultAttributionOverlay(
                             onClickLabel = clickLabel,
                             role = Role.Button,
                         ) { uriHandler.openUri(url) }
-                        .semantics {
-                            role = Role.Button
-                        }
                 } ?: Modifier.semantics { this.traversalIndex = traversalIndex }
             BasicText(
                 text = attribution.label,

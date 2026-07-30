@@ -104,15 +104,13 @@ fun Modifier.tiloMapFocusTarget(traversalIndex: Float): Modifier {
         onDispose { traversal.unregister(token) }
     }
     return onPreviewKeyEvent { event ->
-        when {
-            !event.isPlainTab() -> false
-            event.type == KeyEventType.KeyUp -> true
-            event.type != KeyEventType.KeyDown -> false
-            else ->
-                traversal.moveFrom(token, forward = !event.isShiftPressed) ||
-                    focusManager.moveFocus(
-                        if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next,
-                    )
+        if (event.isPlainTabKeyDown()) {
+            traversal.moveFrom(token, forward = !event.isShiftPressed) ||
+                focusManager.moveFocus(
+                    if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next,
+                )
+        } else {
+            false
         }
     }.focusRequester(requester)
         .semantics { this.traversalIndex = traversalIndex }
@@ -234,8 +232,9 @@ private inline fun handled(action: () -> Unit): Boolean {
     return true
 }
 
-private fun KeyEvent.isPlainTab(): Boolean =
+private fun KeyEvent.isPlainTabKeyDown(): Boolean =
     key == Key.Tab &&
+        type == KeyEventType.KeyDown &&
         !isAltPressed &&
         !isCtrlPressed &&
         !isMetaPressed

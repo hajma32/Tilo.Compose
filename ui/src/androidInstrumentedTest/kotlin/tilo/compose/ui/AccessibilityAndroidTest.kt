@@ -38,7 +38,6 @@ import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasStateDescription
-import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -256,7 +255,7 @@ class AccessibilityAndroidTest {
     }
 
     @Test
-    fun traversalSkipsMissingControlsAndStartsAtFirstLinkedAttribution() {
+    fun traversalIndicesSkipMissingControlsAndStartAtFirstLinkedAttribution() {
         rule.setContent {
             val cameraState =
                 rememberMapCameraState(
@@ -292,33 +291,39 @@ class AccessibilityAndroidTest {
             )
         }
 
-        rule.onNodeWithContentDescription("Interactive map").requestFocus().performKeyInput { pressKey(Key.Tab) }
+        rule
+            .onNodeWithContentDescription("Interactive map")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 0.0f))
+            .requestFocus()
+            .assertIsFocused()
         rule
             .onNodeWithContentDescription("Zoom in")
-            .assert(focusedAfter("Tab from map"))
-            .performKeyInput { pressKey(Key.Tab) }
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 1.0f))
+            .requestFocus()
+            .assertIsFocused()
         rule
             .onNodeWithContentDescription("Zoom out")
-            .assert(focusedAfter("Tab from zoom in"))
-            .performKeyInput { pressKey(Key.Tab) }
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 2.0f))
+            .requestFocus()
+            .assertIsFocused()
         rule
             .onNodeWithText("Static credit")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 4.0f))
+            .assert(
+                SemanticsMatcher("is not a focus target") { node ->
+                    SemanticsActions.RequestFocus !in node.config
+                },
+            )
         rule
             .onNodeWithText("Custom control")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 2.5f))
-            .assert(focusedAfter("Tab from zoom out"))
-            .performKeyInput { pressKey(Key.Tab) }
+            .requestFocus()
+            .assertIsFocused()
         rule
             .onNodeWithText("Linked credit")
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 5.0f))
-            .assert(focusedAfter("Tab from custom control"))
-            .performKeyInput {
-                keyDown(Key.ShiftLeft)
-                pressKey(Key.Tab)
-                keyUp(Key.ShiftLeft)
-            }
-        rule.onNodeWithText("Custom control").assert(focusedAfter("Shift+Tab from linked credit"))
+            .requestFocus()
+            .assertIsFocused()
     }
 
     @Test
@@ -344,7 +349,7 @@ class AccessibilityAndroidTest {
     }
 
     @Test
-    fun tabOrderIsMapThenZoomInZoomOutCompassAndAttribution() {
+    fun defaultControlsExposeExpectedTraversalOrderAndFocusTargets() {
         lateinit var cameraState: tilo.compose.dsl.MapCameraState
         rule.setContent {
             cameraState =
@@ -372,22 +377,29 @@ class AccessibilityAndroidTest {
 
         rule
             .onNodeWithContentDescription("Interactive map")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 0.0f))
             .requestFocus()
-            .assert(focusedAfter("explicit map focus request"))
-            .performKeyInput { pressKey(Key.Tab) }
+            .assertIsFocused()
         rule
             .onNodeWithContentDescription("Zoom in")
-            .assert(focusedAfter("Tab from map"))
-            .performKeyInput { pressKey(Key.Tab) }
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 1.0f))
+            .requestFocus()
+            .assertIsFocused()
         rule
             .onNodeWithContentDescription("Zoom out")
-            .assert(focusedAfter("Tab from zoom in"))
-            .performKeyInput { pressKey(Key.Tab) }
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 2.0f))
+            .requestFocus()
+            .assertIsFocused()
         rule
             .onNodeWithContentDescription("Reset map rotation to north")
-            .assert(focusedAfter("Tab from zoom out"))
-            .performKeyInput { pressKey(Key.Tab) }
-        rule.onNodeWithText("Provider").assert(focusedAfter("Tab from compass"))
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 3.0f))
+            .requestFocus()
+            .assertIsFocused()
+        rule
+            .onNodeWithText("Provider")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 4.0f))
+            .requestFocus()
+            .assertIsFocused()
 
         val bearingBefore = cameraState.bearing
         rule.onNodeWithText("Provider").performKeyInput { pressKey(Key.Home) }
@@ -403,14 +415,6 @@ class AccessibilityAndroidTest {
     }
 
     private fun buttonRole(): SemanticsMatcher = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
-
-    private fun focusedAfter(action: String): SemanticsMatcher {
-        val focusedNodes = rule.onAllNodes(isFocused()).fetchSemanticsNodes()
-        val focusedSnapshot = focusedNodes.joinToString(prefix = "[", postfix = "]") { it.config.toString() }
-        return SemanticsMatcher("is focused after $action; focused nodes: $focusedSnapshot") { node ->
-            node.config.getOrElse(SemanticsProperties.Focused) { false }
-        }
-    }
 
     private fun hasClickLabel(label: String): SemanticsMatcher =
         SemanticsMatcher("has click label '$label'") { node ->

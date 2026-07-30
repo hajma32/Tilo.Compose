@@ -17,7 +17,6 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
@@ -43,7 +42,6 @@ private data class RegisteredFocusTarget(
 internal class MapFocusTraversal {
     private val targets = mutableListOf<RegisteredFocusTarget>()
     private var nextRegistrationOrder = 0L
-    private var tabHandledOnKeyDown = false
 
     fun register(
         token: Any,
@@ -63,50 +61,23 @@ internal class MapFocusTraversal {
         targets.removeAll { it.token === token }
     }
 
-    fun handleTab(
+    fun moveFrom(
         token: Any,
         forward: Boolean,
-        type: KeyEventType,
-        fallback: () -> Boolean,
-    ): Boolean =
-        when (type) {
-            KeyEventType.KeyDown ->
-                moveFrom(token, forward, fallback).also { tabHandledOnKeyDown = it }
-
-            KeyEventType.KeyUp ->
-                if (tabHandledOnKeyDown) {
-                    tabHandledOnKeyDown = false
-                    true
-                } else {
-                    moveFrom(token, forward, fallback)
-                }
-
-            else -> false
-        }
-
-    private fun moveFrom(
-        token: Any,
-        forward: Boolean,
-        fallback: () -> Boolean,
-    ): Boolean = candidatesFrom(token, forward).any { it.requester.requestFocus() } || fallback()
-
-    private fun candidatesFrom(
-        token: Any,
-        forward: Boolean,
-    ): List<RegisteredFocusTarget> {
+    ): Boolean {
         val ordered =
             targets.sortedWith(
                 compareBy(RegisteredFocusTarget::traversalIndex, RegisteredFocusTarget::registrationOrder),
             )
         val currentIndex = ordered.indexOfFirst { it.token === token }
-        if (currentIndex < 0) return emptyList()
+        if (currentIndex < 0) return false
         val candidates =
             if (forward) {
                 ordered.subList(currentIndex + 1, ordered.size)
             } else {
                 ordered.subList(0, currentIndex).asReversed()
             }
-        return candidates
+        return candidates.any { it.requester.requestFocus() }
     }
 }
 
@@ -132,17 +103,12 @@ fun Modifier.tiloMapFocusTarget(traversalIndex: Float): Modifier {
         traversal.register(token, traversalIndex, requester)
         onDispose { traversal.unregister(token) }
     }
-    return onKeyEvent { event ->
-        if (event.isPlainTab()) {
-            traversal.handleTab(
-                token = token,
-                forward = !event.isShiftPressed,
-                type = event.type,
-            ) {
+    return onPreviewKeyEvent { event ->
+        if (event.isPlainTabKeyDown()) {
+            traversal.moveFrom(token, forward = !event.isShiftPressed) ||
                 focusManager.moveFocus(
                     if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next,
                 )
-            }
         } else {
             false
         }
@@ -266,8 +232,9 @@ private inline fun handled(action: () -> Unit): Boolean {
     return true
 }
 
-private fun KeyEvent.isPlainTab(): Boolean =
+private fun KeyEvent.isPlainTabKeyDown(): Boolean =
     key == Key.Tab &&
+        type == KeyEventType.KeyDown &&
         !isAltPressed &&
         !isCtrlPressed &&
         !isMetaPressed

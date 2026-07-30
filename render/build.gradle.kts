@@ -36,6 +36,8 @@ kotlin {
                 implementation(libs.kotlin.test)
                 implementation(libs.androidx.testExt.junit)
                 implementation(libs.androidx.test.runner)
+                implementation(libs.androidx.espresso.core)
+                implementation(libs.androidx.compose.ui.test.junit4)
             }
         }
         val iosMain by creating {
@@ -77,4 +79,8 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+}
+
+dependencies {
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

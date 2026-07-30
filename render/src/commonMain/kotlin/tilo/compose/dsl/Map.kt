@@ -67,6 +67,31 @@ private val OPEN_STREET_MAP_ATTRIBUTION =
     )
 
 /**
+ * Controls how pointer gestures manipulate a [TiloMap].
+ *
+ * `rotationThresholdDegrees` is the net angular displacement from the gesture's initial
+ * orientation required before a two-finger gesture starts rotating the map. Movement up to the
+ * threshold is ignored, which keeps ordinary pinch-to-zoom gestures from introducing accidental
+ * bearing changes. Set it to `0.0` for immediate rotation.
+ */
+@ExperimentalTiloApi
+data class MapGestureConfig(
+    val rotationThresholdDegrees: Double = DEFAULT_ROTATION_THRESHOLD_DEGREES,
+) {
+    init {
+        require(rotationThresholdDegrees.isFinite() && rotationThresholdDegrees >= 0.0) {
+            "rotationThresholdDegrees must be finite and non-negative"
+        }
+    }
+
+    companion object {
+        val Default = MapGestureConfig()
+
+        private const val DEFAULT_ROTATION_THRESHOLD_DEGREES = 8.0
+    }
+}
+
+/**
  * Immutable camera snapshot suitable for viewport-dependent data loading.
  *
  * `bounds` and `resolution` use the map projection's coordinate units. A snapshot is not ready
@@ -1277,6 +1302,12 @@ fun rememberMapCameraState(
  * Compose map surface.
  *
  * Declare raster, vector, drawing, and custom layers in [layers].
+ * Interactive content in the overlay slots is placed above the map and owns pointer sequences
+ * that it consumes. Non-interactive overlay space remains transparent to map input. A map drag,
+ * pinch, rotation, or double tap does not invoke the single-tap callbacks. For a single map tap,
+ * [onFeatureSelect] runs before [onTapWorld], including when selection has no hits.
+ * [gestureConfig] controls gesture activation thresholds; by default, rotation requires an
+ * intentional eight-degree turn.
  * Unexpected render branch failures are reported through [onRenderError];
  * ordinary missing or undecodable raster tiles remain isolated.
  */
@@ -1293,10 +1324,12 @@ fun TiloMap(
     scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
     cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
     invalidationKey: Any? = null,
+    gestureConfig: MapGestureConfig,
     layers: MapLayerBuilder.() -> Unit,
 ) = TiloMapImpl(
     cameraState = cameraState,
     modifier = modifier,
+    gestureConfig = gestureConfig,
     onTapWorld = onTapWorld,
     onFeatureSelect = onFeatureSelect,
     onRenderError = onRenderError,
@@ -1309,7 +1342,74 @@ fun TiloMap(
     layers = layers,
 )
 
-/** Compose map surface with opt-in rendering diagnostics published to [diagnosticsState]. */
+/** Compose map surface using [MapGestureConfig.Default]. */
+@Composable
+@ExperimentalTiloApi
+fun TiloMap(
+    cameraState: MapCameraState,
+    modifier: Modifier = Modifier,
+    onTapWorld: ((Point) -> Unit)? = null,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    onRenderError: ((Throwable) -> Unit)? = null,
+    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
+    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
+    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
+    invalidationKey: Any? = null,
+    layers: MapLayerBuilder.() -> Unit,
+) = TiloMap(
+    cameraState = cameraState,
+    modifier = modifier,
+    onTapWorld = onTapWorld,
+    onFeatureSelect = onFeatureSelect,
+    onRenderError = onRenderError,
+    selectedFeatures = selectedFeatures,
+    attributionContent = attributionContent,
+    scaleBarContent = scaleBarContent,
+    cameraControlsContent = cameraControlsContent,
+    invalidationKey = invalidationKey,
+    gestureConfig = MapGestureConfig.Default,
+    layers = layers,
+)
+
+/**
+ * Compose map surface with opt-in rendering diagnostics published to [diagnosticsState].
+ *
+ * Pointer routing is identical to the non-diagnostics [TiloMap] overload.
+ */
+@Composable
+@ExperimentalTiloApi
+fun TiloMap(
+    cameraState: MapCameraState,
+    diagnosticsState: MapDiagnosticsState,
+    modifier: Modifier = Modifier,
+    onTapWorld: ((Point) -> Unit)? = null,
+    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
+    onRenderError: ((Throwable) -> Unit)? = null,
+    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
+    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
+    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
+    invalidationKey: Any? = null,
+    gestureConfig: MapGestureConfig,
+    layers: MapLayerBuilder.() -> Unit,
+) = TiloMapImpl(
+    cameraState = cameraState,
+    modifier = modifier,
+    gestureConfig = gestureConfig,
+    onTapWorld = onTapWorld,
+    onFeatureSelect = onFeatureSelect,
+    onRenderError = onRenderError,
+    selectedFeatures = selectedFeatures,
+    attributionContent = attributionContent,
+    scaleBarContent = scaleBarContent,
+    cameraControlsContent = cameraControlsContent,
+    invalidationKey = invalidationKey,
+    diagnosticsState = diagnosticsState,
+    layers = layers,
+)
+
+/** Diagnostics-enabled map surface using [MapGestureConfig.Default]. */
 @Composable
 @ExperimentalTiloApi
 fun TiloMap(
@@ -1325,8 +1425,9 @@ fun TiloMap(
     cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
     invalidationKey: Any? = null,
     layers: MapLayerBuilder.() -> Unit,
-) = TiloMapImpl(
+) = TiloMap(
     cameraState = cameraState,
+    diagnosticsState = diagnosticsState,
     modifier = modifier,
     onTapWorld = onTapWorld,
     onFeatureSelect = onFeatureSelect,
@@ -1336,7 +1437,7 @@ fun TiloMap(
     scaleBarContent = scaleBarContent,
     cameraControlsContent = cameraControlsContent,
     invalidationKey = invalidationKey,
-    diagnosticsState = diagnosticsState,
+    gestureConfig = MapGestureConfig.Default,
     layers = layers,
 )
 
@@ -1344,6 +1445,7 @@ fun TiloMap(
 private fun TiloMapImpl(
     cameraState: MapCameraState,
     modifier: Modifier,
+    gestureConfig: MapGestureConfig,
     onTapWorld: ((Point) -> Unit)?,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
     onRenderError: ((Throwable) -> Unit)?,
@@ -1360,6 +1462,7 @@ private fun TiloMapImpl(
         MapRendererLayer(
             cameraState = cameraState,
             layers = builtLayers,
+            gestureConfig = gestureConfig,
             onTapWorld = onTapWorld,
             onFeatureSelect = onFeatureSelect,
             onRenderError = onRenderError,
@@ -1454,6 +1557,7 @@ private fun BoxScope.BottomMapOverlays(
 private fun MapRendererLayer(
     cameraState: MapCameraState,
     layers: List<Layer>,
+    gestureConfig: MapGestureConfig,
     onTapWorld: ((Point) -> Unit)?,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
     onRenderError: ((Throwable) -> Unit)?,
@@ -1466,6 +1570,7 @@ private fun MapRendererLayer(
         MapRenderer(
             map = cameraState.mapState,
             layers = layers,
+            gestureConfig = gestureConfig,
             modifier = Modifier.fillMaxSize(),
             onTapWorld = onTapWorld,
             onFeatureSelect = onFeatureSelect,
@@ -1478,6 +1583,7 @@ private fun MapRendererLayer(
         MapRenderer(
             map = cameraState.mapState,
             layers = layers,
+            gestureConfig = gestureConfig,
             diagnosticsState = diagnosticsState,
             modifier = Modifier.fillMaxSize(),
             onTapWorld = onTapWorld,

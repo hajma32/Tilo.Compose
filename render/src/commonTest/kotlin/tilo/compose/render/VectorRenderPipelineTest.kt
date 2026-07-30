@@ -52,6 +52,29 @@ class VectorRenderPipelineTest {
             assertEquals(0, frame.metrics.bitmapLayersRebuilt)
         }
 
+    /** Documents the temporary immediate fallback until LOD simplification lands on main. */
+    @Test
+    fun immediateLodTemporarilyFallsBackToImmediateRendering() =
+        runTest {
+            var bitmapRenders = 0
+            val pipeline =
+                pipeline {
+                    bitmapRenders += 1
+                    null
+                }
+            val layer =
+                TestVectorLayer(
+                    id = "places",
+                    source = MutableSource(),
+                    renderStrategy = VectorRenderStrategy.ImmediateLod(),
+                )
+
+            val frame = pipeline.buildFrame(listOf(layer), testMap(), Density(1f), LayoutDirection.Ltr)
+
+            assertEquals(listOf("feature:point"), frame.commandsByLayer.getValue("places").map(RenderCommand::id))
+            assertEquals(0, bitmapRenders)
+        }
+
     /**
      * Verifies the complete reuse and invalidation contract for cached vector bitmaps.
      *

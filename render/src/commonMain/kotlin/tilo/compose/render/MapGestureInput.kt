@@ -1,3 +1,5 @@
+@file:OptIn(tilo.compose.dsl.ExperimentalTiloApi::class)
+
 package tilo.compose.render
 
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -9,6 +11,8 @@ import androidx.compose.foundation.gestures.calculateRotation
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -22,37 +26,35 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
-import kotlin.math.PI
+import tilo.compose.dsl.MapGestureConfig
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
 
 /**
  * Handles pan and pinch-to-zoom gestures on the map.
- * Calls [onChanged] after each gesture so the caller can trigger recomposition.
+ * Calls [onChanged] after each applied transform update so the caller can trigger recomposition.
  */
 @Composable
 @Suppress("CyclomaticComplexMethod", "LongMethod") // Pointer gesture arbitration is intentionally one state machine.
 internal fun Modifier.mapGestureInput(
     map: MapState,
+    gestureConfig: MapGestureConfig,
     onChanged: () -> Unit,
+    coordinator: MapGestureCoordinator,
 ): Modifier {
-    val currentMap = rememberUpdatedState(map)
+    val currentGestureConfig = rememberUpdatedState(gestureConfig)
     val currentOnChanged = rememberUpdatedState(onChanged)
-    return pointerInput(Unit) {
+    return pointerInput(map) {
         coroutineScope {
-            var panFlingJob: Job? = null
-            var zoomFlingJob: Job? = null
             awaitEachGesture {
-                val map = currentMap.value
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val rotationThreshold = RotationGestureThreshold(currentGestureConfig.value.rotationThresholdDegrees)
                 var accumulatedZoom = 1f
-                var accumulatedRotation = 0f
                 var accumulatedPan = Offset.Zero
                 var pastTouchSlop = false
                 var cleanSinglePointerPan = true
-                val down = awaitFirstDown(requireUnconsumed = false)
-                panFlingJob?.cancel()
-                zoomFlingJob?.cancel()
+                coordinator.cancelAnimations()
                 val downTimeMillis = down.uptimeMillis
                 var lastEventTimeMillis = down.uptimeMillis
                 var touchSlopReachedAtMillis = down.uptimeMillis
@@ -69,6 +71,7 @@ internal fun Modifier.mapGestureInput(
                     if (!canceled) {
                         val zoomChange = event.calculateZoom()
                         val rotationChange = event.calculateRotation()
+                        val rotationToApply = rotationThreshold.consume(rotationChange.toDouble())
                         val panChange = event.calculatePan()
                         val pressedCount = event.pressedCount()
                         if (pressedCount > 0) {
@@ -80,15 +83,13 @@ internal fun Modifier.mapGestureInput(
 
                         if (!pastTouchSlop) {
                             accumulatedZoom *= zoomChange
-                            accumulatedRotation += rotationChange
                             accumulatedPan += panChange
 
                             val centroidSize = event.calculateCentroidSize(useCurrent = false)
                             val zoomMotion = abs(1 - accumulatedZoom) * centroidSize
-                            val rotationMotion = abs(accumulatedRotation * PI.toFloat() * centroidSize / 180f)
                             val panMotion = accumulatedPan.getDistance()
                             pastTouchSlop = zoomMotion > viewConfiguration.touchSlop ||
-                                rotationMotion > viewConfiguration.touchSlop ||
+                                rotationThreshold.isActivated ||
                                 panMotion > viewConfiguration.touchSlop
                             if (pastTouchSlop) {
                                 touchSlopReachedAtMillis = lastEventTimeMillis
@@ -120,14 +121,14 @@ internal fun Modifier.mapGestureInput(
                                     focus = zoomFocus,
                                 )
                             }
-                            if (rotationChange != 0f) {
+                            if (rotationToApply != 0.0) {
                                 applyRotationGesture(
                                     map = map,
-                                    rotationChange = rotationChange.toDouble(),
+                                    rotationChange = rotationToApply,
                                     focus = Point(centroid.x.toDouble(), centroid.y.toDouble()),
                                 )
                             }
-                            if (panChange != Offset.Zero || zoomChange != 1f || rotationChange != 0f) {
+                            if (panChange != Offset.Zero || zoomChange != 1f || rotationToApply != 0.0) {
                                 currentOnChanged.value()
                             }
                             event.changes.forEach { change ->
@@ -142,7 +143,7 @@ internal fun Modifier.mapGestureInput(
                 val startedAsLongPress =
                     touchSlopReachedAtMillis - downTimeMillis >= viewConfiguration.longPressTimeoutMillis
                 if (pastTouchSlop && cleanSinglePointerPan && !startedAsLongPress) {
-                    panFlingJob =
+                    coordinator.panFlingJob =
                         launch {
                             animateInertialPan(
                                 initialVelocity = panVelocity.clampDistance(MAX_PAN_VELOCITY),
@@ -152,7 +153,7 @@ internal fun Modifier.mapGestureInput(
                         }
                 }
                 if (pastTouchSlop && hadZoomGesture && !startedAsLongPress) {
-                    zoomFlingJob =
+                    coordinator.zoomFlingJob =
                         launch {
                             animateInertialZoom(
                                 initialVelocity = zoomVelocity.coerceIn(-MAX_ZOOM_VELOCITY, MAX_ZOOM_VELOCITY),
@@ -164,6 +165,27 @@ internal fun Modifier.mapGestureInput(
                 }
             }
         }
+    }
+}
+
+/** Adds angular hysteresis without introducing a bearing jump when rotation activates. */
+internal class RotationGestureThreshold(
+    private val thresholdDegrees: Double,
+) {
+    private var accumulatedRotation = 0.0
+
+    var isActivated: Boolean = false
+        private set
+
+    fun consume(rotationChange: Double): Double {
+        if (isActivated) return rotationChange
+
+        accumulatedRotation += rotationChange
+        val excess = abs(accumulatedRotation) - thresholdDegrees
+        if (excess <= 0.0) return 0.0
+
+        isActivated = true
+        return if (accumulatedRotation < 0.0) -excess else excess
     }
 }
 
@@ -181,17 +203,17 @@ internal fun Modifier.mapTapInput(
     map: MapState,
     onTap: ((screenPoint: Point, worldPoint: Point) -> Unit)?,
     onChanged: () -> Unit,
+    coordinator: MapGestureCoordinator,
 ): Modifier {
     val currentMap = rememberUpdatedState(map)
     val currentOnTap = rememberUpdatedState(onTap)
     val currentOnChanged = rememberUpdatedState(onChanged)
     return pointerInput(Unit) {
         coroutineScope {
-            var doubleTapZoomJob: Job? = null
             detectTapGestures(
+                onPress = { coordinator.cancelAnimations() },
                 onDoubleTap = { offset ->
-                    doubleTapZoomJob?.cancel()
-                    doubleTapZoomJob =
+                    coordinator.doubleTapZoomJob =
                         launch {
                             animateDoubleTapZoom(
                                 focus = Point(offset.x.toDouble(), offset.y.toDouble()),
@@ -212,6 +234,32 @@ internal fun Modifier.mapTapInput(
             )
         }
     }
+}
+
+/** Coordinates animations owned by the map's independent transform and tap recognizers. */
+internal class MapGestureCoordinator {
+    var panFlingJob: Job? = null
+    var zoomFlingJob: Job? = null
+    var doubleTapZoomJob: Job? = null
+
+    fun cancelAnimations() {
+        panFlingJob?.cancel()
+        zoomFlingJob?.cancel()
+        doubleTapZoomJob?.cancel()
+        panFlingJob = null
+        zoomFlingJob = null
+        doubleTapZoomJob = null
+    }
+}
+
+/** Owns gesture animation jobs for one composed map and cancels them when its map is replaced or disposed. */
+@Composable
+internal fun rememberMapGestureCoordinator(map: MapState): MapGestureCoordinator {
+    val coordinator = remember { MapGestureCoordinator() }
+    DisposableEffect(map, coordinator) {
+        onDispose(coordinator::cancelAnimations)
+    }
+    return coordinator
 }
 
 private const val MAX_PAN_VELOCITY = 9_500f

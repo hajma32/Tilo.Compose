@@ -45,6 +45,10 @@ kotlin {
             implementation(project(":render"))
             implementation(project(":ui"))
         }
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }
 
@@ -79,6 +83,10 @@ android {
         getByName("release") {
             isMinifyEnabled = false
         }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     compileOptions {

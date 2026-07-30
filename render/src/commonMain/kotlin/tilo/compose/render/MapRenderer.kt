@@ -43,6 +43,7 @@ import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.Tile
 import tilo.compose.dsl.MapDiagnosticsState
 import tilo.compose.dsl.MapFeatureMetrics
+import tilo.compose.dsl.MapGestureConfig
 import tilo.compose.dsl.MapRasterLayerMetrics
 import tilo.compose.dsl.MapTileCacheMetrics
 import tilo.compose.dsl.MapTileMetrics
@@ -78,9 +79,11 @@ fun MapRenderer(
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
     onMapChanged: (() -> Unit)? = null,
+    gestureConfig: MapGestureConfig = MapGestureConfig.Default,
 ) = MapRendererImpl(
     map = map,
     layers = layers,
+    gestureConfig = gestureConfig,
     tileDecoder = tileDecoder,
     modifier = modifier,
     backend = backend,
@@ -109,9 +112,11 @@ fun MapRenderer(
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
     onMapChanged: (() -> Unit)? = null,
+    gestureConfig: MapGestureConfig = MapGestureConfig.Default,
 ) = MapRendererImpl(
     map = map,
     layers = layers,
+    gestureConfig = gestureConfig,
     tileDecoder = tileDecoder,
     modifier = modifier,
     backend = backend,
@@ -129,6 +134,7 @@ fun MapRenderer(
 private fun MapRendererImpl(
     map: MapState,
     layers: List<Layer>,
+    gestureConfig: MapGestureConfig,
     tileDecoder: (ByteArray) -> ImageBitmap?,
     modifier: Modifier,
     backend: RenderBackend,
@@ -151,6 +157,7 @@ private fun MapRendererImpl(
     val rasterPipeline = remember { RasterRenderPipeline() }
     val vectorPipeline = remember { VectorRenderPipeline() }
     val featureHitTester = remember { FeatureHitTester() }
+    val gestureCoordinator = rememberMapGestureCoordinator(map)
     val layerTree = remember(layers) { ResolvedLayerTree.resolve(layers) }
     val layerFlowKey = layerTree.key
     val overviewRequestTracker = remember(layerFlowKey) { OverviewRequestTracker() }
@@ -467,10 +474,15 @@ private fun MapRendererImpl(
                     )
                 redrawVersion++
                 onMapChanged?.invoke()
-            }.mapGestureInput(map) {
-                redrawVersion++
-                onMapChanged?.invoke()
-            }.mapTapInput(
+            }.mapGestureInput(
+                map = map,
+                gestureConfig = gestureConfig,
+                onChanged = {
+                    redrawVersion++
+                    onMapChanged?.invoke()
+                },
+                coordinator = gestureCoordinator,
+            ).mapTapInput(
                 map = map,
                 onTap =
                     if (onTapWorld == null && onFeatureSelect == null) {
@@ -481,10 +493,12 @@ private fun MapRendererImpl(
                             onTapWorld?.invoke(worldPoint)
                         }
                     },
-            ) {
-                redrawVersion++
-                onMapChanged?.invoke()
-            }.drawWithContent {
+                onChanged = {
+                    redrawVersion++
+                    onMapChanged?.invoke()
+                },
+                coordinator = gestureCoordinator,
+            ).drawWithContent {
                 redrawVersion
                 drawContent()
             }

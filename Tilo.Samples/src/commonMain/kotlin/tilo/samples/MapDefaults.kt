@@ -22,6 +22,10 @@ internal const val CUZK_ORTHOPHOTO_URL =
 
 private val PRAGUE = Point(14.4378, 50.0755)
 private val DEFAULT_MAP_CONFIG = MapConfig(minZoom = 1.0, maxZoom = 20.0)
+private val WEB_MERCATOR_MAP_CONFIG =
+    DEFAULT_MAP_CONFIG
+        .withTransformation(Wgs84ToWebMercatorTransformation)
+        .withTransformation(WebMercatorToWgs84Transformation)
 
 // WGS84 extent published in the ČÚZK ZTM 100 metadata for Czechia.
 private val CZECH_REPUBLIC_SJTSK_BOUNDS =
@@ -32,6 +36,13 @@ private val CZECH_REPUBLIC_SJTSK_BOUNDS =
         north = 51.06,
         transform = Wgs84ToEpsg5514Transformation::sourceToTarget,
     )
+private val SJTSK_MAP_CONFIG =
+    MapConfig(
+        minZoom = 9.0,
+        maxZoom = 16.0,
+        cameraBounds = CZECH_REPUBLIC_SJTSK_BOUNDS,
+    ).withTransformation(Wgs84ToEpsg5514Transformation)
+        .withTransformation(Epsg5514ToWgs84Transformation)
 
 @Composable
 internal fun rememberWebMercatorCamera(
@@ -43,11 +54,7 @@ internal fun rememberWebMercatorCamera(
         initialCenter = Wgs84ToWebMercatorTransformation.sourceToTarget(center),
         initialZoom = zoom,
         projection = webMercator(),
-        config =
-            DEFAULT_MAP_CONFIG
-                .copy(cameraBounds = cameraBounds)
-                .withTransformation(Wgs84ToWebMercatorTransformation)
-                .withTransformation(WebMercatorToWgs84Transformation),
+        config = WEB_MERCATOR_MAP_CONFIG.copy(cameraBounds = cameraBounds),
     )
 
 internal fun webMercatorBounds(
@@ -63,13 +70,7 @@ internal fun rememberSjtskCamera(): MapCameraState =
         initialCenter = Wgs84ToEpsg5514Transformation.sourceToTarget(PRAGUE),
         initialZoom = 12.2,
         projection = sjtsk(),
-        config =
-            MapConfig(
-                minZoom = 9.0,
-                maxZoom = 16.0,
-                cameraBounds = CZECH_REPUBLIC_SJTSK_BOUNDS,
-            ).withTransformation(Wgs84ToEpsg5514Transformation)
-                .withTransformation(Epsg5514ToWgs84Transformation),
+        config = SJTSK_MAP_CONFIG,
     )
 
 private fun transformedBounds(

@@ -8,7 +8,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -44,6 +43,7 @@ private data class RegisteredFocusTarget(
 internal class MapFocusTraversal {
     private val targets = mutableListOf<RegisteredFocusTarget>()
     private var nextRegistrationOrder = 0L
+    private var tabHandledOnKeyDown = false
 
     fun register(
         token: Any,
@@ -63,15 +63,32 @@ internal class MapFocusTraversal {
         targets.removeAll { it.token === token }
     }
 
-    fun moveFrom(
+    fun handleTab(
         token: Any,
         forward: Boolean,
-    ): Boolean = candidatesFrom(token, forward).any { it.requester.requestFocus() }
+        type: KeyEventType,
+        fallback: () -> Boolean,
+    ): Boolean =
+        when (type) {
+            KeyEventType.KeyDown ->
+                moveFrom(token, forward, fallback).also { tabHandledOnKeyDown = it }
 
-    fun neighborRequester(
+            KeyEventType.KeyUp ->
+                if (tabHandledOnKeyDown) {
+                    tabHandledOnKeyDown = false
+                    true
+                } else {
+                    moveFrom(token, forward, fallback)
+                }
+
+            else -> false
+        }
+
+    private fun moveFrom(
         token: Any,
         forward: Boolean,
-    ): FocusRequester? = candidatesFrom(token, forward).firstOrNull()?.requester
+        fallback: () -> Boolean,
+    ): Boolean = candidatesFrom(token, forward).any { it.requester.requestFocus() } || fallback()
 
     private fun candidatesFrom(
         token: Any,
@@ -116,19 +133,21 @@ fun Modifier.tiloMapFocusTarget(traversalIndex: Float): Modifier {
         onDispose { traversal.unregister(token) }
     }
     return onKeyEvent { event ->
-        if (event.isPlainTabKeyDown()) {
-            traversal.moveFrom(token, forward = !event.isShiftPressed) ||
+        if (event.isPlainTab()) {
+            traversal.handleTab(
+                token = token,
+                forward = !event.isShiftPressed,
+                type = event.type,
+            ) {
                 focusManager.moveFocus(
                     if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next,
                 )
+            }
         } else {
             false
         }
     }.focusRequester(requester)
-        .focusProperties {
-            next = traversal.neighborRequester(token, forward = true) ?: FocusRequester.Default
-            previous = traversal.neighborRequester(token, forward = false) ?: FocusRequester.Default
-        }.semantics { this.traversalIndex = traversalIndex }
+        .semantics { this.traversalIndex = traversalIndex }
 }
 
 /**
@@ -247,9 +266,8 @@ private inline fun handled(action: () -> Unit): Boolean {
     return true
 }
 
-private fun KeyEvent.isPlainTabKeyDown(): Boolean =
+private fun KeyEvent.isPlainTab(): Boolean =
     key == Key.Tab &&
-        type == KeyEventType.KeyDown &&
         !isAltPressed &&
         !isCtrlPressed &&
         !isMetaPressed

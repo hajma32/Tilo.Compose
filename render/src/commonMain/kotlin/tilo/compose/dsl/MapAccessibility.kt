@@ -104,13 +104,15 @@ fun Modifier.tiloMapFocusTarget(traversalIndex: Float): Modifier {
         onDispose { traversal.unregister(token) }
     }
     return onPreviewKeyEvent { event ->
-        if (event.isPlainTabKeyDown()) {
-            traversal.moveFrom(token, forward = !event.isShiftPressed) ||
-                focusManager.moveFocus(
-                    if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next,
-                )
-        } else {
-            false
+        when {
+            !event.isPlainTab() -> false
+            event.type == KeyEventType.KeyUp -> true
+            event.type != KeyEventType.KeyDown -> false
+            else ->
+                traversal.moveFrom(token, forward = !event.isShiftPressed) ||
+                    focusManager.moveFocus(
+                        if (event.isShiftPressed) FocusDirection.Previous else FocusDirection.Next,
+                    )
         }
     }.focusRequester(requester)
         .semantics { this.traversalIndex = traversalIndex }
@@ -180,13 +182,20 @@ internal fun Modifier.mapAccessibility(
             )
         }
 
-    return semantics {
-        contentDescription = resolvedContentDescription
-        stateDescription = resolvedStateDescription
-    }.onPreviewKeyEvent { event ->
-        handleMapKeyboardEvent(event, cameraState, options)
-    }.tiloMapFocusTarget(MAP_TRAVERSAL_INDEX)
-        .focusable(enabled = options.keyboardNavigationEnabled)
+    val accessibilityModifier =
+        semantics {
+            contentDescription = resolvedContentDescription
+            stateDescription = resolvedStateDescription
+        }.onPreviewKeyEvent { event ->
+            handleMapKeyboardEvent(event, cameraState, options)
+        }
+    return if (options.keyboardNavigationEnabled) {
+        accessibilityModifier
+            .tiloMapFocusTarget(MAP_TRAVERSAL_INDEX)
+            .focusable()
+    } else {
+        accessibilityModifier
+    }
 }
 
 @ExperimentalTiloApi
@@ -225,9 +234,8 @@ private inline fun handled(action: () -> Unit): Boolean {
     return true
 }
 
-private fun KeyEvent.isPlainTabKeyDown(): Boolean =
+private fun KeyEvent.isPlainTab(): Boolean =
     key == Key.Tab &&
-        type == KeyEventType.KeyDown &&
         !isAltPressed &&
         !isCtrlPressed &&
         !isMetaPressed

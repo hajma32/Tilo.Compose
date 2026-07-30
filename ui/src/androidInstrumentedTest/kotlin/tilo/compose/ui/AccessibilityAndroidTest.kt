@@ -34,7 +34,6 @@ import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -329,10 +328,10 @@ class AccessibilityAndroidTest {
 
         rule
             .onNodeWithContentDescription("Interactive map")
-            .assertIsNotFocused()
             .assert(
-                SemanticsMatcher("has no focus request action") { node ->
-                    SemanticsActions.RequestFocus !in node.config
+                SemanticsMatcher("has no focus semantics or focus request action") { node ->
+                    SemanticsProperties.Focused !in node.config &&
+                        SemanticsActions.RequestFocus !in node.config
                 },
             )
     }

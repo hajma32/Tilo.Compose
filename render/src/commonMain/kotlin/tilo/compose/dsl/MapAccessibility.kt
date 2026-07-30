@@ -17,6 +17,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
@@ -103,7 +104,7 @@ fun Modifier.tiloMapFocusTarget(traversalIndex: Float): Modifier {
         traversal.register(token, traversalIndex, requester)
         onDispose { traversal.unregister(token) }
     }
-    return onPreviewKeyEvent { event ->
+    return onKeyEvent { event ->
         if (event.isPlainTabKeyDown()) {
             traversal.moveFrom(token, forward = !event.isShiftPressed) ||
                 focusManager.moveFocus(

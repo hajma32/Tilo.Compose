@@ -35,7 +35,7 @@ object ScaleBarCalculator {
                 from = from,
                 to = to,
                 projection = map.projection,
-                transformationRegistry = map.config.transformationRegistry,
+                transformationRegistry = map.transformationRegistry,
             ) ?: return null
 
         if (maxDistanceMeters <= 0.0) return null

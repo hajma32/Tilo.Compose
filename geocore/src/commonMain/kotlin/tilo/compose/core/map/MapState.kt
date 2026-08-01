@@ -4,6 +4,7 @@ import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.projection.Projection
+import tilo.compose.core.transform.TransformationRegistry
 import kotlin.math.hypot
 import kotlin.math.log2
 
@@ -17,6 +18,7 @@ class MapState(
     val config: MapConfig = MapConfig.Default,
     viewport: Viewport = Viewport.Empty,
     bearing: Double = 0.0,
+    val transformationRegistry: TransformationRegistry = TransformationRegistry.Default,
 ) {
     /** Monotonic revision of camera and viewport state; batched camera updates advance it once. */
     var cameraRevision: Long = 0L
@@ -213,13 +215,13 @@ class MapState(
         point: Point,
         source: Projection,
         target: Projection,
-    ): Point = config.transformer.sourceToTarget(point, source, target)
+    ): Point = transformationRegistry.resolve(source, target).sourceToTarget(point)
 
     fun transformTargetToSource(
         point: Point,
         source: Projection,
         target: Projection,
-    ): Point = config.transformer.targetToSource(point, source, target)
+    ): Point = transformationRegistry.resolve(source, target).targetToSource(point)
 
     fun worldToScreen(world: Point): ScreenPoint =
         viewport.worldToScreen(world, center, zoom, projection.worldUnitsPerMapUnit, bearing)

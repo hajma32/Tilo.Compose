@@ -1,0 +1,157 @@
+package tilo.compose.core.transform
+
+import tilo.compose.core.geometry.Point
+import tilo.compose.core.projection.Projection
+import tilo.compose.core.projection.ReferencedProjection
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
+
+class TransformationRegistryTest {
+    @Test
+    fun discoversProjectionOwnedTransformationInBothDirections() {
+        val local = localProjection(reference = ReferenceProjection)
+        val registry = TransformationRegistry.Default
+
+        assertEquals(
+            Point(2.0, 4.0),
+            registry.resolve(local, ReferenceProjection).sourceToTarget(Point(6.0, 12.0)),
+        )
+        assertEquals(
+            Point(6.0, 12.0),
+            registry.resolve(ReferenceProjection, local).sourceToTarget(Point(2.0, 4.0)),
+        )
+    }
+
+    @Test
+    fun composesProjectionOwnedTransformationWithRuntimeProvider() {
+        val local = localProjection(reference = ReferenceProjection)
+        val resolved = OffsetTransformation(ReferenceProjection, TargetProjection, offset = 5.0)
+        val registry =
+            TransformationRegistry(
+                providers =
+                    listOf(
+                        TransformationProvider { source, target ->
+                            if (source.id == ReferenceProjection.id && target.id == TargetProjection.id) {
+                                resolved
+                            } else {
+                                null
+                            }
+                        },
+                    ),
+            )
+
+        assertEquals(
+            Point(7.0, 9.0),
+            registry.resolve(local, TargetProjection).sourceToTarget(Point(6.0, 12.0)),
+        )
+        assertEquals(
+            Point(6.0, 12.0),
+            registry.resolve(TargetProjection, local).sourceToTarget(Point(7.0, 9.0)),
+        )
+    }
+
+    @Test
+    fun dynamicResolversAreConsultedInOrder() {
+        val unsupported = TransformationProvider { _, _ -> null }
+        val resolved = OffsetTransformation(SourceProjection, TargetProjection, offset = 5.0)
+        val supported = TransformationProvider { _, _ -> resolved }
+        val registry = TransformationRegistry(providers = listOf(unsupported, supported))
+
+        assertSame(resolved, registry.resolve(SourceProjection, TargetProjection))
+    }
+
+    @Test
+    fun rejectsResolverResultForAnotherCrsPair() {
+        val wrongDirection = OffsetTransformation(TargetProjection, SourceProjection, offset = 5.0)
+        val registry = TransformationRegistry(providers = listOf(TransformationProvider { _, _ -> wrongDirection }))
+
+        assertFailsWith<IllegalArgumentException> {
+            registry.resolve(SourceProjection, TargetProjection)
+        }
+    }
+
+    @Test
+    fun sameCrsUsesIdentityWithoutConsultingResolvers() {
+        var resolverCalls = 0
+        val registry =
+            TransformationRegistry(
+                providers =
+                    listOf(
+                        TransformationProvider { _, _ ->
+                            resolverCalls += 1
+                            null
+                        },
+                    ),
+            )
+
+        val identity = registry.resolve(SourceProjection, SourceProjection)
+
+        assertEquals(Point(1.0, 2.0), identity.sourceToTarget(Point(1.0, 2.0)))
+        assertEquals(0, resolverCalls)
+    }
+
+    @Test
+    fun constructorDefensivelyCopiesProviders() {
+        val providers = mutableListOf<TransformationProvider>()
+        val registry = TransformationRegistry(providers)
+
+        providers += TransformationProvider { _, _ -> null }
+
+        assertEquals(emptyList(), registry.providers)
+    }
+
+    @Test
+    fun equalProvidersProduceEqualRegistryValues() {
+        val provider = TransformationProvider { _, _ -> null }
+        val first = TransformationRegistry(listOf(provider))
+        val second = TransformationRegistry(listOf(provider))
+
+        assertNotSame(first, second)
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+    }
+
+    @Test
+    fun reportsUnsupportedCrsPairWithTypedException() {
+        val error =
+            assertFailsWith<UnsupportedCrsTransformationException> {
+                TransformationRegistry.Default.resolve(SourceProjection, TargetProjection)
+            }
+
+        assertEquals(SourceProjection.id, error.sourceId)
+        assertEquals(TargetProjection.id, error.targetId)
+    }
+
+    private fun localProjection(reference: Projection): Projection =
+        ReferencedProjection(
+            id = "TEST:LOCAL",
+            reference = reference,
+            toReference = { point -> Point(point.x / 3.0, point.y / 3.0) },
+            fromReference = { point -> Point(point.x * 3.0, point.y * 3.0) },
+        )
+
+    private object SourceProjection : Projection {
+        override val id: String = "TEST:SOURCE"
+    }
+
+    private object ReferenceProjection : Projection {
+        override val id: String = "TEST:REFERENCE"
+    }
+
+    private object TargetProjection : Projection {
+        override val id: String = "TEST:TARGET"
+    }
+
+    private class OffsetTransformation(
+        override val source: Projection,
+        override val target: Projection,
+        private val offset: Double,
+    ) : Transformation<Projection, Projection> {
+        override fun sourceToTarget(point: Point): Point = Point(point.x + offset, point.y + offset)
+
+        override fun targetToSource(point: Point): Point = Point(point.x - offset, point.y - offset)
+    }
+}

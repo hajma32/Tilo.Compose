@@ -1,14 +1,13 @@
 package tilo.compose.core.scale
 
 import tilo.compose.core.geometry.Point
-import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.Epsg5514Projection
-import tilo.compose.core.projection.Projection
-import tilo.compose.core.transform.Transformation
+import tilo.compose.core.projection.ReferencedProjection
+import tilo.compose.core.transform.TransformationRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -69,7 +68,7 @@ class ScaleBarCalculatorTest {
                 from = Point(-600_000.0, -1_100_000.0),
                 to = Point(-599_000.0, -1_100_000.0),
                 projection = Epsg5514Projection,
-                transformationRegistry = MapConfig.Default.transformationRegistry,
+                transformationRegistry = TransformationRegistry.Default,
             )
 
         assertNull(distance)
@@ -82,33 +81,30 @@ class ScaleBarCalculatorTest {
                 from = Point(-600_000.0, -1_100_000.0),
                 to = Point(-599_000.0, -1_100_000.0),
                 projection = Epsg5514Projection,
-                transformationRegistry = MapConfig.Default.transformationRegistry,
+                transformationRegistry = TransformationRegistry.Default,
             )
 
         assertEquals(1000.0, distance)
     }
 
     @Test
-    fun prefersRegisteredTransformationOverPlanarFallback() {
-        val config = MapConfig.Default.withTransformation(FakeSjtskToWgs84Transformation)
+    fun discoversTransformationAttachedToProjection() {
+        val localProjection =
+            ReferencedProjection(
+                id = "TEST:LOCAL",
+                reference = Epsg4326Projection,
+                toReference = { point -> Point(point.x / 1_000.0, point.y) },
+                fromReference = { point -> Point(point.x * 1_000.0, point.y) },
+            )
 
         val distance =
             DistanceCalculators.Auto.distanceMeters(
                 from = Point(0.0, 0.0),
                 to = Point(1_000.0, 0.0),
-                projection = Epsg5514Projection,
-                transformationRegistry = config.transformationRegistry,
+                projection = localProjection,
+                transformationRegistry = TransformationRegistry.Default,
             )
 
         assertTrue(requireNotNull(distance) > 100_000.0)
-    }
-
-    private object FakeSjtskToWgs84Transformation : Transformation<Projection, Projection> {
-        override val source: Projection = Epsg5514Projection
-        override val target: Projection = Epsg4326Projection
-
-        override fun sourceToTarget(point: Point): Point = Point(point.x / 1_000.0, point.y)
-
-        override fun targetToSource(point: Point): Point = Point(point.x * 1_000.0, point.y)
     }
 }

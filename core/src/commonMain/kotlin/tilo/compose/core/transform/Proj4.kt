@@ -10,3 +10,9 @@ internal expect fun proj4Transform(
     sourceCrs: String,
     targetCrs: String,
 ): Point
+
+/** Returns whether the platform engine can create an operation for the CRS pair. */
+internal expect fun supportsProj4Transform(
+    sourceCrs: String,
+    targetCrs: String,
+): Boolean

@@ -101,6 +101,7 @@ internal fun tilo.compose.core.map.MapState.forOffscreenViewport(
         // The padded offscreen viewport is a render buffer, not a camera viewport.
         // Reapplying camera bounds here would move its center away from the snapshot anchor.
         config = config.copy(cameraBounds = null),
+        transformationRegistry = transformationRegistry,
         viewport =
             Viewport(
                 width = width,

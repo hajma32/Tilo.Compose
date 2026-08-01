@@ -16,17 +16,44 @@ internal actual fun proj4Transform(
     sourceCrs: String,
     targetCrs: String,
 ): Point {
-    val transform =
-        transformCache.computeIfAbsent(TransformKey(sourceCrs, targetCrs)) { key ->
-            val src = crsFactory.createFromName(key.sourceCrs)
-            val tgt = crsFactory.createFromName(key.targetCrs)
-            transformFactory.createTransform(src, tgt)
-        }
+    if (sourceCrs == targetCrs) return point
+
+    val transform = coordinateTransform(sourceCrs, targetCrs)
     val srcPt = ProjCoordinate(point.x, point.y)
     val dstPt = ProjCoordinate()
     transform.transform(srcPt, dstPt)
     return Point(x = dstPt.x, y = dstPt.y)
 }
+
+internal actual fun supportsProj4Transform(
+    sourceCrs: String,
+    targetCrs: String,
+): Boolean {
+    if (sourceCrs == targetCrs) return true
+    return try {
+        coordinateTransform(sourceCrs, targetCrs)
+        true
+    } catch (_: RuntimeException) {
+        false
+    }
+}
+
+private fun coordinateTransform(
+    sourceCrs: String,
+    targetCrs: String,
+): CoordinateTransform =
+    transformCache.computeIfAbsent(TransformKey(sourceCrs, targetCrs)) { key ->
+        val src = crsFactory.create(key.sourceCrs)
+        val tgt = crsFactory.create(key.targetCrs)
+        transformFactory.createTransform(src, tgt)
+    }
+
+private fun CRSFactory.create(definition: String) =
+    if (definition.contains("+proj=")) {
+        createFromParameters(definition, definition)
+    } else {
+        createFromName(definition)
+    }
 
 private data class TransformKey(
     val sourceCrs: String,

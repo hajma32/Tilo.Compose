@@ -72,6 +72,25 @@ internal actual fun proj4Transform(
 }
 
 @OptIn(ExperimentalForeignApi::class)
+internal actual fun supportsProj4Transform(
+    sourceCrs: String,
+    targetCrs: String,
+): Boolean {
+    if (sourceCrs == targetCrs) return true
+
+    return transformLock.withLock {
+        try {
+            transformCache.getOrPut(TransformKey(sourceCrs, targetCrs)) {
+                createTransform(sourceCrs, targetCrs)
+            }
+            true
+        } catch (_: IllegalArgumentException) {
+            false
+        }
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
 private fun createTransform(
     sourceCrs: String,
     targetCrs: String,

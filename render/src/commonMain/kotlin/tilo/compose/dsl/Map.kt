@@ -64,6 +64,8 @@ import tilo.compose.core.selection.FeatureSelection
 import tilo.compose.core.selection.FeatureSelectionRef
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
+import tilo.compose.core.transform.ProjTransformationProvider
+import tilo.compose.core.transform.TransformationRegistry
 import tilo.compose.render.ExperimentalTiloRenderingApi
 import tilo.compose.render.MapRenderer
 import tilo.compose.render.ResolvedLayerTree
@@ -1451,6 +1453,7 @@ fun rememberMapCameraState(
                     zoom = initialPosition.zoom,
                     projection = projection,
                     config = config,
+                    transformationRegistry = TransformationRegistry(providers = listOf(ProjTransformationProvider)),
                     bearing = initialPosition.bearing,
                 ),
         )

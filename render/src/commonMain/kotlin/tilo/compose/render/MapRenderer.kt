@@ -278,6 +278,7 @@ private fun MapRendererImpl(
                 bearing = map.bearing,
                 projection = map.projection,
                 config = map.config,
+                transformationRegistry = map.transformationRegistry,
                 viewport = map.viewport,
             )
         renderRequests.emit(renderMap)
@@ -518,6 +519,7 @@ private fun MapRendererImpl(
             bearing = map.bearing,
             projection = map.projection,
             config = map.config,
+            transformationRegistry = map.transformationRegistry,
             viewport = map.viewport,
         )
     val livePlaceholderFrame =

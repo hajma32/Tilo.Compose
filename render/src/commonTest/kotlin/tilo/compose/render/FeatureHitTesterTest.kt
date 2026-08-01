@@ -12,6 +12,8 @@ import tilo.compose.core.map.ScreenPoint
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
+import tilo.compose.core.transform.TransformationProvider
+import tilo.compose.core.transform.TransformationRegistry
 import tilo.compose.core.transform.WebMercatorToWgs84Transformation
 import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
 import kotlin.test.Test
@@ -169,10 +171,22 @@ class FeatureHitTesterTest {
             center = center,
             zoom = 11.5,
             projection = Epsg3857Projection,
-            config =
-                MapConfig(minZoom = 0.0, maxZoom = 20.0)
-                    .withTransformation(Wgs84ToWebMercatorTransformation)
-                    .withTransformation(WebMercatorToWgs84Transformation),
+            config = MapConfig(minZoom = 0.0, maxZoom = 20.0),
+            transformationRegistry =
+                TransformationRegistry(
+                    providers =
+                        listOf(
+                            TransformationProvider { source, target ->
+                                when (source.id to target.id) {
+                                    Epsg4326Projection.id to Epsg3857Projection.id ->
+                                        Wgs84ToWebMercatorTransformation
+                                    Epsg3857Projection.id to Epsg4326Projection.id ->
+                                        WebMercatorToWgs84Transformation
+                                    else -> null
+                                }
+                            },
+                        ),
+                ),
             viewport = Viewport(width = 1080, height = 2100, pixelRatio = 2.625),
         )
 }

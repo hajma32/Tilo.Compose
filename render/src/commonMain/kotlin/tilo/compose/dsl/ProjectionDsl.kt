@@ -50,26 +50,11 @@ fun identityProjection(): Projection = IdentityProjection
 fun projection(
     definition: String,
     id: String = definition,
-    worldUnitsPerMapUnit: Double = defaultWorldUnitsPerMapUnit(definition),
 ): Projection =
     DefinedProjection(
         definition = definition,
         id = id,
-        worldUnitsPerMapUnit = worldUnitsPerMapUnit,
     )
-
-private fun defaultWorldUnitsPerMapUnit(definition: String): Double =
-    if (
-        definition.contains("+proj=longlat", ignoreCase = true) ||
-        definition.contains("+proj=latlong", ignoreCase = true) ||
-        definition.equals("EPSG:4326", ignoreCase = true)
-    ) {
-        1.0
-    } else if (definition.contains("+units=m", ignoreCase = true)) {
-        111_319.49079327358
-    } else {
-        1.0
-    }
 
 /**
  * Defines a non-PROJ coordinate system connected to a known [reference] projection.

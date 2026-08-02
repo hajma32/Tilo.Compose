@@ -15,8 +15,8 @@ data class Data(
 /**
  * Feature composes geometry with presentation data (style and label) and optional arbitrary data.
  *
- * Important: `key` is required and used as a stable identifier for diffing/rendering. Provide a stable
- * value across updates to allow efficient diffs (avoid using array indexes or ephemeral values).
+ * Important: `key` is required, must be unique within its layer, and is used as a stable identifier
+ * for diffing/rendering. Preserve it across updates (avoid array indexes or ephemeral values).
  */
 data class Feature(
     val geometry: Geometry,

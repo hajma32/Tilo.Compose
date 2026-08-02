@@ -10,6 +10,7 @@ import kotlin.math.ln
 import kotlin.math.tan
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class ProjTransformationProviderTest {
@@ -42,6 +43,33 @@ class ProjTransformationProviderTest {
         val expectedY = WEB_MERCATOR_RADIUS * ln(tan(PI / 4.0 + input.y * PI / 360.0))
         assertEquals(expectedX, transformed.x, absoluteTolerance = 1e-6)
         assertEquals(expectedY, transformed.y, absoluteTolerance = 1e-6)
+    }
+
+    @Test
+    fun definedProjectionDerivesMapScaleFromCrsUnits() {
+        val geographic = DefinedProjection("EPSG:4326")
+        val metric = DefinedProjection("EPSG:3857")
+        val feet = DefinedProjection("+proj=merc +datum=WGS84 +units=ft +no_defs")
+
+        assertEquals(1.0, geographic.worldUnitsPerMapUnit, absoluteTolerance = 1e-12)
+        assertEquals(METERS_PER_DEGREE_AT_EQUATOR, metric.worldUnitsPerMapUnit, absoluteTolerance = 1e-9)
+        assertEquals(
+            METERS_PER_DEGREE_AT_EQUATOR / METERS_PER_FOOT,
+            feet.worldUnitsPerMapUnit,
+            absoluteTolerance = 1e-9,
+        )
+    }
+
+    @Test
+    fun definedProjectionRejectsUnknownDefinitionImmediately() {
+        assertFailsWith<RuntimeException> {
+            DefinedProjection("NOT-A-REAL-CRS")
+        }
+    }
+
+    @Test
+    fun equivalentDefinitionsProduceStableProjectionValues() {
+        assertEquals(DefinedProjection("EPSG:3857"), DefinedProjection("EPSG:3857"))
     }
 
     @Test
@@ -122,5 +150,7 @@ class ProjTransformationProviderTest {
 
     private companion object {
         const val WEB_MERCATOR_RADIUS = 6_378_137.0
+        const val METERS_PER_DEGREE_AT_EQUATOR = 111_319.49079327358
+        const val METERS_PER_FOOT = 0.3048
     }
 }

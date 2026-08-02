@@ -10,6 +10,12 @@ import kotlin.math.log2
 
 /**
  * Mutable engine-level map state, including center, zoom, bearing, projection, and viewport.
+ *
+ * `transformationRegistry` is an engine integration point. Its default intentionally contains only
+ * projection-owned transformation paths because GeoCore has no dependency on a platform CRS
+ * engine. The Compose `rememberMapCameraState` factory supplies Tilo's PROJ/Proj4J provider.
+ * Callers constructing this class directly must provide their own registry when they need
+ * transformations between independently defined CRS.
  */
 class MapState(
     center: Point = Point(0.0, 0.0),

@@ -162,7 +162,8 @@ private fun MapRendererImpl(
     }
     val rasterPipeline = remember { RasterRenderPipeline() }
     val vectorPipeline = remember { VectorRenderPipeline() }
-    val featureHitTester = remember { FeatureHitTester() }
+    val featureProjectionSnapshotStore = remember { FeatureProjectionSnapshotStore() }
+    val featureHitTester = remember { FeatureHitTester(featureProjectionSnapshotStore) }
     val gestureCoordinator = rememberMapGestureCoordinator(map)
     val layerTree = remember(layers) { ResolvedLayerTree.resolve(layers) }
     val layerFlowKey = layerTree.key
@@ -194,7 +195,14 @@ private fun MapRendererImpl(
     val vectorLayerCacheSignature = vectorLayers.cacheSignature()
     val currentVectorCacheKeys =
         vectorLayers.associate { layer ->
-            layer.id to layer.cacheKey(selectedFeatures.keysForLayer(layer.id), map.zoom)
+            layer.id to
+                layer.cacheKey(
+                    selectedFeatures.keysForLayer(layer.id),
+                    map.zoom,
+                    map,
+                    density,
+                    layoutDirection,
+                )
         }
     val renderLoopInput by rememberUpdatedState(
         RenderLoopInput(
@@ -263,6 +271,11 @@ private fun MapRendererImpl(
         map.viewport.width,
         map.viewport.height,
         map.viewport.pixelRatio,
+        map.projection.id,
+        map.projection.definition,
+        map.projection.worldUnitsPerMapUnit,
+        map.config,
+        map.transformationRegistry,
         density,
         layoutDirection,
         vectorLayerCacheSignature,
@@ -342,6 +355,7 @@ private fun MapRendererImpl(
                         lastVectorCommandsByLayer = commandsByLayer
                         lastVectorBitmapsByLayer = vectorBitmapsByLayer
                         lastVectorCacheKeysByLayer = vectorFrame.cacheKeysByLayer
+                        featureProjectionSnapshotStore.publish(vectorFrame.projectionSnapshotsByLayer)
                         diagnosticsState?.publishFeatures(
                             MapFeatureMetrics(
                                 returned = vectorFrame.metrics.returnedFeatures,

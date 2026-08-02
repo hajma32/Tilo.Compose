@@ -54,6 +54,36 @@ class TransformationRegistryTest {
     }
 
     @Test
+    fun projectionOwnedPathTakesPrecedenceOverProvider() {
+        val local = localProjection(reference = ReferenceProjection)
+        var directProviderCalls = 0
+        val registry =
+            TransformationRegistry(
+                providers =
+                    listOf(
+                        TransformationProvider { source, target ->
+                            when {
+                                source.id == local.id && target.id == TargetProjection.id -> {
+                                    directProviderCalls += 1
+                                    OffsetTransformation(local, TargetProjection, offset = 100.0)
+                                }
+
+                                source.id == ReferenceProjection.id && target.id == TargetProjection.id ->
+                                    OffsetTransformation(ReferenceProjection, TargetProjection, offset = 5.0)
+
+                                else -> null
+                            }
+                        },
+                    ),
+            )
+
+        val transformed = registry.resolve(local, TargetProjection).sourceToTarget(Point(6.0, 12.0))
+
+        assertEquals(Point(7.0, 9.0), transformed)
+        assertEquals(0, directProviderCalls)
+    }
+
+    @Test
     fun dynamicResolversAreConsultedInOrder() {
         val unsupported = TransformationProvider { _, _ -> null }
         val resolved = OffsetTransformation(SourceProjection, TargetProjection, offset = 5.0)
@@ -61,6 +91,36 @@ class TransformationRegistryTest {
         val registry = TransformationRegistry(providers = listOf(unsupported, supported))
 
         assertSame(resolved, registry.resolve(SourceProjection, TargetProjection))
+    }
+
+    @Test
+    fun cachesResolvedTransformationForEquivalentCrsPair() {
+        var providerCalls = 0
+        val resolved = OffsetTransformation(SourceProjection, TargetProjection, offset = 5.0)
+        val registry =
+            TransformationRegistry(
+                providers =
+                    listOf(
+                        TransformationProvider { _, _ ->
+                            providerCalls += 1
+                            resolved
+                        },
+                    ),
+            )
+
+        assertSame(resolved, registry.resolve(SourceProjection, TargetProjection))
+        assertSame(resolved, registry.resolve(SourceProjection, TargetProjection))
+        assertEquals(1, providerCalls)
+    }
+
+    @Test
+    fun sameIdWithDifferentDefinitionIsNotTreatedAsIdentity() {
+        val source = DefinedTestProjection(id = "SHARED", definition = "SOURCE")
+        val target = DefinedTestProjection(id = "SHARED", definition = "TARGET")
+        val resolved = OffsetTransformation(source, target, offset = 5.0)
+        val registry = TransformationRegistry(listOf(TransformationProvider { _, _ -> resolved }))
+
+        assertSame(resolved, registry.resolve(source, target))
     }
 
     @Test
@@ -144,6 +204,11 @@ class TransformationRegistryTest {
     private object TargetProjection : Projection {
         override val id: String = "TEST:TARGET"
     }
+
+    private data class DefinedTestProjection(
+        override val id: String,
+        override val definition: String,
+    ) : Projection
 
     private class OffsetTransformation(
         override val source: Projection,

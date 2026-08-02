@@ -90,6 +90,58 @@ class MapCameraStateCompositionRegressionTest {
             }
         }
 
+    @Test
+    fun inlineProjectionDslKeepsCameraStableAcrossRecomposition() =
+        runTest {
+            val trigger = mutableStateOf(0)
+            var cameraState: MapCameraState? = null
+
+            withCameraComposition {
+                trigger.value
+                cameraState =
+                    rememberMapCameraState(
+                        initialCenter = Point(1.0, 2.0),
+                        projection = projection("EPSG:3857"),
+                    )
+            }.use { composition ->
+                val initial = requireNotNull(cameraState)
+
+                trigger.value += 1
+                composition.recompose()
+
+                assertSame(initial, cameraState)
+                assertEquals(Point(1.0, 2.0), requireNotNull(cameraState).center)
+            }
+        }
+
+    @Test
+    fun inlineReferencedProjectionDslKeepsCameraStableAcrossRecomposition() =
+        runTest {
+            val trigger = mutableStateOf(0)
+            var cameraState: MapCameraState? = null
+
+            withCameraComposition {
+                trigger.value
+                cameraState =
+                    rememberMapCameraState(
+                        projection =
+                            referencedProjection(
+                                id = "TEST:LOCAL",
+                                reference = wgs84(),
+                                toReference = { it },
+                                fromReference = { it },
+                            ),
+                    )
+            }.use { composition ->
+                val initial = requireNotNull(cameraState)
+
+                trigger.value += 1
+                composition.recompose()
+
+                assertSame(initial, cameraState)
+            }
+        }
+
     /**
      * Verifies that initial camera values are one-time inputs.
      *

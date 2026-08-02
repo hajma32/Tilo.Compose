@@ -4,6 +4,10 @@ import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
+import tilo.compose.core.projection.Projection
+import tilo.compose.core.transform.Transformation
+import tilo.compose.core.transform.TransformationProvider
+import tilo.compose.core.transform.TransformationRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -67,4 +71,46 @@ class FeatureListSourceTest {
         assertEquals(emptyList(), unrotated)
         assertEquals(listOf(cornerFeature), rotated)
     }
+
+    @Test
+    fun reprojectedSourceReturnsConservativeCandidatesWithoutPerQueryTransforms() {
+        val sourceProjection = TestProjection("source")
+        val mapProjection = TestProjection("map")
+        var transformedPoints = 0
+        val transformation =
+            object : Transformation<Projection, Projection> {
+                override val source = sourceProjection
+                override val target = mapProjection
+
+                override fun sourceToTarget(point: Point): Point {
+                    transformedPoints += 1
+                    return Point(point.x, point.y - point.x.centerBump())
+                }
+
+                override fun targetToSource(point: Point): Point = Point(point.x, point.y + point.x.centerBump())
+            }
+        val registry = TransformationRegistry(listOf(TransformationProvider { _, _ -> transformation }))
+        val visibleAfterProjection = Feature(key = "curved", geometry = Point(0.0, 100.0))
+        val outside = Feature(key = "outside", geometry = Point(1_000.0, 1_000.0))
+        val source = FeatureListSource(listOf(visibleAfterProjection, outside), projection = sourceProjection)
+        val map =
+            MapState(
+                projection = mapProjection,
+                transformationRegistry = registry,
+                viewport = Viewport(width = 100, height = 100),
+            )
+
+        val first = source.getFeatures(map)
+        val second = source.getFeatures(map)
+
+        assertEquals(listOf(visibleAfterProjection, outside), first)
+        assertEquals(first, second)
+        assertEquals(0, transformedPoints)
+    }
+
+    private fun Double.centerBump(): Double = if (this == 0.0) 100.0 else 0.0
+
+    private data class TestProjection(
+        override val id: String,
+    ) : Projection
 }

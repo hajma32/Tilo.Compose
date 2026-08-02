@@ -1,12 +1,26 @@
 package tilo.compose.core.tile
 
 import tilo.compose.core.map.Viewport
+import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
+import tilo.compose.core.projection.Projection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class TileGridTest {
+    @Test
+    fun defaultGridRequiresExactWebMercatorCrs() {
+        val sameIdDifferentDefinition =
+            object : Projection {
+                override val id = Epsg3857Projection.id
+                override val definition = "TEST:NOT-WEB-MERCATOR"
+            }
+
+        assertEquals(TileGrid.WebMercator, TileGrid.defaultFor(Epsg3857Projection))
+        assertEquals(TileGrid(), TileGrid.defaultFor(sameIdDifferentDefinition))
+    }
+
     /**
      * Input: viewports with equal logical size but pixel ratios 1x and 3x.
      * Expected output: both viewports select the same density-independent tile zoom.

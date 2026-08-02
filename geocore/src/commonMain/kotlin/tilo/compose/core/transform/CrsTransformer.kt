@@ -5,6 +5,10 @@ import tilo.compose.core.projection.Projection
 
 /**
  * High-level entry point for point reprojection between CRS.
+ *
+ * This is engine-level GeoCore API. [TransformationRegistry.Default] intentionally has no platform
+ * CRS provider; the Compose camera factory installs Tilo's PROJ/Proj4J integration. Direct users
+ * must pass a registry when transforming independently defined CRS.
  */
 class CrsTransformer(
     private val registry: TransformationRegistry = TransformationRegistry.Default,

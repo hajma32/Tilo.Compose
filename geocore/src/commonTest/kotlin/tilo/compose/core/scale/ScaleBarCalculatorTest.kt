@@ -6,6 +6,7 @@ import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.Epsg5514Projection
+import tilo.compose.core.projection.Projection
 import tilo.compose.core.projection.ReferencedProjection
 import tilo.compose.core.transform.TransformationRegistry
 import kotlin.test.Test
@@ -68,6 +69,25 @@ class ScaleBarCalculatorTest {
                 from = Point(-600_000.0, -1_100_000.0),
                 to = Point(-599_000.0, -1_100_000.0),
                 projection = Epsg5514Projection,
+                transformationRegistry = TransformationRegistry.Default,
+            )
+
+        assertNull(distance)
+    }
+
+    @Test
+    fun autoDoesNotInferKnownCrsFromIdAlone() {
+        val disguisedProjection =
+            object : Projection {
+                override val id = Epsg4326Projection.id
+                override val definition = "TEST:NOT-WGS84"
+            }
+
+        val distance =
+            DistanceCalculators.Auto.distanceMeters(
+                from = Point(0.0, 0.0),
+                to = Point(1.0, 0.0),
+                projection = disguisedProjection,
                 transformationRegistry = TransformationRegistry.Default,
             )
 

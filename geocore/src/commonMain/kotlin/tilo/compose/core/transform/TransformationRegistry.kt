@@ -3,6 +3,7 @@ package tilo.compose.core.transform
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.projection.ReferencedProjection
+import tilo.compose.core.util.concurrentCache
 
 /**
  * Runtime infrastructure that resolves projection-owned transformations and platform providers.
@@ -14,32 +15,47 @@ class TransformationRegistry(
     providers: List<TransformationProvider> = emptyList(),
 ) {
     private data class Key(
-        val sourceId: String,
-        val targetId: String,
+        val source: CrsKey,
+        val target: CrsKey,
+    )
+
+    private data class CrsKey(
+        val id: String,
+        val definition: String,
+    )
+
+    private data class CachedResolution(
+        val transformation: Transformation<Projection, Projection>?,
     )
 
     /** Runtime providers consulted in declaration order after projection-owned transformations. */
     val providers: List<TransformationProvider> = providers.toList()
 
+    private val resolutions = concurrentCache<Key, CachedResolution>()
+
     fun find(
         source: Projection,
         target: Projection,
-    ): Transformation<Projection, Projection>? = find(source, target, emptySet())
+    ): Transformation<Projection, Projection>? =
+        resolutions
+            .getOrPut(Key(source.crsKey(), target.crsKey())) {
+                CachedResolution(findUncached(source, target, emptySet()))
+            }.transformation
 
-    private fun find(
+    private fun findUncached(
         source: Projection,
         target: Projection,
         visited: Set<Key>,
     ): Transformation<Projection, Projection>? {
-        if (source.id == target.id) return SameProjectionTransformation(source, target)
+        if (source.sameCrsAs(target)) return SameProjectionTransformation(source, target)
 
-        val key = Key(source.id, target.id)
+        val key = Key(source.crsKey(), target.crsKey())
         if (key in visited) return null
         val nextVisited = visited + key
 
         return directProjectionTransformation(source, target)
-            ?: resolveFromProviders(source, target)
             ?: findThroughReferences(source, target, nextVisited)
+            ?: resolveFromProviders(source, target)
     }
 
     private fun findThroughReferences(
@@ -49,12 +65,12 @@ class TransformationRegistry(
     ): Transformation<Projection, Projection>? {
         val throughSource =
             (source as? ReferencedProjection)?.referenceTransformation?.let { first ->
-                find(first.target, target, visited)?.let { second -> CompositeTransformation(first, second) }
+                findUncached(first.target, target, visited)?.let { second -> CompositeTransformation(first, second) }
             }
         return throughSource
             ?: (target as? ReferencedProjection)?.referenceTransformation?.let { targetToReference ->
                 val second = ReversedTransformation(targetToReference)
-                find(source, second.source, visited)?.let { first -> CompositeTransformation(first, second) }
+                findUncached(source, second.source, visited)?.let { first -> CompositeTransformation(first, second) }
             }
     }
 
@@ -63,9 +79,9 @@ class TransformationRegistry(
         target: Projection,
     ): Transformation<Projection, Projection>? =
         when {
-            source is ReferencedProjection && source.reference.id == target.id ->
+            source is ReferencedProjection && source.reference.sameCrsAs(target) ->
                 source.referenceTransformation
-            target is ReferencedProjection && target.reference.id == source.id ->
+            target is ReferencedProjection && target.reference.sameCrsAs(source) ->
                 ReversedTransformation(target.referenceTransformation)
             else -> null
         }
@@ -93,7 +109,7 @@ class TransformationRegistry(
         target: Projection,
     ) {
         require(
-            transformation.source.id == source.id && transformation.target.id == target.id,
+            transformation.source.sameCrsAs(source) && transformation.target.sameCrsAs(target),
         ) {
             "Transformation provider returned ${transformation.source.id} -> " +
                 "${transformation.target.id} for requested ${source.id} -> ${target.id}."
@@ -113,6 +129,14 @@ class TransformationRegistry(
             providers == other.providers
 
     override fun hashCode(): Int = providers.hashCode()
+
+    private fun Projection.crsKey() =
+        CrsKey(
+            id = id,
+            definition = definition,
+        )
+
+    private fun Projection.sameCrsAs(other: Projection): Boolean = id == other.id && definition == other.definition
 
     private class SameProjectionTransformation(
         override val source: Projection,
@@ -147,6 +171,10 @@ class TransformationRegistry(
     }
 
     companion object {
+        /**
+         * Platform-neutral registry containing projection-owned paths only.
+         * Platform or application integration layers add their providers explicitly.
+         */
         val Default = TransformationRegistry()
     }
 }

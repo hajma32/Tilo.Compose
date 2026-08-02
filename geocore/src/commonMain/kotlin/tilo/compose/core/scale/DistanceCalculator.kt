@@ -36,9 +36,11 @@ object DistanceCalculators {
      */
     val Auto: DistanceCalculator =
         DistanceCalculator { from, to, projection, transformationRegistry ->
-            when (projection.id) {
-                Epsg4326Projection.id -> haversineMeters(from, to)
-                Epsg3857Projection.id -> haversineMeters(from.webMercatorToWgs84(), to.webMercatorToWgs84())
+            when {
+                projection.sameCrsAs(Epsg4326Projection) -> haversineMeters(from, to)
+                projection.sameCrsAs(Epsg3857Projection) ->
+                    haversineMeters(from.webMercatorToWgs84(), to.webMercatorToWgs84())
+
                 else -> {
                     val toWgs84 = transformationRegistry.find(projection, Epsg4326Projection)
                     if (toWgs84 != null) {
@@ -61,6 +63,8 @@ object DistanceCalculators {
             planarMeters(from, to)
         }
 }
+
+private fun Projection.sameCrsAs(other: Projection): Boolean = id == other.id && definition == other.definition
 
 internal fun planarMeters(
     from: Point,

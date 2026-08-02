@@ -212,6 +212,13 @@ data class TileGrid(
             )
 
         fun defaultFor(projection: Projection): TileGrid =
-            if (projection.id == Epsg3857Projection.id) WebMercator else TileGrid()
+            if (
+                projection.id == Epsg3857Projection.id &&
+                projection.definition == Epsg3857Projection.definition
+            ) {
+                WebMercator
+            } else {
+                TileGrid()
+            }
     }
 }

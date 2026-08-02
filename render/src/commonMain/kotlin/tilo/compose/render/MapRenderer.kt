@@ -62,7 +62,8 @@ import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
  *
  * Expected missing or undecodable tiles remain isolated inside the raster
  * pipeline. [onRenderError] receives unexpected branch failures; coroutine
- * cancellation is always propagated.
+ * cancellation is always propagated. [onCameraInteractionStarted] runs on pointer down before a
+ * gesture mutates the camera, so callers can cancel motion they own.
  */
 @Composable
 @ExperimentalTiloRenderingApi
@@ -79,6 +80,7 @@ fun MapRenderer(
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
     onMapChanged: (() -> Unit)? = null,
+    onCameraInteractionStarted: (() -> Unit)? = null,
     gestureConfig: MapGestureConfig = MapGestureConfig.Default,
 ) = MapRendererImpl(
     map = map,
@@ -93,6 +95,7 @@ fun MapRenderer(
     selectedFeatures = selectedFeatures,
     invalidationKey = invalidationKey,
     onMapChanged = onMapChanged,
+    onCameraInteractionStarted = onCameraInteractionStarted,
     diagnosticsState = null,
 )
 
@@ -112,6 +115,7 @@ fun MapRenderer(
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
     invalidationKey: Any? = null,
     onMapChanged: (() -> Unit)? = null,
+    onCameraInteractionStarted: (() -> Unit)? = null,
     gestureConfig: MapGestureConfig = MapGestureConfig.Default,
 ) = MapRendererImpl(
     map = map,
@@ -126,6 +130,7 @@ fun MapRenderer(
     selectedFeatures = selectedFeatures,
     invalidationKey = invalidationKey,
     onMapChanged = onMapChanged,
+    onCameraInteractionStarted = onCameraInteractionStarted,
     diagnosticsState = diagnosticsState,
 )
 
@@ -144,6 +149,7 @@ private fun MapRendererImpl(
     selectedFeatures: Set<FeatureSelectionRef>,
     invalidationKey: Any?,
     onMapChanged: (() -> Unit)?,
+    onCameraInteractionStarted: (() -> Unit)?,
     diagnosticsState: MapDiagnosticsState?,
 ) {
     val density = LocalDensity.current
@@ -477,6 +483,7 @@ private fun MapRendererImpl(
             }.mapGestureInput(
                 map = map,
                 gestureConfig = gestureConfig,
+                onInteractionStarted = onCameraInteractionStarted,
                 onChanged = {
                     redrawVersion++
                     onMapChanged?.invoke()
@@ -484,6 +491,7 @@ private fun MapRendererImpl(
                 coordinator = gestureCoordinator,
             ).mapTapInput(
                 map = map,
+                onInteractionStarted = onCameraInteractionStarted,
                 onTap =
                     if (onTapWorld == null && onFeatureSelect == null) {
                         null

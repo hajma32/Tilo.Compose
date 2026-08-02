@@ -18,29 +18,51 @@ class MapState(
     viewport: Viewport = Viewport.Empty,
     bearing: Double = 0.0,
 ) {
+    /** Monotonic revision of camera and viewport state; batched camera updates advance it once. */
+    var cameraRevision: Long = 0L
+        private set
+
+    private var batchingCameraChange = false
+    private var cameraChangedInBatch = false
+
     var center: Point = center
         set(value) {
             require(value.x.isFinite() && value.y.isFinite()) { "center coordinates must be finite" }
-            field = constrainCenter(value)
+            val constrained = constrainCenter(value)
+            if (field != constrained) {
+                field = constrained
+                recordCameraChange()
+            }
         }
 
     var zoom: Double = zoom.requireFiniteZoom().coerceIn(config.minZoom, config.maxZoom)
         set(value) {
             value.requireFiniteZoom()
-            field = value.coerceIn(config.minZoom, config.maxZoom)
+            val constrained = value.coerceIn(config.minZoom, config.maxZoom)
+            if (field != constrained) {
+                field = constrained
+                recordCameraChange()
+            }
             center = center
         }
 
     /** Clockwise map rotation in degrees, normalized to the `[0, 360)` range. */
     var bearing: Double = normalizeBearing(bearing)
         set(value) {
-            field = normalizeBearing(value)
+            val normalized = normalizeBearing(value)
+            if (field != normalized) {
+                field = normalized
+                recordCameraChange()
+            }
             center = center
         }
 
     var viewport: Viewport = viewport
         set(value) {
-            field = value
+            if (field != value) {
+                field = value
+                recordCameraChange()
+            }
             center = center
         }
 
@@ -52,12 +74,22 @@ class MapState(
     val cameraPosition: CameraPosition
         get() = CameraPosition(center = center, zoom = zoom, bearing = bearing)
 
-    /** Applies center, zoom, and bearing as one camera operation. */
-    fun setCamera(position: CameraPosition) {
-        // Apply center last so camera bounds are evaluated with the requested zoom and bearing.
-        zoom = position.zoom
-        bearing = position.bearing
-        center = position.center
+    /** Applies center, zoom, and bearing as one camera operation and returns the resolved position. */
+    fun setCamera(position: CameraPosition): CameraPosition {
+        batchingCameraChange = true
+        try {
+            // Apply center last so camera bounds are evaluated with the requested zoom and bearing.
+            zoom = position.zoom
+            bearing = position.bearing
+            center = position.center
+        } finally {
+            batchingCameraChange = false
+            if (cameraChangedInBatch) {
+                cameraChangedInBatch = false
+                cameraRevision += 1
+            }
+        }
+        return cameraPosition
     }
 
     fun panBy(
@@ -229,6 +261,14 @@ class MapState(
             x = requested.x.constrainAxis(bounds.minX, bounds.maxX, halfWidth),
             y = requested.y.constrainAxis(bounds.minY, bounds.maxY, halfHeight),
         )
+    }
+
+    private fun recordCameraChange() {
+        if (batchingCameraChange) {
+            cameraChangedInBatch = true
+        } else {
+            cameraRevision += 1
+        }
     }
 
     private fun Double.constrainAxis(

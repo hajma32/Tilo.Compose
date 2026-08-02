@@ -43,13 +43,13 @@ class DefinedProjection(
 }
 
 /**
- * A custom coordinate system connected to a known [reference] projection.
+ * A custom coordinate system connected to a known `reference` projection.
  *
  * The connection travels with the projection, so maps and layers using it do not have to register
  * the transformation separately. Tilo may compose this connection with a platform CRS provider to
- * reach projections other than [reference].
+ * reach projections other than `reference`.
  *
- * [toReference] converts coordinates from this projection to [reference]; [fromReference] performs
+ * `toReference` converts coordinates from this projection to `reference`; `fromReference` performs
  * the inverse conversion.
  */
 class ReferencedProjection(

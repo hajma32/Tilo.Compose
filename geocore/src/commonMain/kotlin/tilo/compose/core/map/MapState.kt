@@ -20,11 +20,13 @@ class MapState(
 ) {
     var center: Point = center
         set(value) {
+            require(value.x.isFinite() && value.y.isFinite()) { "center coordinates must be finite" }
             field = constrainCenter(value)
         }
 
-    var zoom: Double = zoom.coerceIn(config.minZoom, config.maxZoom)
+    var zoom: Double = zoom.requireFiniteZoom().coerceIn(config.minZoom, config.maxZoom)
         set(value) {
+            value.requireFiniteZoom()
             field = value.coerceIn(config.minZoom, config.maxZoom)
             center = center
         }
@@ -46,14 +48,27 @@ class MapState(
         this.center = center
     }
 
+    /** Current normalized and constrained camera snapshot. */
+    val cameraPosition: CameraPosition
+        get() = CameraPosition(center = center, zoom = zoom, bearing = bearing)
+
+    /** Applies center, zoom, and bearing as one camera operation. */
+    fun setCamera(position: CameraPosition) {
+        // Apply center last so camera bounds are evaluated with the requested zoom and bearing.
+        zoom = position.zoom
+        bearing = position.bearing
+        center = position.center
+    }
+
     fun panBy(
         dx: Double,
         dy: Double,
     ) {
-        val worldDelta = viewport.screenToWorld(Point(dx, dy), center, zoom, projection.worldUnitsPerMapUnit, bearing)
+        val worldDelta =
+            viewport.screenToWorld(ScreenPoint(dx, dy), center, zoom, projection.worldUnitsPerMapUnit, bearing)
         val originWorld =
             viewport.screenToWorld(
-                Point(0.0, 0.0),
+                ScreenPoint(0.0, 0.0),
                 center,
                 zoom,
                 projection.worldUnitsPerMapUnit,
@@ -68,7 +83,7 @@ class MapState(
 
     fun zoomBy(
         delta: Double,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
     ) {
         val newZoom = (zoom + delta).coerceIn(config.minZoom, config.maxZoom)
         if (focus == null) {
@@ -89,7 +104,7 @@ class MapState(
     /** Rotates the map clockwise by [delta] degrees while keeping [focus] fixed on screen. */
     fun rotateBy(
         delta: Double,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
     ) {
         require(delta.isFinite()) { "delta must be finite" }
         if (delta == 0.0) return
@@ -174,27 +189,27 @@ class MapState(
         target: Projection,
     ): Point = config.transformer.targetToSource(point, source, target)
 
-    fun worldToScreen(world: Point): Point =
+    fun worldToScreen(world: Point): ScreenPoint =
         viewport.worldToScreen(world, center, zoom, projection.worldUnitsPerMapUnit, bearing)
 
-    fun screenToWorld(screen: Point): Point =
+    fun screenToWorld(screen: ScreenPoint): Point =
         viewport.screenToWorld(screen, center, zoom, projection.worldUnitsPerMapUnit, bearing)
 
     /** Axis-aligned world-coordinate envelope of all four viewport corners. */
     fun viewportBounds(): BoundingBox =
         BoundingBox.fromPoints(
             listOf(
-                screenToWorld(Point(0.0, 0.0)),
-                screenToWorld(Point(viewport.width.toDouble(), 0.0)),
-                screenToWorld(Point(0.0, viewport.height.toDouble())),
-                screenToWorld(Point(viewport.width.toDouble(), viewport.height.toDouble())),
+                screenToWorld(ScreenPoint(0.0, 0.0)),
+                screenToWorld(ScreenPoint(viewport.width.toDouble(), 0.0)),
+                screenToWorld(ScreenPoint(0.0, viewport.height.toDouble())),
+                screenToWorld(ScreenPoint(viewport.width.toDouble(), viewport.height.toDouble())),
             ),
         )
 
     /** World-coordinate distance represented by one physical screen pixel. */
     fun resolution(): Double {
-        val origin = screenToWorld(Point(0.0, 0.0))
-        val nextPixel = screenToWorld(Point(1.0, 0.0))
+        val origin = screenToWorld(ScreenPoint(0.0, 0.0))
+        val nextPixel = screenToWorld(ScreenPoint(1.0, 0.0))
         return hypot(nextPixel.x - origin.x, nextPixel.y - origin.y)
     }
 
@@ -202,10 +217,10 @@ class MapState(
         val bounds = config.cameraBounds ?: return requested
         val corners =
             listOf(
-                Point(0.0, 0.0),
-                Point(viewport.width.toDouble(), 0.0),
-                Point(0.0, viewport.height.toDouble()),
-                Point(viewport.width.toDouble(), viewport.height.toDouble()),
+                ScreenPoint(0.0, 0.0),
+                ScreenPoint(viewport.width.toDouble(), 0.0),
+                ScreenPoint(0.0, viewport.height.toDouble()),
+                ScreenPoint(viewport.width.toDouble(), viewport.height.toDouble()),
             ).map { viewport.screenToWorld(it, requested, zoom, projection.worldUnitsPerMapUnit, bearing) }
         val halfWidth = (corners.maxOf { it.x } - corners.minOf { it.x }) / 2.0
         val halfHeight = (corners.maxOf { it.y } - corners.minOf { it.y }) / 2.0
@@ -239,4 +254,9 @@ class MapState(
 
         const val FULL_ROTATION_DEGREES = 360.0
     }
+}
+
+private fun Double.requireFiniteZoom(): Double {
+    require(isFinite()) { "zoom must be finite" }
+    return this
 }

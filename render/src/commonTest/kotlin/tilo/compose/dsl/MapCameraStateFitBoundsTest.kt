@@ -5,13 +5,17 @@ package tilo.compose.dsl
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.MonotonicFrameClock
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.runtime.snapshots.SnapshotStateObserver
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import tilo.compose.core.map.Viewport
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,6 +23,75 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class MapCameraStateFitBoundsTest {
+    @Test
+    fun centerAndPositionAreObservableSnapshotState() {
+        val cameraState = MapCameraState(MapState())
+        var invalidations = 0
+        val observer = SnapshotStateObserver { command -> command() }
+        observer.start()
+        try {
+            observer.observeReads(
+                scope = Unit,
+                onValueChangedForScope = { invalidations += 1 },
+            ) {
+                cameraState.center
+                cameraState.position
+            }
+
+            cameraState.setCenter(Point(10.0, 20.0))
+            Snapshot.sendApplyNotifications()
+
+            assertEquals(1, invalidations)
+            assertEquals(Point(10.0, 20.0), cameraState.center)
+        } finally {
+            observer.stop()
+        }
+    }
+
+    @Test
+    fun absoluteCameraOperationsPublishOneImmutablePosition() {
+        val cameraState =
+            MapCameraState(
+                MapState(config = MapConfig(minZoom = 2.0, maxZoom = 10.0)),
+            )
+
+        cameraState.setCamera(
+            center = Point(12.0, 34.0),
+            zoom = 20.0,
+            bearing = -15.0,
+        )
+
+        assertEquals(
+            CameraPosition(center = Point(12.0, 34.0), zoom = 10.0, bearing = 345.0),
+            cameraState.position,
+        )
+        assertEquals(1, cameraState.cameraControlRevision)
+
+        cameraState.setZoom(4.0)
+        cameraState.moveTo(Point(56.0, 78.0))
+        assertEquals(CameraPosition(Point(56.0, 78.0), 4.0, 345.0), cameraState.position)
+    }
+
+    @Test
+    fun animateToReachesCameraPosition() =
+        runTest {
+            val cameraState =
+                MapCameraState(
+                    MapState(center = Point(0.0, 0.0), zoom = 2.0, bearing = 350.0),
+                )
+
+            withContext(AdvancingFrameClock()) {
+                cameraState.animateTo(
+                    position = CameraPosition(Point(100.0, 50.0), zoom = 6.0, bearing = 10.0),
+                    animationSpec = tween(durationMillis = 64, easing = LinearEasing),
+                )
+            }
+
+            assertEquals(Point(100.0, 50.0), cameraState.center)
+            assertEquals(6.0, cameraState.zoom, absoluteTolerance = 1e-6)
+            assertEquals(10.0, cameraState.bearing, absoluteTolerance = 1e-6)
+        }
+
     /**
      * Verifies that center-only changes do not invalidate zoom-only consumers.
      *
@@ -62,7 +135,7 @@ class MapCameraStateFitBoundsTest {
                     viewport = Viewport(width = 300, height = 200),
                 )
             val cameraState = MapCameraState(map)
-            val focus = Point(240.0, 35.0)
+            val focus = ScreenPoint(240.0, 35.0)
             val worldBefore = map.screenToWorld(focus)
 
             withContext(AdvancingFrameClock()) {

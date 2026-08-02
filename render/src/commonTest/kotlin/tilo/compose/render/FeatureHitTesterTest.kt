@@ -8,6 +8,7 @@ import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg4326Projection
@@ -111,7 +112,7 @@ class FeatureHitTesterTest {
             FeatureHitTester().hitTest(
                 map = map,
                 layers = listOf(layer),
-                screenPoint = Point(20.0, 20.0),
+                screenPoint = ScreenPoint(20.0, 20.0),
             )
 
         assertTrue(selections.isEmpty())
@@ -136,7 +137,7 @@ class FeatureHitTesterTest {
                             ),
                     ),
             )
-        val tap = Point(180.0, 100.0)
+        val tap = ScreenPoint(180.0, 100.0)
 
         assertTrue(FeatureHitTester().hitTest(map, listOf(layer), tap).isEmpty())
 
@@ -158,7 +159,7 @@ class FeatureHitTesterTest {
                 features = listOf(Feature(key = "east", geometry = Point(20.0, 0.0))),
             )
 
-        val selections = FeatureHitTester().hitTest(map, listOf(layer), Point(50.0, 30.0))
+        val selections = FeatureHitTester().hitTest(map, listOf(layer), ScreenPoint(50.0, 30.0))
 
         assertEquals(listOf("east"), selections.map { it.feature.key })
     }

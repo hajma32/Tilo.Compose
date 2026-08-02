@@ -1,7 +1,7 @@
 package tilo.compose.core.scale
 
-import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
@@ -28,8 +28,8 @@ object ScaleBarCalculator {
         }
 
         val centerX = map.viewport.width / 2.0
-        val from = map.screenToWorld(Point(centerX - maxWidthPx / 2.0, screenY))
-        val to = map.screenToWorld(Point(centerX + maxWidthPx / 2.0, screenY))
+        val from = map.screenToWorld(ScreenPoint(centerX - maxWidthPx / 2.0, screenY))
+        val to = map.screenToWorld(ScreenPoint(centerX + maxWidthPx / 2.0, screenY))
         val maxDistanceMeters =
             map.config.distanceCalculator.distanceMeters(
                 from = from,

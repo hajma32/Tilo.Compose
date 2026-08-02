@@ -2,6 +2,7 @@ package tilo.compose.core.selection
 
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.map.ScreenPoint
 
 /**
  * One selectable vector feature hit by a map tap.
@@ -11,13 +12,13 @@ import tilo.compose.core.geometry.Point
  * pick the first item, show a chooser, or apply their own priority rules.
  *
  * `worldPoint` is expressed in the map projection. `screenPoint` is expressed
- * in logical pixels from the top-left corner of the map viewport.
+ * in physical pixels from the top-left corner of the map viewport.
  */
 data class FeatureSelection(
     val layerId: String,
     val feature: Feature,
     val worldPoint: Point,
-    val screenPoint: Point,
+    val screenPoint: ScreenPoint,
 ) {
     val ref: FeatureSelectionRef
         get() = FeatureSelectionRef(layerId = layerId, featureKey = feature.key)

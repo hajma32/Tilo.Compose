@@ -33,19 +33,19 @@ data class Viewport(
         zoom: Double,
         worldUnitsPerMapUnit: Double = 1.0,
         bearing: Double = 0.0,
-    ): Point {
+    ): ScreenPoint {
         val scale = 2.0.pow(zoom) / worldUnitsPerMapUnit
         val radians = bearing * PI / 180.0
         val x = (world.x - center.x) * scale
         val y = (center.y - world.y) * scale
-        return Point(
+        return ScreenPoint(
             x = (x * cos(radians) + y * sin(radians) + dipWidth / 2.0) * pixelRatio,
             y = (-x * sin(radians) + y * cos(radians) + dipHeight / 2.0) * pixelRatio,
         )
     }
 
     fun screenToWorld(
-        screen: Point,
+        screen: ScreenPoint,
         center: Point,
         zoom: Double,
         worldUnitsPerMapUnit: Double = 1.0,

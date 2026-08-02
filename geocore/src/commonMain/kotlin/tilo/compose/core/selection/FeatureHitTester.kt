@@ -17,6 +17,7 @@ import tilo.compose.core.geometry.distanceTo
 import tilo.compose.core.geometry.distanceToBoundary
 import tilo.compose.core.geometry.distanceToLine
 import tilo.compose.core.geometry.isInside
+import tilo.compose.core.map.ScreenPoint
 import kotlin.math.max
 
 /** Resolved feature-layer input for screen-space hit testing. */
@@ -44,14 +45,18 @@ class FeatureHitTester(
 ) {
     fun hitTest(
         layers: List<FeatureHitTestLayer>,
-        screenPoint: Point,
+        screenPoint: ScreenPoint,
         worldPoint: Point,
-        worldToScreen: (Point) -> Point,
-    ): List<FeatureSelection> =
-        buildList {
+        worldToScreen: (Point) -> ScreenPoint,
+    ): List<FeatureSelection> {
+        val geometryScreenPoint = Point(screenPoint.x, screenPoint.y)
+        val geometryWorldToScreen: (Point) -> Point = { world ->
+            worldToScreen(world).let { screen -> Point(screen.x, screen.y) }
+        }
+        return buildList {
             layers.forEach { layer ->
                 layer.features.forEach { item ->
-                    if (item.geometry.hits(screenPoint, worldToScreen, item.feature, layer.style)) {
+                    if (item.geometry.hits(geometryScreenPoint, geometryWorldToScreen, item.feature, layer.style)) {
                         add(
                             FeatureSelection(
                                 layerId = layer.id,
@@ -64,6 +69,7 @@ class FeatureHitTester(
                 }
             }
         }
+    }
 
     private fun Geometry.hits(
         screenPoint: Point,

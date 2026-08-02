@@ -1,9 +1,9 @@
 package tilo.compose.render
 
 import tilo.compose.core.feature.Feature
-import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.vector.VectorLayer
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import tilo.compose.core.selection.FeatureHitTestFeature
 import tilo.compose.core.selection.FeatureHitTestLayer
 import tilo.compose.core.selection.FeatureSelection
@@ -13,7 +13,7 @@ internal class FeatureHitTester {
     fun hitTest(
         map: MapState,
         layers: List<VectorLayer>,
-        screenPoint: Point,
+        screenPoint: ScreenPoint,
     ): List<FeatureSelection> {
         val worldPoint = map.screenToWorld(screenPoint)
         val hitTestLayers =

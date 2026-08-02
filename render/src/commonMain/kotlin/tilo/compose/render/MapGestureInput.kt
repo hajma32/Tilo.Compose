@@ -26,6 +26,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import tilo.compose.dsl.MapGestureConfig
 import kotlin.math.abs
 import kotlin.math.exp
@@ -60,7 +61,7 @@ internal fun Modifier.mapGestureInput(
                 var touchSlopReachedAtMillis = down.uptimeMillis
                 var panVelocity = Offset.Zero
                 var zoomVelocity = 0.0
-                var zoomFocus: Point? = null
+                var zoomFocus: ScreenPoint? = null
                 var hadZoomGesture = false
 
                 do {
@@ -114,7 +115,7 @@ internal fun Modifier.mapGestureInput(
                                         .toDouble() / 1_000.0
                                 val instantZoomVelocity = zoomDelta / deltaSeconds
                                 zoomVelocity = zoomVelocity * 0.25 + instantZoomVelocity * 0.75
-                                zoomFocus = Point(centroid.x.toDouble(), centroid.y.toDouble())
+                                zoomFocus = ScreenPoint(centroid.x.toDouble(), centroid.y.toDouble())
                                 hadZoomGesture = true
                                 map.zoomBy(
                                     delta = zoomDelta,
@@ -125,7 +126,7 @@ internal fun Modifier.mapGestureInput(
                                 applyRotationGesture(
                                     map = map,
                                     rotationChange = rotationToApply,
-                                    focus = Point(centroid.x.toDouble(), centroid.y.toDouble()),
+                                    focus = ScreenPoint(centroid.x.toDouble(), centroid.y.toDouble()),
                                 )
                             }
                             if (panChange != Offset.Zero || zoomChange != 1f || rotationToApply != 0.0) {
@@ -193,7 +194,7 @@ internal class RotationGestureThreshold(
 internal fun applyRotationGesture(
     map: MapState,
     rotationChange: Double,
-    focus: Point,
+    focus: ScreenPoint,
 ) {
     map.rotateBy(delta = -rotationChange, focus = focus)
 }
@@ -201,7 +202,7 @@ internal fun applyRotationGesture(
 @Composable
 internal fun Modifier.mapTapInput(
     map: MapState,
-    onTap: ((screenPoint: Point, worldPoint: Point) -> Unit)?,
+    onTap: ((screenPoint: ScreenPoint, worldPoint: Point) -> Unit)?,
     onChanged: () -> Unit,
     coordinator: MapGestureCoordinator,
 ): Modifier {
@@ -216,14 +217,14 @@ internal fun Modifier.mapTapInput(
                     coordinator.doubleTapZoomJob =
                         launch {
                             animateDoubleTapZoom(
-                                focus = Point(offset.x.toDouble(), offset.y.toDouble()),
+                                focus = ScreenPoint(offset.x.toDouble(), offset.y.toDouble()),
                                 map = currentMap.value,
                                 onChanged = { currentOnChanged.value() },
                             )
                         }
                 },
                 onTap = { offset ->
-                    val screenPoint = Point(offset.x.toDouble(), offset.y.toDouble())
+                    val screenPoint = ScreenPoint(offset.x.toDouble(), offset.y.toDouble())
                     val onTap = currentOnTap.value
                     if (onTap != null) {
                         val map = currentMap.value
@@ -308,7 +309,7 @@ private suspend fun animateInertialPan(
 }
 
 private suspend fun animateDoubleTapZoom(
-    focus: Point,
+    focus: ScreenPoint,
     map: MapState,
     onChanged: () -> Unit,
 ) {
@@ -334,7 +335,7 @@ private suspend fun animateDoubleTapZoom(
 
 private suspend fun animateInertialZoom(
     initialVelocity: Double,
-    focus: Point?,
+    focus: ScreenPoint?,
     map: MapState,
     onChanged: () -> Unit,
 ) {

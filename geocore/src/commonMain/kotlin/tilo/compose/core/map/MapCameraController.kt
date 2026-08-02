@@ -1,7 +1,5 @@
 package tilo.compose.core.map
 
-import tilo.compose.core.geometry.Point
-
 /**
  * Minimal camera control contract for reusable map UI.
  */
@@ -12,6 +10,6 @@ interface MapCameraController {
 
     fun zoomBy(
         delta: Double,
-        focus: Point?,
+        focus: ScreenPoint?,
     )
 }

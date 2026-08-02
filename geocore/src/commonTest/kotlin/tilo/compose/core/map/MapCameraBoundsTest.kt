@@ -23,8 +23,8 @@ class MapCameraBoundsTest {
         map.panBy(dx = 1_000.0, dy = -1_000.0)
 
         assertEquals(Point(50.0, 60.0), map.center)
-        assertEquals(bounds.maxX, map.screenToWorld(Point(100.0, 40.0)).x)
-        assertEquals(bounds.maxY, map.screenToWorld(Point(50.0, 0.0)).y)
+        assertEquals(bounds.maxX, map.screenToWorld(ScreenPoint(100.0, 40.0)).x)
+        assertEquals(bounds.maxY, map.screenToWorld(ScreenPoint(50.0, 0.0)).y)
     }
 
     @Test
@@ -37,10 +37,10 @@ class MapCameraBoundsTest {
                 viewport = Viewport(width = 100, height = 100),
             )
 
-        map.zoomBy(delta = 2.0, focus = Point(100.0, 50.0))
+        map.zoomBy(delta = 2.0, focus = ScreenPoint(100.0, 50.0))
 
         assertEquals(87.5, map.center.x)
-        assertEquals(bounds.maxX, map.screenToWorld(Point(100.0, 50.0)).x)
+        assertEquals(bounds.maxX, map.screenToWorld(ScreenPoint(100.0, 50.0)).x)
     }
 
     @Test

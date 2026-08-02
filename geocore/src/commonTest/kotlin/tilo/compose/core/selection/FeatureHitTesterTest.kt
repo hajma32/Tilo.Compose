@@ -4,6 +4,7 @@ import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.PointIconStyle
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.map.ScreenPoint
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -26,9 +27,9 @@ class FeatureHitTesterTest {
                             features = listOf(FeatureHitTestFeature(feature)),
                         ),
                     ),
-                screenPoint = Point(60.0, 0.0),
+                screenPoint = ScreenPoint(60.0, 0.0),
                 worldPoint = Point(60.0, 0.0),
-                worldToScreen = { it },
+                worldToScreen = { ScreenPoint(it.x, it.y) },
             )
 
         assertEquals(listOf("large-icon"), selections.map { it.feature.key })
@@ -69,9 +70,9 @@ class FeatureHitTesterTest {
         val selections =
             FeatureHitTester().hitTest(
                 layers = layers,
-                screenPoint = Point(10.0, 10.0),
+                screenPoint = ScreenPoint(10.0, 10.0),
                 worldPoint = Point(10.0, 10.0),
-                worldToScreen = { it },
+                worldToScreen = { ScreenPoint(it.x, it.y) },
             )
 
         assertEquals(listOf("upper-point", "lower-point"), selections.map { it.feature.key })

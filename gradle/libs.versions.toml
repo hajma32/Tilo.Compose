@@ -1,5 +1,5 @@
 [versions]
-tilo = "0.1.3-alpha09"
+tilo = "0.1.4-alpha10"
 agp = "8.11.2"
 android-compileSdk = "36"
 android-minSdk = "28"

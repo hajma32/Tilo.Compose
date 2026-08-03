@@ -53,6 +53,7 @@ internal object CommandBuilder {
         layerId: String? = null,
         selectedFeatureKeys: Set<String> = emptySet(),
         layerStyle: FeatureLayerStyle = FeatureLayerStyle(),
+        includeGeometry: Boolean = true,
     ): CommandBuildResult {
         val visible = visibleBounds(map)
         val resolvedLayerStyle = layerStyle.resolveAtZoom(map.zoom)
@@ -71,9 +72,11 @@ internal object CommandBuilder {
                     val isSelected = layerId != null && feature.key in selectedFeatureKeys
                     val style = feature.resolvedStyle(isSelected, resolvedLayerStyle)
 
-                    val geometryCommands = geometryToCommands(baseId, feature.geometry, style.geometry)
-                    geometryCommandCount += geometryCommands.size
-                    addAll(geometryCommands)
+                    if (includeGeometry) {
+                        val geometryCommands = geometryToCommands(baseId, feature.geometry, style.geometry)
+                        geometryCommandCount += geometryCommands.size
+                        addAll(geometryCommands)
+                    }
 
                     feature.label?.takeIf { resolvedLayerStyle.labelsVisible && it.isNotBlank() }?.let { label ->
                         labelPlacement(feature.geometry, map)?.let { placement ->

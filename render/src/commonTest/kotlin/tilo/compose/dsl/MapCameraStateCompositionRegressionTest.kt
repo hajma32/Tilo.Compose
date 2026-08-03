@@ -12,6 +12,7 @@ import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.projection.Epsg3857Projection
+import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.projection.Projection
 import kotlin.test.Test
@@ -36,6 +37,108 @@ class MapCameraStateCompositionRegressionTest {
 
                 assertSame(initialState, cameraState)
                 assertEquals(CameraPosition(Point(1.0, 2.0), 3.0, 15.0), initialState.position)
+            }
+        }
+
+    @Test
+    fun rememberedCameraResolvesPlatformCrsWithoutExplicitRegistration() =
+        runTest {
+            var cameraState: MapCameraState? = null
+
+            withCameraComposition {
+                cameraState = rememberMapCameraState(projection = Epsg3857Projection)
+            }.use {
+                val transformed =
+                    requireNotNull(cameraState)
+                        .mapState
+                        .transformSourceToTarget(
+                            Point(0.0, 0.0),
+                            Epsg4326Projection,
+                            Epsg3857Projection,
+                        )
+
+                assertEquals(0.0, transformed.x, absoluteTolerance = 1e-6)
+                assertEquals(0.0, transformed.y, absoluteTolerance = 1e-6)
+            }
+        }
+
+    @Test
+    fun rememberedCameraDiscoversCustomProjectionTransformationWithoutMapConfig() =
+        runTest {
+            val localGrid =
+                referencedProjection(
+                    id = "TEST:LOCAL-GRID",
+                    reference = wgs84(),
+                    toReference = { point -> Point(point.x / 2.0, point.y / 2.0) },
+                    fromReference = { point -> Point(point.x * 2.0, point.y * 2.0) },
+                )
+            var cameraState: MapCameraState? = null
+
+            withCameraComposition {
+                cameraState = rememberMapCameraState(projection = localGrid)
+            }.use {
+                val state = requireNotNull(cameraState).mapState
+
+                assertEquals(
+                    Point(4.0, 6.0),
+                    state.transformSourceToTarget(Point(2.0, 3.0), wgs84(), localGrid),
+                )
+                assertEquals(
+                    Point(2.0, 3.0),
+                    state.transformSourceToTarget(Point(4.0, 6.0), localGrid, wgs84()),
+                )
+            }
+        }
+
+    @Test
+    fun inlineProjectionDslKeepsCameraStableAcrossRecomposition() =
+        runTest {
+            val trigger = mutableStateOf(0)
+            var cameraState: MapCameraState? = null
+
+            withCameraComposition {
+                trigger.value
+                cameraState =
+                    rememberMapCameraState(
+                        initialCenter = Point(1.0, 2.0),
+                        projection = projection("EPSG:3857"),
+                    )
+            }.use { composition ->
+                val initial = requireNotNull(cameraState)
+
+                trigger.value += 1
+                composition.recompose()
+
+                assertSame(initial, cameraState)
+                assertEquals(Point(1.0, 2.0), requireNotNull(cameraState).center)
+            }
+        }
+
+    @Test
+    fun inlineReferencedProjectionDslKeepsCameraStableAcrossRecomposition() =
+        runTest {
+            val trigger = mutableStateOf(0)
+            var cameraState: MapCameraState? = null
+
+            withCameraComposition {
+                trigger.value
+                cameraState =
+                    rememberMapCameraState(
+                        projection =
+                            referencedProjection(
+                                id = "TEST:LOCAL",
+                                reference = wgs84(),
+                                toReference = { it },
+                                fromReference = { it },
+                            ),
+                    )
+            }.use { composition ->
+                val initial = requireNotNull(cameraState)
+
+                trigger.value += 1
+                composition.recompose()
+
+                assertSame(initial, cameraState)
             }
         }
 

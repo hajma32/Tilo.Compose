@@ -61,9 +61,6 @@ fun MapScreen() {
         initialCenter = Wgs84ToEpsg5514Transformation.sourceToTarget(brno),
         initialZoom = 11.5,
         projection = sjtsk(),
-        config = MapConfig.Default
-            .withTransformation(Wgs84ToEpsg5514Transformation)
-            .withTransformation(Epsg5514ToWgs84Transformation),
     )
 
     val places = remember {

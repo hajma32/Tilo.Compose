@@ -26,13 +26,18 @@ class FeatureListSource(
         this === other ||
             other is FeatureListSource &&
             features == other.features &&
-            projection?.id == other.projection?.id
+            projection?.id == other.projection?.id &&
+            projection?.definition == other.projection?.definition
 
     /**
      * Feature layers are commonly rebuilt by Compose even when their content did not change.
      * Keep their renderer cache identity stable across those equivalent instances.
      */
-    override fun hashCode(): Int = 31 * version.hashCode() + projection?.id.hashCode()
+    override fun hashCode(): Int {
+        var result = 31 * version.hashCode() + projection?.id.hashCode()
+        result = 31 * result + projection?.definition.hashCode()
+        return result
+    }
 
     private val index =
         RBush<Feature>(maxEntries = maxEntries) { feature ->
@@ -42,26 +47,17 @@ class FeatureListSource(
         }.load(this.features)
 
     override fun getFeatures(map: MapState): List<Feature> {
-        val queryBounds = visibleBounds(map).toSourceBounds(map)
-        return index.search(queryBounds)
-    }
-
-    private fun BoundingBox.toSourceBounds(map: MapState): SpatialRect {
         val source = projection
-        if (source == null || source.id == map.projection.id) {
-            return SpatialRect(minX, minY, maxX, maxY)
+        if (
+            source != null &&
+            (source.id != map.projection.id || source.definition != map.projection.definition)
+        ) {
+            // Inverse-transforming only viewport corners is not conservative for non-linear CRS
+            // operations. The long-lived render cache projects and indexes these candidates once.
+            return features
         }
-
-        val points =
-            listOf(topLeft, topRight, bottomLeft, bottomRight)
-                .map { point -> map.transformSourceToTarget(point, map.projection, source) }
-
-        return SpatialRect(
-            minX = points.minOf { it.x },
-            minY = points.minOf { it.y },
-            maxX = points.maxOf { it.x },
-            maxY = points.maxOf { it.y },
-        )
+        val visible = visibleBounds(map).toSpatialRect()
+        return index.search(visible)
     }
 
     private fun visibleBounds(map: MapState): BoundingBox {
@@ -82,3 +78,5 @@ class FeatureListSource(
         const val VIEWPORT_QUERY_PADDING = 0.1
     }
 }
+
+private fun BoundingBox.toSpatialRect(): SpatialRect = SpatialRect(minX, minY, maxX, maxY)

@@ -10,6 +10,7 @@ import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Epsg5514Projection
 import tilo.compose.core.projection.IdentityProjection
+import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.core.tile.TileRequest
@@ -165,7 +166,7 @@ class RasterTileLayerTest {
                 TileRequest(TileCoordinate(z = 2, x = 3, y = 1), grid.tileBounds(x = 3, y = 1, zoom = 2)),
             )
 
-        assertEquals("tile-store:EPSG:5514:2:3:6", key)
+        assertEquals("10:tile-store:9:EPSG:5514:9:EPSG:5514:2:3:6", key)
     }
 
     /**
@@ -190,6 +191,31 @@ class RasterTileLayerTest {
                 zoom = 0.0,
                 viewport = Viewport(width = 256, height = 256),
                 projection = Epsg3857Projection,
+            )
+
+        assertFailsWith<IllegalArgumentException> {
+            layer.planTiles(map)
+        }
+    }
+
+    @Test
+    fun rasterLayerRejectsMatchingIdWithDifferentDefinition() {
+        val source =
+            TileStoreTileSource(
+                projection = Epsg3857Projection,
+                grid = TileGrid.WebMercator,
+                readTile = { byteArrayOf(1) },
+            )
+        val disguisedProjection =
+            object : Projection {
+                override val id = Epsg3857Projection.id
+                override val definition = "TEST:NOT-WEB-MERCATOR"
+            }
+        val layer = RasterTileLayer(id = "offline", source = source)
+        val map =
+            MapState(
+                viewport = Viewport(width = 256, height = 256),
+                projection = disguisedProjection,
             )
 
         assertFailsWith<IllegalArgumentException> {

@@ -38,7 +38,8 @@ class TileStoreTileSource(
 ) : RasterTileSource {
     override fun cacheKey(request: TileRequest): String {
         val coordinate = sourceCoordinate(request)
-        return "$sourceId:${projection.id}:${coordinate.z}:${coordinate.x}:${coordinate.y}"
+        return "${sourceId.segment()}:${projection.id.segment()}:${projection.definition.segment()}:" +
+            "${coordinate.z}:${coordinate.x}:${coordinate.y}"
     }
 
     override suspend fun readTile(request: TileRequest): ByteArray? = readTile(sourceCoordinate(request))
@@ -53,3 +54,5 @@ class TileStoreTileSource(
         return TileCoordinate(z = z, x = x, y = sourceY)
     }
 }
+
+private fun String.segment(): String = "$length:$this"

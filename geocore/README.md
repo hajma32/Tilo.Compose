@@ -11,7 +11,7 @@ Android, iOS, HTTP clients, image decoding, or licensed projection engines.
 - Feature models and in-memory feature sources.
 - Map state and viewport math.
 - Projection metadata.
-- CRS transformation contracts and registry.
+- CRS transformation contracts and projection-owned reference transformations.
 - Tile coordinates, tile bounds, tile grids, and tile request planning.
 - Layer contracts for raster/vector data.
 - In-memory spatial querying through
@@ -24,10 +24,11 @@ Android, iOS, HTTP clients, image decoding, or licensed projection engines.
 - HTTP clients and tile byte fetching.
 - Image decoding.
 - Concrete licensed projection implementations such as proj4/proj4j bridges.
-- Hard-wired default CRS transformations.
+- Platform-specific CRS providers such as PROJ/Proj4J.
 
-Applications and renderers should inject any concrete CRS transformations they
-need through `MapConfig` / `TransformationRegistry`.
+Custom coordinate systems should normally carry an authority identifier or PROJ
+definition. A bidirectional connection to a known reference projection remains
+an escape hatch for systems that PROJ cannot describe.
 
 ## Module Boundary
 
@@ -36,7 +37,7 @@ GeoCore answers questions like:
 - What is the current map state?
 - Which tiles cover the viewport?
 - Which in-memory features can intersect the viewport?
-- Which transformation contract should be used between two projections?
+- Which projection-owned or runtime-provided path connects two coordinate systems?
 
 `Tilo.Compose` answers questions like:
 

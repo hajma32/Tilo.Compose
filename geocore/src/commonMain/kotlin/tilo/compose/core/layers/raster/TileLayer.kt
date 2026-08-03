@@ -65,7 +65,10 @@ interface TileLayer : Layer {
     suspend fun prefetchTiles(map: MapState) = Unit
 
     fun validateProjection(map: MapState) {
-        require(map.projection.id == projection.id) {
+        require(
+            map.projection.id == projection.id &&
+                map.projection.definition == projection.definition,
+        ) {
             "Tile layer '$id' uses ${projection.id}, but map uses ${map.projection.id}. Tiles are not reprojected client-side."
         }
     }

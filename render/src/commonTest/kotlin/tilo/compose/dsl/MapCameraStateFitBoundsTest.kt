@@ -1,17 +1,24 @@
-@file:OptIn(ExperimentalTiloApi::class)
+@file:OptIn(ExperimentalTiloApi::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 
 package tilo.compose.dsl
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.MonotonicFrameClock
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.runtime.snapshots.SnapshotStateObserver
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import tilo.compose.core.map.Viewport
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,6 +26,164 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class MapCameraStateFitBoundsTest {
+    @Test
+    fun centerAndPositionIndependentlyEstablishSnapshotDependencies() {
+        val cameraState = MapCameraState(MapState())
+        val centerInvalidations = observeInvalidations(read = { cameraState.center })
+        val positionInvalidations = observeInvalidations(read = { cameraState.position })
+
+        cameraState.setCenter(Point(10.0, 20.0))
+        Snapshot.sendApplyNotifications()
+
+        assertEquals(1, centerInvalidations())
+        assertEquals(1, positionInvalidations())
+        assertEquals(Point(10.0, 20.0), cameraState.center)
+    }
+
+    @Test
+    fun scalarCameraReadsInvalidateOnlyWhenTheirComponentChanges() {
+        val cameraState = MapCameraState(MapState(zoom = 3.0, bearing = 15.0))
+        val zoomInvalidations = observeInvalidations(read = { cameraState.zoom })
+        val bearingInvalidations = observeInvalidations(read = { cameraState.bearing })
+
+        cameraState.setCenter(Point(10.0, 20.0))
+        Snapshot.sendApplyNotifications()
+
+        assertEquals(0, zoomInvalidations())
+        assertEquals(0, bearingInvalidations())
+    }
+
+    @Test
+    fun absoluteCameraOperationsPublishOneImmutablePosition() {
+        val cameraState =
+            MapCameraState(
+                MapState(config = MapConfig(minZoom = 2.0, maxZoom = 10.0)),
+            )
+
+        val positionInvalidations = observeInvalidations(read = { cameraState.position })
+        cameraState.setCamera(CameraPosition(Point(12.0, 34.0), zoom = 20.0, bearing = -15.0))
+        Snapshot.sendApplyNotifications()
+
+        assertEquals(
+            CameraPosition(center = Point(12.0, 34.0), zoom = 10.0, bearing = 345.0),
+            cameraState.position,
+        )
+        assertEquals(1, positionInvalidations())
+        assertEquals(1, cameraState.cameraControlRevision)
+
+        cameraState.setZoom(4.0)
+        cameraState.setCenter(Point(56.0, 78.0))
+        assertEquals(CameraPosition(Point(56.0, 78.0), 4.0, 345.0), cameraState.position)
+    }
+
+    @Test
+    fun shortestBearingDeltaCrossesNorthInsteadOfRotatingTheLongWay() {
+        assertEquals(20.0, shortestBearingDelta(from = 350.0, to = 10.0))
+        assertEquals(-20.0, shortestBearingDelta(from = 10.0, to = 350.0))
+    }
+
+    @Test
+    fun animateToUsesTheShortestBearingPath() =
+        runTest {
+            val cameraState = MapCameraState(MapState(bearing = 350.0))
+            val frameClock = ManualFrameClock()
+            val animation =
+                launch(frameClock) {
+                    cameraState.animateTo(
+                        CameraPosition(Point(0.0, 0.0), zoom = 0.0, bearing = 10.0),
+                        animationSpec = tween(durationMillis = 1_000, easing = LinearEasing),
+                    )
+                }
+            runCurrent()
+            frameClock.advanceTo(0L)
+            runCurrent()
+            frameClock.advanceTo(250_000_000L)
+            runCurrent()
+
+            assertEquals(355.0, cameraState.bearing, absoluteTolerance = 1e-6)
+
+            frameClock.advanceTo(1_000_000_000L)
+            runCurrent()
+            assertTrue(animation.isCompleted)
+            assertEquals(10.0, cameraState.bearing, absoluteTolerance = 1e-6)
+        }
+
+    @Test
+    fun immediateCameraMutationCancelsRunningAnimation() =
+        runTest {
+            val cameraState = MapCameraState(MapState())
+            val frameClock = ManualFrameClock()
+            val animation =
+                launch(frameClock) {
+                    cameraState.animateTo(
+                        CameraPosition(Point(100.0, 100.0), zoom = 5.0),
+                        animationSpec = tween(durationMillis = 1_000, easing = LinearEasing),
+                    )
+                }
+            runCurrent()
+            frameClock.advanceTo(0L)
+            runCurrent()
+            frameClock.advanceTo(16_000_000L)
+            runCurrent()
+            assertTrue(animation.isActive)
+
+            cameraState.setCenter(Point(25.0, 30.0))
+            runCurrent()
+
+            assertTrue(animation.isCancelled)
+            assertEquals(Point(25.0, 30.0), cameraState.center)
+        }
+
+    @Test
+    fun newerCameraAnimationCancelsThePreviousAnimation() =
+        runTest {
+            val cameraState = MapCameraState(MapState())
+            val firstFrameClock = ManualFrameClock()
+            val firstAnimation =
+                launch(firstFrameClock) {
+                    cameraState.animateTo(
+                        CameraPosition(Point(100.0, 100.0), zoom = 5.0),
+                        animationSpec = tween(durationMillis = 1_000, easing = LinearEasing),
+                    )
+                }
+            runCurrent()
+            firstFrameClock.advanceTo(0L)
+            runCurrent()
+            firstFrameClock.advanceTo(16_000_000L)
+            runCurrent()
+
+            withContext(AdvancingFrameClock()) {
+                cameraState.animateTo(
+                    CameraPosition(Point(20.0, 30.0), zoom = 2.0, bearing = 45.0),
+                    animationSpec = tween(durationMillis = 64, easing = LinearEasing),
+                )
+            }
+            runCurrent()
+
+            assertTrue(firstAnimation.isCancelled)
+            assertEquals(CameraPosition(Point(20.0, 30.0), 2.0, 45.0), cameraState.position)
+        }
+
+    @Test
+    fun animateToReachesCameraPosition() =
+        runTest {
+            val cameraState =
+                MapCameraState(
+                    MapState(center = Point(0.0, 0.0), zoom = 2.0, bearing = 350.0),
+                )
+
+            withContext(AdvancingFrameClock()) {
+                cameraState.animateTo(
+                    position = CameraPosition(Point(100.0, 50.0), zoom = 6.0, bearing = 10.0),
+                    animationSpec = tween(durationMillis = 64, easing = LinearEasing),
+                )
+            }
+
+            assertEquals(Point(100.0, 50.0), cameraState.center)
+            assertEquals(6.0, cameraState.zoom, absoluteTolerance = 1e-6)
+            assertEquals(10.0, cameraState.bearing, absoluteTolerance = 1e-6)
+        }
+
     /**
      * Verifies that center-only changes do not invalidate zoom-only consumers.
      *
@@ -62,7 +227,7 @@ class MapCameraStateFitBoundsTest {
                     viewport = Viewport(width = 300, height = 200),
                 )
             val cameraState = MapCameraState(map)
-            val focus = Point(240.0, 35.0)
+            val focus = ScreenPoint(240.0, 35.0)
             val worldBefore = map.screenToWorld(focus)
 
             withContext(AdvancingFrameClock()) {
@@ -218,6 +383,31 @@ class MapCameraStateFitBoundsTest {
         override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R {
             frameTimeNanos += 16_000_000L
             return onFrame(frameTimeNanos)
+        }
+    }
+
+    private class ManualFrameClock : MonotonicFrameClock {
+        private val frames = Channel<Long>(capacity = Channel.UNLIMITED)
+
+        fun advanceTo(frameTimeNanos: Long) {
+            frames.trySend(frameTimeNanos).getOrThrow()
+        }
+
+        override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R = onFrame(frames.receive())
+    }
+
+    private fun observeInvalidations(read: () -> Unit): () -> Int {
+        var invalidations = 0
+        val observer = SnapshotStateObserver { command -> command() }
+        observer.start()
+        observer.observeReads(
+            scope = observer,
+            onValueChangedForScope = { invalidations += 1 },
+            block = read,
+        )
+        return {
+            observer.stop()
+            invalidations
         }
     }
 }

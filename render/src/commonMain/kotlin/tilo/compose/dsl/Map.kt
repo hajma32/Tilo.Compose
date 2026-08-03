@@ -16,17 +16,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.job
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.geometry.BoundingBox
@@ -44,9 +50,11 @@ import tilo.compose.core.layers.raster.WMSCapabilities
 import tilo.compose.core.layers.raster.WMSCapabilitiesLoader
 import tilo.compose.core.layers.raster.XYZTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
+import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapCameraController
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.projection.Projection
@@ -130,18 +138,25 @@ class MapCameraState internal constructor(
     internal var zoomRevision by mutableIntStateOf(0)
         private set
 
-    private var observableZoom by mutableDoubleStateOf(mapState.zoom)
-    private var observableBearing by mutableDoubleStateOf(mapState.bearing)
+    private var observablePosition by mutableStateOf(mapState.cameraPosition)
+    private val observableCenter = derivedStateOf(structuralEqualityPolicy()) { observablePosition.center }
+    private val observableZoom = derivedStateOf(structuralEqualityPolicy()) { observablePosition.zoom }
+    private val observableBearing = derivedStateOf(structuralEqualityPolicy()) { observablePosition.bearing }
+    private var activeAnimationJob: Job? = null
 
     val center: Point
-        get() = mapState.center
+        get() = observableCenter.value
 
     val zoom: Double
-        get() = observableZoom
+        get() = observableZoom.value
 
     /** Clockwise map rotation in degrees, normalized to the `[0, 360)` range. */
     val bearing: Double
-        get() = observableBearing
+        get() = observableBearing.value
+
+    /** Immutable observable snapshot of center, zoom, and bearing. */
+    val position: CameraPosition
+        get() = observablePosition
 
     val projection: Projection
         get() = mapState.projection
@@ -195,11 +210,79 @@ class MapCameraState internal constructor(
         dx: Double,
         dy: Double,
     ) {
+        cancelCameraAnimation()
+        panByInternal(dx, dy)
+    }
+
+    private fun panByInternal(
+        dx: Double,
+        dy: Double,
+    ) {
         val previousCenter = mapState.center
         mapState.panBy(dx, dy)
         if (mapState.center != previousCenter) {
-            markCameraChanged()
+            markCameraChanged(mapState.cameraPosition)
         }
+    }
+
+    /** Sets the center in the active map projection. */
+    fun setCenter(center: Point) {
+        setCamera(position.copy(center = center))
+    }
+
+    /** Sets the absolute zoom level, constrained by [config]. */
+    fun setZoom(zoom: Double) {
+        setCamera(position.copy(zoom = zoom))
+    }
+
+    /** Atomically publishes a new center, zoom, and bearing. */
+    fun setCamera(position: CameraPosition) {
+        cancelCameraAnimation()
+        setCameraInternal(position)
+    }
+
+    /** Convenience overload for atomically setting all camera components. */
+    fun setCamera(
+        center: Point,
+        zoom: Double,
+        bearing: Double = this.bearing,
+    ) {
+        setCamera(CameraPosition(center = center, zoom = zoom, bearing = bearing))
+    }
+
+    /** Animates center, zoom, and bearing together, using the shortest rotation around north. */
+    suspend fun animateTo(
+        position: CameraPosition,
+        animationSpec: AnimationSpec<Float> = DefaultCameraAnimationSpec,
+    ) = runCameraAnimation {
+        val start = this.position
+        val target =
+            CameraPosition(
+                center = position.center,
+                zoom = position.zoom.coerceIn(config.minZoom, config.maxZoom),
+                bearing = normalizeBearing(position.bearing),
+            )
+        if (target == start) return@runCameraAnimation
+        val bearingDelta = shortestBearingDelta(start.bearing, target.bearing)
+        var expectedRevision = mapState.cameraRevision
+
+        AnimationState(initialValue = 0f)
+            .animateTo(targetValue = 1f, animationSpec = animationSpec) {
+                ensureCameraRevision(expectedRevision)
+                val progress = value.toDouble()
+                setCameraInternal(
+                    CameraPosition(
+                        center =
+                            Point(
+                                x = lerp(start.center.x, target.center.x, progress),
+                                y = lerp(start.center.y, target.center.y, progress),
+                            ),
+                        zoom = lerp(start.zoom, target.zoom, progress),
+                        bearing = start.bearing + bearingDelta * progress,
+                    ),
+                )
+                expectedRevision = mapState.cameraRevision
+            }
     }
 
     /**
@@ -209,15 +292,18 @@ class MapCameraState internal constructor(
         dx: Double,
         dy: Double,
         animationSpec: AnimationSpec<Float> = DefaultPanAnimationSpec,
-    ) {
-        if (dx == 0.0 && dy == 0.0) return
+    ) = runCameraAnimation {
+        if (dx == 0.0 && dy == 0.0) return@runCameraAnimation
 
         var previousProgress = 0f
+        var expectedRevision = mapState.cameraRevision
         AnimationState(initialValue = 0f)
             .animateTo(targetValue = 1f, animationSpec = animationSpec) {
+                ensureCameraRevision(expectedRevision)
                 val progressDelta = value - previousProgress
                 previousProgress = value
-                panBy(dx * progressDelta, dy * progressDelta)
+                panByInternal(dx * progressDelta, dy * progressDelta)
+                expectedRevision = mapState.cameraRevision
             }
     }
 
@@ -250,13 +336,21 @@ class MapCameraState internal constructor(
 
     override fun zoomBy(
         delta: Double,
-        focus: Point?,
+        focus: ScreenPoint?,
+    ) {
+        cancelCameraAnimation()
+        zoomByInternal(delta, focus)
+    }
+
+    private fun zoomByInternal(
+        delta: Double,
+        focus: ScreenPoint?,
     ) {
         val previousCenter = mapState.center
         val previousZoom = mapState.zoom
         mapState.zoomBy(delta = delta, focus = focus)
         if (mapState.center != previousCenter || mapState.zoom != previousZoom) {
-            markCameraChanged()
+            markCameraChanged(mapState.cameraPosition)
         }
     }
 
@@ -266,21 +360,24 @@ class MapCameraState internal constructor(
      */
     suspend fun animateZoomBy(
         delta: Double,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
         animationSpec: AnimationSpec<Float> = DefaultZoomAnimationSpec,
-    ) {
+    ) = runCameraAnimation {
         val targetZoom = (mapState.zoom + delta).coerceIn(config.minZoom, config.maxZoom)
-        if (targetZoom == mapState.zoom) return
+        if (targetZoom == mapState.zoom) return@runCameraAnimation
 
+        var expectedRevision = mapState.cameraRevision
         AnimationState(initialValue = mapState.zoom.toFloat())
             .animateTo(targetValue = targetZoom.toFloat(), animationSpec = animationSpec) {
-                zoomBy(value.toDouble() - mapState.zoom, focus)
+                ensureCameraRevision(expectedRevision)
+                zoomByInternal(value.toDouble() - mapState.zoom, focus)
+                expectedRevision = mapState.cameraRevision
             }
     }
 
     suspend fun animateZoomIn(
         step: Double = 1.0,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
         animationSpec: AnimationSpec<Float> = DefaultZoomAnimationSpec,
     ) {
         animateZoomBy(delta = step, focus = focus, animationSpec = animationSpec)
@@ -288,7 +385,7 @@ class MapCameraState internal constructor(
 
     suspend fun animateZoomOut(
         step: Double = 1.0,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
         animationSpec: AnimationSpec<Float> = DefaultZoomAnimationSpec,
     ) {
         animateZoomBy(delta = -step, focus = focus, animationSpec = animationSpec)
@@ -297,48 +394,60 @@ class MapCameraState internal constructor(
     /** Rotates the map clockwise by [delta] degrees while keeping [focus] fixed on screen. */
     fun rotateBy(
         delta: Double,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
+    ) {
+        cancelCameraAnimation()
+        rotateByInternal(delta, focus)
+    }
+
+    private fun rotateByInternal(
+        delta: Double,
+        focus: ScreenPoint?,
     ) {
         val previousCenter = mapState.center
         val previousBearing = mapState.bearing
         mapState.rotateBy(delta, focus)
         if (mapState.center != previousCenter || mapState.bearing != previousBearing) {
-            markCameraChanged()
+            markCameraChanged(mapState.cameraPosition)
         }
     }
 
     /** Sets the clockwise map [bearing], taking the shortest path around north. */
     fun setBearing(
         bearing: Double,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
     ) {
         require(bearing.isFinite()) { "bearing must be finite" }
-        rotateBy(shortestBearingDelta(mapState.bearing, bearing), focus)
+        cancelCameraAnimation()
+        rotateByInternal(shortestBearingDelta(mapState.bearing, bearing), focus)
     }
 
     /** Animates a clockwise rotation by [delta] degrees. */
     suspend fun animateRotateBy(
         delta: Double,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
         animationSpec: AnimationSpec<Float> = DefaultRotationAnimationSpec,
-    ) {
+    ) = runCameraAnimation {
         require(delta.isFinite()) { "delta must be finite" }
-        if (delta == 0.0) return
+        if (delta == 0.0) return@runCameraAnimation
         val target = delta.toFloat()
         require(target.isFinite()) { "delta must be representable as Float" }
 
         var previousValue = 0.0
+        var expectedRevision = mapState.cameraRevision
         AnimationState(initialValue = 0f)
             .animateTo(targetValue = target, animationSpec = animationSpec) {
-                rotateBy(value.toDouble() - previousValue, focus)
+                ensureCameraRevision(expectedRevision)
+                rotateByInternal(value.toDouble() - previousValue, focus)
                 previousValue = value.toDouble()
+                expectedRevision = mapState.cameraRevision
             }
     }
 
     /** Animates to [bearing] using the shortest path around north. */
     suspend fun animateBearingTo(
         bearing: Double,
-        focus: Point? = null,
+        focus: ScreenPoint? = null,
         animationSpec: AnimationSpec<Float> = DefaultRotationAnimationSpec,
     ) {
         require(bearing.isFinite()) { "bearing must be finite" }
@@ -350,6 +459,7 @@ class MapCameraState internal constructor(
         bounds: BoundingBox,
         padding: Dp = 48.dp,
     ) {
+        cancelCameraAnimation()
         val previousCenter = mapState.center
         val previousZoom = mapState.zoom
         val previousBearing = mapState.bearing
@@ -362,24 +472,61 @@ class MapCameraState internal constructor(
             mapState.zoom != previousZoom ||
             mapState.bearing != previousBearing
         ) {
-            markCameraChanged()
+            markCameraChanged(mapState.cameraPosition)
         }
     }
 
     internal fun markChanged() {
-        revision += 1
-        if (mapState.zoom != observableZoom) {
-            observableZoom = mapState.zoom
-            zoomRevision += 1
-        }
-        if (mapState.bearing != observableBearing) {
-            observableBearing = mapState.bearing
+        publishPosition(mapState.cameraPosition)
+    }
+
+    internal fun cancelCameraAnimation() {
+        activeAnimationJob?.cancel()
+        activeAnimationJob = null
+    }
+
+    private fun setCameraInternal(position: CameraPosition) {
+        val currentPosition = mapState.setCamera(position)
+        if (currentPosition != observablePosition) {
+            markCameraChanged(currentPosition)
         }
     }
 
-    private fun markCameraChanged() {
-        markChanged()
+    private fun publishPosition(currentPosition: CameraPosition) {
+        revision += 1
+        val previousPosition = observablePosition
+        if (currentPosition.zoom != previousPosition.zoom) {
+            zoomRevision += 1
+        }
+        if (currentPosition != previousPosition) {
+            observablePosition = currentPosition
+        }
+    }
+
+    private fun markCameraChanged(currentPosition: CameraPosition) {
+        publishPosition(currentPosition)
         cameraControlRevision += 1
+    }
+
+    private suspend fun runCameraAnimation(block: suspend () -> Unit) {
+        coroutineScope {
+            val animationJob = coroutineContext.job
+            activeAnimationJob?.takeIf { it !== animationJob }?.cancel()
+            activeAnimationJob = animationJob
+            try {
+                block()
+            } finally {
+                if (activeAnimationJob === animationJob) {
+                    activeAnimationJob = null
+                }
+            }
+        }
+    }
+
+    private fun ensureCameraRevision(expectedRevision: Long) {
+        if (mapState.cameraRevision != expectedRevision) {
+            throw CancellationException("Camera changed outside the active animation")
+        }
     }
 
     private companion object {
@@ -389,18 +536,31 @@ class MapCameraState internal constructor(
             tween(durationMillis = 260, easing = FastOutSlowInEasing)
         val DefaultRotationAnimationSpec: AnimationSpec<Float> =
             tween(durationMillis = 220, easing = FastOutSlowInEasing)
+        val DefaultCameraAnimationSpec: AnimationSpec<Float> =
+            tween(durationMillis = 300, easing = FastOutSlowInEasing)
 
-        fun shortestBearingDelta(
-            from: Double,
-            to: Double,
-        ): Double {
-            val delta = (to - from) % 360.0
-            return when {
-                delta > 180.0 -> delta - 360.0
-                delta < -180.0 -> delta + 360.0
-                else -> delta
-            }
+        fun lerp(
+            start: Double,
+            end: Double,
+            progress: Double,
+        ): Double = start + (end - start) * progress
+
+        fun normalizeBearing(value: Double): Double {
+            val normalized = value % 360.0
+            return if (normalized < 0.0) normalized + 360.0 else normalized
         }
+    }
+}
+
+internal fun shortestBearingDelta(
+    from: Double,
+    to: Double,
+): Double {
+    val delta = (to - from) % 360.0
+    return when {
+        delta > 180.0 -> delta - 360.0
+        delta < -180.0 -> delta + 360.0
+        else -> delta
     }
 }
 
@@ -1271,7 +1431,33 @@ class FeatureLayerOptions {
 }
 
 /**
- * Remembers camera state for [TiloMap].
+ * Remembers camera state for [TiloMap] from one immutable initial camera position.
+ *
+ * `initialPosition` is used only when the state is first created. [projection] and [config] are
+ * immutable properties of [MapCameraState]; changing either replaces the remembered state.
+ */
+@Composable
+@ExperimentalTiloApi
+fun rememberMapCameraState(
+    initialPosition: CameraPosition,
+    projection: Projection = IdentityProjection,
+    config: MapConfig = MapConfig.Default,
+): MapCameraState =
+    remember(projection, config) {
+        MapCameraState(
+            mapState =
+                MapState(
+                    center = initialPosition.center,
+                    zoom = initialPosition.zoom,
+                    projection = projection,
+                    config = config,
+                    bearing = initialPosition.bearing,
+                ),
+        )
+    }
+
+/**
+ * Convenience overload that remembers camera state from separate initial components.
  *
  * [initialCenter], [initialZoom], and [initialBearing] initialize a newly remembered state and are
  * not reapplied by later recompositions. [projection] and [config] are immutable
@@ -1286,18 +1472,11 @@ fun rememberMapCameraState(
     config: MapConfig = MapConfig.Default,
     initialBearing: Double = 0.0,
 ): MapCameraState =
-    remember(projection, config) {
-        MapCameraState(
-            mapState =
-                MapState(
-                    center = initialCenter,
-                    zoom = initialZoom,
-                    projection = projection,
-                    config = config,
-                    bearing = initialBearing,
-                ),
-        )
-    }
+    rememberMapCameraState(
+        initialPosition = CameraPosition(initialCenter, initialZoom, initialBearing),
+        projection = projection,
+        config = config,
+    )
 
 /**
  * Compose map surface.
@@ -1655,6 +1834,7 @@ private fun MapRendererLayer(
             selectedFeatures = selectedFeatures,
             invalidationKey = invalidationKey to cameraControlRevision,
             onMapChanged = cameraState::markChanged,
+            onCameraInteractionStarted = cameraState::cancelCameraAnimation,
         )
     } else {
         MapRenderer(
@@ -1669,6 +1849,7 @@ private fun MapRendererLayer(
             selectedFeatures = selectedFeatures,
             invalidationKey = invalidationKey to cameraControlRevision,
             onMapChanged = cameraState::markChanged,
+            onCameraInteractionStarted = cameraState::cancelCameraAnimation,
         )
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.IdentityProjection
@@ -20,6 +21,24 @@ import kotlin.test.assertSame
 
 /** Regression coverage for the input semantics of [rememberMapCameraState]. */
 class MapCameraStateCompositionRegressionTest {
+    @Test
+    fun immutableInitialPositionUsesTheSameOneTimeInputSemantics() =
+        runTest {
+            val position = mutableStateOf(CameraPosition(Point(1.0, 2.0), zoom = 3.0, bearing = 15.0))
+            var cameraState: MapCameraState? = null
+
+            withCameraComposition {
+                cameraState = rememberMapCameraState(initialPosition = position.value)
+            }.use { composition ->
+                val initialState = requireNotNull(cameraState)
+                position.value = CameraPosition(Point(10.0, 20.0), zoom = 8.0, bearing = 120.0)
+                composition.recompose()
+
+                assertSame(initialState, cameraState)
+                assertEquals(CameraPosition(Point(1.0, 2.0), 3.0, 15.0), initialState.position)
+            }
+        }
+
     /**
      * Verifies that initial camera values are one-time inputs.
      *

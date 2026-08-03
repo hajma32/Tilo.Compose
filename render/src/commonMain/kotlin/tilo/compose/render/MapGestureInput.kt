@@ -26,6 +26,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import tilo.compose.dsl.MapGestureConfig
 import kotlin.math.abs
 import kotlin.math.exp
@@ -40,10 +41,12 @@ import kotlin.math.ln
 internal fun Modifier.mapGestureInput(
     map: MapState,
     gestureConfig: MapGestureConfig,
+    onInteractionStarted: (() -> Unit)? = null,
     onChanged: () -> Unit,
     coordinator: MapGestureCoordinator,
 ): Modifier {
     val currentGestureConfig = rememberUpdatedState(gestureConfig)
+    val currentOnInteractionStarted = rememberUpdatedState(onInteractionStarted)
     val currentOnChanged = rememberUpdatedState(onChanged)
     return pointerInput(map) {
         coroutineScope {
@@ -55,12 +58,13 @@ internal fun Modifier.mapGestureInput(
                 var pastTouchSlop = false
                 var cleanSinglePointerPan = true
                 coordinator.cancelAnimations()
+                currentOnInteractionStarted.value?.invoke()
                 val downTimeMillis = down.uptimeMillis
                 var lastEventTimeMillis = down.uptimeMillis
                 var touchSlopReachedAtMillis = down.uptimeMillis
                 var panVelocity = Offset.Zero
                 var zoomVelocity = 0.0
-                var zoomFocus: Point? = null
+                var zoomFocus: ScreenPoint? = null
                 var hadZoomGesture = false
 
                 do {
@@ -114,7 +118,7 @@ internal fun Modifier.mapGestureInput(
                                         .toDouble() / 1_000.0
                                 val instantZoomVelocity = zoomDelta / deltaSeconds
                                 zoomVelocity = zoomVelocity * 0.25 + instantZoomVelocity * 0.75
-                                zoomFocus = Point(centroid.x.toDouble(), centroid.y.toDouble())
+                                zoomFocus = ScreenPoint(centroid.x.toDouble(), centroid.y.toDouble())
                                 hadZoomGesture = true
                                 map.zoomBy(
                                     delta = zoomDelta,
@@ -125,7 +129,7 @@ internal fun Modifier.mapGestureInput(
                                 applyRotationGesture(
                                     map = map,
                                     rotationChange = rotationToApply,
-                                    focus = Point(centroid.x.toDouble(), centroid.y.toDouble()),
+                                    focus = ScreenPoint(centroid.x.toDouble(), centroid.y.toDouble()),
                                 )
                             }
                             if (panChange != Offset.Zero || zoomChange != 1f || rotationToApply != 0.0) {
@@ -193,7 +197,7 @@ internal class RotationGestureThreshold(
 internal fun applyRotationGesture(
     map: MapState,
     rotationChange: Double,
-    focus: Point,
+    focus: ScreenPoint,
 ) {
     map.rotateBy(delta = -rotationChange, focus = focus)
 }
@@ -201,29 +205,34 @@ internal fun applyRotationGesture(
 @Composable
 internal fun Modifier.mapTapInput(
     map: MapState,
-    onTap: ((screenPoint: Point, worldPoint: Point) -> Unit)?,
+    onTap: ((screenPoint: ScreenPoint, worldPoint: Point) -> Unit)?,
+    onInteractionStarted: (() -> Unit)? = null,
     onChanged: () -> Unit,
     coordinator: MapGestureCoordinator,
 ): Modifier {
     val currentMap = rememberUpdatedState(map)
     val currentOnTap = rememberUpdatedState(onTap)
+    val currentOnInteractionStarted = rememberUpdatedState(onInteractionStarted)
     val currentOnChanged = rememberUpdatedState(onChanged)
     return pointerInput(Unit) {
         coroutineScope {
             detectTapGestures(
-                onPress = { coordinator.cancelAnimations() },
+                onPress = {
+                    coordinator.cancelAnimations()
+                    currentOnInteractionStarted.value?.invoke()
+                },
                 onDoubleTap = { offset ->
                     coordinator.doubleTapZoomJob =
                         launch {
                             animateDoubleTapZoom(
-                                focus = Point(offset.x.toDouble(), offset.y.toDouble()),
+                                focus = ScreenPoint(offset.x.toDouble(), offset.y.toDouble()),
                                 map = currentMap.value,
                                 onChanged = { currentOnChanged.value() },
                             )
                         }
                 },
                 onTap = { offset ->
-                    val screenPoint = Point(offset.x.toDouble(), offset.y.toDouble())
+                    val screenPoint = ScreenPoint(offset.x.toDouble(), offset.y.toDouble())
                     val onTap = currentOnTap.value
                     if (onTap != null) {
                         val map = currentMap.value
@@ -289,6 +298,7 @@ private suspend fun animateInertialPan(
     var velocity = initialVelocity * initialVelocity.boostMultiplier()
     if (velocity.getDistance() < MINIMUM_PAN_FLING_VELOCITY) return
 
+    var expectedRevision = map.cameraRevision
     var previousFrame = withFrameNanos { it }
     val startedAt = previousFrame
     while (velocity.getDistance() >= MINIMUM_PAN_FLING_VELOCITY) {
@@ -299,16 +309,18 @@ private suspend fun animateInertialPan(
             ((frame - previousFrame).toFloat() / 1_000_000_000f)
                 .coerceIn(0f, MAXIMUM_FRAME_SECONDS)
         previousFrame = frame
+        if (map.cameraRevision != expectedRevision) return
 
         val pan = velocity * deltaSeconds
         map.panBy(pan.x.toDouble(), pan.y.toDouble())
+        expectedRevision = map.cameraRevision
         onChanged()
         velocity *= exp(-PAN_FLING_FRICTION * deltaSeconds)
     }
 }
 
 private suspend fun animateDoubleTapZoom(
-    focus: Point,
+    focus: ScreenPoint,
     map: MapState,
     onChanged: () -> Unit,
 ) {
@@ -316,6 +328,7 @@ private suspend fun animateDoubleTapZoom(
     if (targetZoom == map.zoom) return
 
     val startZoom = map.zoom
+    var expectedRevision = map.cameraRevision
     var previousProgress = 0.0
     val startedAt = withFrameNanos { it }
 
@@ -325,7 +338,9 @@ private suspend fun animateDoubleTapZoom(
             ((frame - startedAt).toDouble() / DOUBLE_TAP_ZOOM_DURATION_NANOS)
                 .coerceIn(0.0, 1.0)
         val progress = rawProgress.easeInOutCubic()
+        if (map.cameraRevision != expectedRevision) return
         map.zoomBy(delta = (targetZoom - startZoom) * (progress - previousProgress), focus = focus)
+        expectedRevision = map.cameraRevision
         onChanged()
         previousProgress = progress
         if (rawProgress >= 1.0) break
@@ -334,13 +349,14 @@ private suspend fun animateDoubleTapZoom(
 
 private suspend fun animateInertialZoom(
     initialVelocity: Double,
-    focus: Point?,
+    focus: ScreenPoint?,
     map: MapState,
     onChanged: () -> Unit,
 ) {
     var velocity = initialVelocity * initialVelocity.zoomBoostMultiplier()
     if (abs(velocity) < MINIMUM_ZOOM_FLING_VELOCITY) return
 
+    var expectedRevision = map.cameraRevision
     var previousFrame = withFrameNanos { it }
     val startedAt = previousFrame
     while (abs(velocity) >= MINIMUM_ZOOM_FLING_VELOCITY) {
@@ -351,9 +367,11 @@ private suspend fun animateInertialZoom(
             ((frame - previousFrame).toDouble() / 1_000_000_000.0)
                 .coerceIn(0.0, MAXIMUM_FRAME_SECONDS.toDouble())
         previousFrame = frame
+        if (map.cameraRevision != expectedRevision) return
 
         val previousZoom = map.zoom
         map.zoomBy(delta = velocity * deltaSeconds, focus = focus)
+        expectedRevision = map.cameraRevision
         if (map.zoom == previousZoom) return
         onChanged()
 

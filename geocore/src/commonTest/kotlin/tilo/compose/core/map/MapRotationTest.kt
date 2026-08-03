@@ -28,8 +28,8 @@ class MapRotationTest {
                 viewport = Viewport(width = 200, height = 100),
             )
 
-        assertPointEquals(Point(100.0, 40.0), map.worldToScreen(Point(20.0, 20.0)))
-        assertPointEquals(Point(90.0, 50.0), map.worldToScreen(Point(10.0, 30.0)))
+        assertScreenPointEquals(ScreenPoint(100.0, 40.0), map.worldToScreen(Point(20.0, 20.0)))
+        assertScreenPointEquals(ScreenPoint(90.0, 50.0), map.worldToScreen(Point(10.0, 30.0)))
     }
 
     @Test
@@ -60,7 +60,7 @@ class MapRotationTest {
                 bearing = 350.0,
                 viewport = Viewport(width = 400, height = 300, pixelRatio = 1.5),
             )
-        val focus = Point(315.0, 82.0)
+        val focus = ScreenPoint(315.0, 82.0)
         val worldBefore = map.screenToWorld(focus)
 
         map.rotateBy(delta = 35.0, focus = focus)
@@ -105,10 +105,10 @@ class MapRotationTest {
 
         assertPointEquals(Point(29.2893218813, 29.2893218813), map.center, tolerance = 1e-9)
         listOf(
-            Point(0.0, 0.0),
-            Point(100.0, 0.0),
-            Point(0.0, 100.0),
-            Point(100.0, 100.0),
+            ScreenPoint(0.0, 0.0),
+            ScreenPoint(100.0, 0.0),
+            ScreenPoint(0.0, 100.0),
+            ScreenPoint(100.0, 100.0),
         ).forEach { corner ->
             val world = map.screenToWorld(corner)
             assertTrue(world.x >= bounds.minX - 1e-9 && world.x <= bounds.maxX + 1e-9)
@@ -119,6 +119,15 @@ class MapRotationTest {
     private fun assertPointEquals(
         expected: Point,
         actual: Point,
+        tolerance: Double = 1e-12,
+    ) {
+        assertEquals(expected.x, actual.x, absoluteTolerance = tolerance)
+        assertEquals(expected.y, actual.y, absoluteTolerance = tolerance)
+    }
+
+    private fun assertScreenPointEquals(
+        expected: ScreenPoint,
+        actual: ScreenPoint,
         tolerance: Double = 1e-12,
     ) {
         assertEquals(expected.x, actual.x, absoluteTolerance = tolerance)

@@ -13,11 +13,10 @@ import tilo.compose.core.geometry.MultiPoint
 import tilo.compose.core.geometry.MultiPolygon
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.geometry.Polygon
-import tilo.compose.core.geometry.distanceTo
-import tilo.compose.core.geometry.distanceToBoundary
-import tilo.compose.core.geometry.distanceToLine
-import tilo.compose.core.geometry.isInside
+import tilo.compose.core.map.ScreenPoint
+import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 
 /** Resolved feature-layer input for screen-space hit testing. */
 data class FeatureHitTestLayer(
@@ -44,9 +43,9 @@ class FeatureHitTester(
 ) {
     fun hitTest(
         layers: List<FeatureHitTestLayer>,
-        screenPoint: Point,
+        screenPoint: ScreenPoint,
         worldPoint: Point,
-        worldToScreen: (Point) -> Point,
+        worldToScreen: (Point) -> ScreenPoint,
     ): List<FeatureSelection> =
         buildList {
             layers.forEach { layer ->
@@ -66,8 +65,8 @@ class FeatureHitTester(
         }
 
     private fun Geometry.hits(
-        screenPoint: Point,
-        worldToScreen: (Point) -> Point,
+        screenPoint: ScreenPoint,
+        worldToScreen: (Point) -> ScreenPoint,
         feature: Feature,
         layerStyle: FeatureLayerStyle,
     ): Boolean =
@@ -92,22 +91,74 @@ class FeatureHitTester(
 
     private fun hitLine(
         points: List<Point>,
-        screenPoint: Point,
-        worldToScreen: (Point) -> Point,
+        screenPoint: ScreenPoint,
+        worldToScreen: (Point) -> ScreenPoint,
         tolerance: Double,
     ): Boolean {
         if (points.size < 2) return false
-        return screenPoint.distanceToLine(points.map(worldToScreen)) <= tolerance
+        var previous = worldToScreen(points.first())
+        var minimumDistance = Double.POSITIVE_INFINITY
+        for (index in 1 until points.size) {
+            val current = worldToScreen(points[index])
+            minimumDistance = min(minimumDistance, screenPoint.distanceToSegment(previous, current))
+            previous = current
+        }
+        return minimumDistance <= tolerance
     }
 
     private fun hitPolygon(
         polygon: Polygon,
-        screenPoint: Point,
-        worldToScreen: (Point) -> Point,
+        screenPoint: ScreenPoint,
+        worldToScreen: (Point) -> ScreenPoint,
         tolerance: Double,
     ): Boolean {
-        val screenPolygon = Polygon(polygon.rings.map { ring -> ring.map(worldToScreen) })
-        return screenPoint.isInside(screenPolygon) || screenPoint.distanceToBoundary(screenPolygon) <= tolerance
+        val screenRings = polygon.rings.map { ring -> ring.map(worldToScreen) }
+        val exterior = screenRings.firstOrNull() ?: return false
+        val isInside =
+            screenPoint.isInsideRing(exterior) &&
+                screenRings.drop(1).none { ring -> screenPoint.isInsideRing(ring) }
+        return isInside ||
+            screenRings.any { ring -> screenPoint.distanceToLine(ring) <= tolerance }
+    }
+
+    private fun ScreenPoint.distanceTo(other: ScreenPoint): Double = hypot(x - other.x, y - other.y)
+
+    private fun ScreenPoint.distanceToSegment(
+        start: ScreenPoint,
+        end: ScreenPoint,
+    ): Double {
+        val dx = end.x - start.x
+        val dy = end.y - start.y
+        if (dx == 0.0 && dy == 0.0) return distanceTo(start)
+        val progress = (((x - start.x) * dx) + ((y - start.y) * dy)) / ((dx * dx) + (dy * dy))
+        val clamped = progress.coerceIn(0.0, 1.0)
+        return hypot(x - (start.x + clamped * dx), y - (start.y + clamped * dy))
+    }
+
+    private fun ScreenPoint.distanceToLine(points: List<ScreenPoint>): Double {
+        if (points.size < 2) return Double.POSITIVE_INFINITY
+        var previous = points.first()
+        var minimumDistance = Double.POSITIVE_INFINITY
+        for (index in 1 until points.size) {
+            val current = points[index]
+            minimumDistance = min(minimumDistance, distanceToSegment(previous, current))
+            previous = current
+        }
+        return minimumDistance
+    }
+
+    private fun ScreenPoint.isInsideRing(ring: List<ScreenPoint>): Boolean {
+        if (ring.size < 4) return false
+        var inside = false
+        var previous = ring.last()
+        ring.forEach { current ->
+            val intersects =
+                ((current.y > y) != (previous.y > y)) &&
+                    (x < (previous.x - current.x) * (y - current.y) / (previous.y - current.y) + current.x)
+            if (intersects) inside = !inside
+            previous = current
+        }
+        return inside
     }
 
     private fun Feature.pointTolerance(layerStyle: FeatureLayerStyle): Double {

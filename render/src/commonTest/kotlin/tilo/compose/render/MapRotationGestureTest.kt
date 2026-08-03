@@ -1,7 +1,7 @@
 package tilo.compose.render
 
-import tilo.compose.core.geometry.Point
 import tilo.compose.core.map.MapState
+import tilo.compose.core.map.ScreenPoint
 import tilo.compose.core.map.Viewport
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,7 +39,7 @@ class MapRotationGestureTest {
     @Test
     fun clockwiseGestureRotatesMapContentClockwiseAndKeepsCentroidFixed() {
         val map = MapState(viewport = Viewport(width = 300, height = 200))
-        val focus = Point(230.0, 40.0)
+        val focus = ScreenPoint(230.0, 40.0)
         val worldBefore = map.screenToWorld(focus)
 
         applyRotationGesture(map = map, rotationChange = 30.0, focus = focus)

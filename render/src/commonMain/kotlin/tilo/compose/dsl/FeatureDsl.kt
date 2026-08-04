@@ -28,6 +28,7 @@ fun features(block: FeatureListBuilder.() -> Unit): List<Feature> = FeatureListB
 @TiloDsl
 class FeatureListBuilder {
     private val items = mutableListOf<Feature>()
+    private val keys = mutableSetOf<String>()
 
     /**
      * Adds a feature with an already constructed geometry.
@@ -37,8 +38,11 @@ class FeatureListBuilder {
         geometry: Geometry,
         block: FeatureOptions.() -> Unit = {},
     ) {
+        require(key !in keys) {
+            "Duplicate feature key '$key'. Feature keys must be unique within a layer."
+        }
         val options = FeatureOptions().apply(block)
-        items +=
+        val feature =
             Feature(
                 key = key,
                 geometry = geometry,
@@ -50,6 +54,8 @@ class FeatureListBuilder {
                 selectedLabelStyle = options.selectedLabelStyle,
                 data = options.data,
             )
+        keys += key
+        items += feature
     }
 
     /**

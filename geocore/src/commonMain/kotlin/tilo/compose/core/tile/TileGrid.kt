@@ -22,6 +22,16 @@ data class TileGrid(
     val nTilesY0: Int = 1,
     val tileSize: Int = 256,
 ) {
+    init {
+        require(originX.isFinite() && originY.isFinite()) { "Tile grid origin must be finite" }
+        require(worldWidth.isFinite() && worldWidth > 0.0) {
+            "Tile grid worldWidth must be finite and greater than zero"
+        }
+        require(nTilesX0 > 0) { "Tile grid nTilesX0 must be greater than zero" }
+        require(nTilesY0 > 0) { "Tile grid nTilesY0 must be greater than zero" }
+        require(tileSize > 0) { "Tile grid tileSize must be greater than zero" }
+    }
+
     val worldHeight: Double = worldWidth / nTilesX0 * nTilesY0
 
     fun nTilesX(zoom: Int): Int = nTilesX0 shl zoom

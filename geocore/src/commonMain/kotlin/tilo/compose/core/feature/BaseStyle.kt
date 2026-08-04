@@ -38,7 +38,17 @@ enum class LineJoin {
 data class DashPattern(
     val intervals: List<Double>,
     val phase: Double = 0.0,
-)
+) {
+    init {
+        require(intervals.size >= 2 && intervals.size % 2 == 0) {
+            "Dash intervals must contain a non-empty sequence of painted/gap pairs"
+        }
+        require(intervals.all { it.isFinite() && it > 0.0 }) {
+            "Dash intervals must be finite and greater than zero"
+        }
+        require(phase.isFinite()) { "Dash phase must be finite" }
+    }
+}
 
 /** Foreground stroke styling with dimensions in DIP and opacity in `0.0..1.0`. */
 data class StrokeStyle(
@@ -48,7 +58,12 @@ data class StrokeStyle(
     val lineCap: LineCap = LineCap.Butt,
     val lineJoin: LineJoin = LineJoin.Miter,
     val dash: DashPattern? = null,
-)
+) {
+    init {
+        require(width.isFinite() && width >= 0.0) { "Stroke width must be finite and not negative" }
+        require(opacity in 0.0..1.0) { "Stroke opacity must be between zero and one" }
+    }
+}
 
 /**
  * Outline drawn underneath a line or polygon stroke.
@@ -66,8 +81,18 @@ data class CasingStyle(
     val lineJoin: LineJoin = LineJoin.Miter,
     val dash: DashPattern? = null,
 ) {
+    init {
+        require(width.isFinite() && width >= 0.0) { "Casing width must be finite and not negative" }
+        require(opacity in 0.0..1.0) { "Casing opacity must be between zero and one" }
+    }
+
     /** Absolute backing-stroke width for a foreground stroke of [strokeWidth]. */
-    fun outerWidth(strokeWidth: Double): Double = strokeWidth + width
+    fun outerWidth(strokeWidth: Double): Double {
+        require(strokeWidth.isFinite() && strokeWidth >= 0.0) {
+            "Foreground stroke width must be finite and not negative"
+        }
+        return strokeWidth + width
+    }
 }
 
 /** Optional repeating pattern painted over a fill color. */
@@ -76,13 +101,29 @@ sealed interface FillPattern {
         val angleDegrees: Double = 45.0,
         val spacing: Double = 8.0,
         val stroke: StrokeStyle = StrokeStyle(width = 1.0),
-    ) : FillPattern
+    ) : FillPattern {
+        init {
+            require(angleDegrees.isFinite()) { "Hatch angle must be finite" }
+            require(spacing.isFinite() && spacing > 0.0) {
+                "Hatch spacing must be finite and greater than zero"
+            }
+        }
+    }
 
     data class Dots(
         val spacing: Double = 8.0,
         val radius: Double = 1.5,
         val color: ColorValue = ColorValue.Black,
-    ) : FillPattern
+    ) : FillPattern {
+        init {
+            require(spacing.isFinite() && spacing > 0.0) {
+                "Dot spacing must be finite and greater than zero"
+            }
+            require(radius.isFinite() && radius > 0.0) {
+                "Dot radius must be finite and greater than zero"
+            }
+        }
+    }
 }
 
 /** Interior fill styling for points and polygons. */
@@ -90,7 +131,11 @@ data class FillStyle(
     val color: ColorValue = ColorValue.Transparent,
     val opacity: Double = 1.0,
     val pattern: FillPattern? = null,
-)
+) {
+    init {
+        require(opacity in 0.0..1.0) { "Fill opacity must be between zero and one" }
+    }
+}
 
 /** Built-in vector shape used when a point does not use an icon. */
 enum class PointShape {
@@ -108,7 +153,11 @@ data class PointStyle(
     val fill: FillStyle? = FillStyle(color = ColorValue.Blue),
     val stroke: StrokeStyle? = StrokeStyle(color = ColorValue.White, width = 2.5),
     val icon: PointIconStyle? = null,
-) : GeometryStyle
+) : GeometryStyle {
+    init {
+        require(size.isFinite() && size > 0.0) { "Point size must be finite and greater than zero" }
+    }
+}
 
 /** Platform-neutral line symbol composed from an optional casing and foreground stroke. */
 data class LineStyle(
@@ -173,7 +222,20 @@ data class LabelBackgroundStyle(
     val cornerRadius: Double = 4.0,
     val paddingHorizontal: Double = 5.0,
     val paddingVertical: Double = 2.0,
-)
+) {
+    init {
+        require(opacity in 0.0..1.0) { "Label background opacity must be between zero and one" }
+        require(cornerRadius.isFinite() && cornerRadius >= 0.0) {
+            "Label background cornerRadius must be finite and not negative"
+        }
+        require(paddingHorizontal.isFinite() && paddingHorizontal >= 0.0) {
+            "Label background paddingHorizontal must be finite and not negative"
+        }
+        require(paddingVertical.isFinite() && paddingVertical >= 0.0) {
+            "Label background paddingVertical must be finite and not negative"
+        }
+    }
+}
 
 /**
  * Platform-neutral text label styling.
@@ -192,7 +254,16 @@ data class LabelStyle(
     val bitmapPadding: Double = 2.0,
     val offsetY: Double = 12.0,
     val textAlign: LabelTextAlign = LabelTextAlign.Center,
-)
+) {
+    init {
+        require(fontSize.isFinite() && fontSize > 0.0) { "Label fontSize must be finite and greater than zero" }
+        require(haloWidth.isFinite() && haloWidth >= 0.0) { "Label haloWidth must be finite and not negative" }
+        require(bitmapPadding.isFinite() && bitmapPadding >= 0.0) {
+            "Label bitmapPadding must be finite and not negative"
+        }
+        require(offsetY.isFinite()) { "Label offsetY must be finite" }
+    }
+}
 
 /**
  * Default and selected presentation for every geometry kind in a feature layer.

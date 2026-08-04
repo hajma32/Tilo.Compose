@@ -28,4 +28,8 @@ data class Feature(
     val labelStyle: LabelStyle? = null,
     val selectedLabelStyle: LabelStyle? = null,
     val data: Data? = null,
-)
+) {
+    init {
+        require(key.isNotBlank()) { "Feature key must not be blank" }
+    }
+}

@@ -60,8 +60,20 @@ internal class ResolvedLayerTree private constructor(
                 siblings
                     .sortedWith(compareBy(Layer::zIndex))
                     .map { layer ->
+                        val minZoom = layer.minZoom
+                        val maxZoom = layer.maxZoom
+                        require(layer.id.isNotBlank()) { "Layer id must not be blank" }
                         require(layer.opacity in 0.0..1.0) {
                             "Layer '${layer.id}' opacity must be between 0.0 and 1.0"
+                        }
+                        require(minZoom == null || minZoom.isFinite()) {
+                            "Layer '${layer.id}' minZoom must be finite"
+                        }
+                        require(maxZoom == null || maxZoom.isFinite()) {
+                            "Layer '${layer.id}' maxZoom must be finite"
+                        }
+                        require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
+                            "Layer '${layer.id}' minZoom must not be greater than maxZoom"
                         }
                         require(ids.add(layer.id)) {
                             "Duplicate layer id '${layer.id}'. Layer IDs must be unique within one map."

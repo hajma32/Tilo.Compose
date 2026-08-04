@@ -6,6 +6,17 @@ import kotlin.test.assertFailsWith
 
 class LayerGroupTest {
     @Test
+    fun blankIdAndNonFiniteZoomsAreRejected() {
+        assertFailsWith<IllegalArgumentException> { LayerGroup(id = " ", children = emptyList()) }
+        assertFailsWith<IllegalArgumentException> {
+            LayerGroup(id = "group", children = emptyList(), minZoom = Double.NaN)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LayerGroup(id = "group", children = emptyList(), maxZoom = Double.POSITIVE_INFINITY)
+        }
+    }
+
+    @Test
     fun childrenAreSnapshottedAtConstruction() {
         val children = mutableListOf<Layer>(testLayer("first"))
         val group = LayerGroup(id = "group", children = children)

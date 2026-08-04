@@ -6,9 +6,19 @@ import tilo.compose.core.projection.Epsg4326Projection
 import tilo.compose.core.projection.Projection
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class TileGridTest {
+    @Test
+    fun dimensionsAndCoordinatesMustBeValid() {
+        assertFailsWith<IllegalArgumentException> { TileGrid(originX = Double.NaN) }
+        assertFailsWith<IllegalArgumentException> { TileGrid(worldWidth = 0.0) }
+        assertFailsWith<IllegalArgumentException> { TileGrid(nTilesX0 = 0) }
+        assertFailsWith<IllegalArgumentException> { TileGrid(nTilesY0 = -1) }
+        assertFailsWith<IllegalArgumentException> { TileGrid(tileSize = 0) }
+    }
+
     @Test
     fun defaultGridRequiresExactWebMercatorCrs() {
         val sameIdDifferentDefinition =

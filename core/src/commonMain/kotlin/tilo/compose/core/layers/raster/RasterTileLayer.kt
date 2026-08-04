@@ -43,9 +43,12 @@ open class RasterTileLayer(
 ) : TileLayer,
     AutoCloseable {
     init {
+        require(id.isNotBlank()) { "Layer id must not be blank" }
         require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
         val minimum = minZoom
         val maximum = maxZoom
+        require(minimum == null || minimum.isFinite()) { "minZoom must be finite" }
+        require(maximum == null || maximum.isFinite()) { "maxZoom must be finite" }
         require(minimum == null || maximum == null || minimum <= maximum) {
             "minZoom must not be greater than maxZoom"
         }

@@ -7,4 +7,8 @@ package tilo.compose.core.geometry
 data class Point(
     val x: Double,
     val y: Double,
-) : Geometry
+) : Geometry {
+    init {
+        require(x.isFinite() && y.isFinite()) { "Point coordinates must be finite" }
+    }
+}

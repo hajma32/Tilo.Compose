@@ -24,7 +24,10 @@ class LayerGroup(
     val children: List<Layer> = children.toList()
 
     init {
+        require(id.isNotBlank()) { "Layer id must not be blank" }
         require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
+        require(minZoom == null || minZoom.isFinite()) { "minZoom must be finite" }
+        require(maxZoom == null || maxZoom.isFinite()) { "maxZoom must be finite" }
         require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
             "minZoom must not be greater than maxZoom"
         }

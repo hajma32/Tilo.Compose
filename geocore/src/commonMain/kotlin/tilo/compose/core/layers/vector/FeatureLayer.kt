@@ -31,9 +31,22 @@ class FeatureLayer(
     override val opacity: Double = 1.0,
 ) : VectorLayer {
     init {
+        require(id.isNotBlank()) { "Layer id must not be blank" }
         require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
+        require(minZoom == null || minZoom.isFinite()) { "minZoom must be finite" }
+        require(maxZoom == null || maxZoom.isFinite()) { "maxZoom must be finite" }
         require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
             "minZoom must not be greater than maxZoom"
+        }
+        val duplicateKey =
+            features
+                .groupingBy(Feature::key)
+                .eachCount()
+                .entries
+                .firstOrNull { it.value > 1 }
+                ?.key
+        require(duplicateKey == null) {
+            "Duplicate feature key '$duplicateKey' in layer '$id'. Feature keys must be unique within a layer."
         }
     }
 

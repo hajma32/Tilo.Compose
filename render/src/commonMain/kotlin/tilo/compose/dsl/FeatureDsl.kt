@@ -37,6 +37,9 @@ class FeatureListBuilder {
         geometry: Geometry,
         block: FeatureOptions.() -> Unit = {},
     ) {
+        require(items.none { it.key == key }) {
+            "Duplicate feature key '$key'. Feature keys must be unique within a layer."
+        }
         val options = FeatureOptions().apply(block)
         items +=
             Feature(

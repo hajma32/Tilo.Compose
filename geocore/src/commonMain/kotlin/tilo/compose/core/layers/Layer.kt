@@ -62,6 +62,7 @@ interface Layer {
 
     /** Returns whether this layer is active at [zoom]. */
     fun isVisibleAt(zoom: Double): Boolean {
+        require(zoom.isFinite()) { "zoom must be finite" }
         val minimum = minZoom
         val maximum = maxZoom
         return visible &&

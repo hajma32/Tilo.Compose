@@ -56,6 +56,7 @@ import tilo.compose.core.scale.ScaleBar
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.MapAccessibilityOptions
 import tilo.compose.dsl.TiloMap
+import tilo.compose.dsl.TiloMapOptions
 import tilo.compose.dsl.rememberMapCameraState
 import tilo.compose.dsl.tiloMapFocusTarget
 import kotlin.test.Test
@@ -160,10 +161,13 @@ class AccessibilityAndroidTest {
             TiloMap(
                 cameraState = cameraState,
                 modifier = Modifier.size(320.dp),
-                accessibility =
-                    MapAccessibilityOptions(
-                        contentDescription = "Transit map",
-                        stateDescription = { state -> "Level ${state.zoom}, heading ${state.bearing}" },
+                options =
+                    TiloMapOptions(
+                        accessibility =
+                            MapAccessibilityOptions(
+                                contentDescription = "Transit map",
+                                stateDescription = { state -> "Level ${state.zoom}, heading ${state.bearing}" },
+                            ),
                     ),
                 layers = {},
             )
@@ -329,7 +333,10 @@ class AccessibilityAndroidTest {
             TiloMap(
                 cameraState = cameraState,
                 modifier = Modifier.size(240.dp),
-                accessibility = MapAccessibilityOptions(keyboardNavigationEnabled = false),
+                options =
+                    TiloMapOptions(
+                        accessibility = MapAccessibilityOptions(keyboardNavigationEnabled = false),
+                    ),
                 layers = {},
             )
         }

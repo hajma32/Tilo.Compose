@@ -103,6 +103,18 @@ data class MapGestureConfig(
 }
 
 /**
+ * Cross-cutting behavior for a [TiloMap] surface.
+ *
+ * Keeping these settings in one value lets the map API grow without adding overloads for every
+ * combination of optional behavior.
+ */
+@ExperimentalTiloApi
+data class TiloMapOptions(
+    val accessibility: MapAccessibilityOptions = MapAccessibilityOptions(),
+    val gestureConfig: MapGestureConfig = MapGestureConfig.Default,
+)
+
+/**
  * Immutable camera snapshot suitable for viewport-dependent data loading.
  *
  * `bounds` and `resolution` use the map projection's coordinate units. A snapshot is not ready
@@ -1506,8 +1518,9 @@ fun rememberMapCameraState(
  * that it consumes. Non-interactive overlay space remains transparent to map input. A map drag,
  * pinch, rotation, or double tap does not invoke the single-tap callbacks. For a single map tap,
  * [onFeatureSelect] runs before [onTapWorld], including when selection has no hits.
- * [gestureConfig] controls gesture activation thresholds; by default, rotation requires an
- * intentional eight-degree turn.
+ * [TiloMapOptions.gestureConfig] controls gesture activation thresholds; by default, rotation
+ * requires an intentional eight-degree turn. Rendering diagnostics are published when
+ * [diagnosticsState] is provided.
  * Unexpected render branch failures are reported through [onRenderError];
  * ordinary missing or undecodable raster tiles remain isolated.
  */
@@ -1516,6 +1529,8 @@ fun rememberMapCameraState(
 fun TiloMap(
     cameraState: MapCameraState,
     modifier: Modifier = Modifier,
+    options: TiloMapOptions = TiloMapOptions(),
+    diagnosticsState: MapDiagnosticsState? = null,
     onTapWorld: ((Point) -> Unit)? = null,
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
     onRenderError: ((Throwable) -> Unit)? = null,
@@ -1523,47 +1538,12 @@ fun TiloMap(
     attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
     scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
     cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
-    invalidationKey: Any? = null,
-    gestureConfig: MapGestureConfig,
-    layers: MapLayerBuilder.() -> Unit,
-) = TiloMap(
-    cameraState = cameraState,
-    modifier = modifier,
-    accessibility = MapAccessibilityOptions(),
-    onTapWorld = onTapWorld,
-    onFeatureSelect = onFeatureSelect,
-    onRenderError = onRenderError,
-    selectedFeatures = selectedFeatures,
-    attributionContent = attributionContent,
-    scaleBarContent = scaleBarContent,
-    cameraControlsContent = cameraControlsContent,
-    invalidationKey = invalidationKey,
-    gestureConfig = gestureConfig,
-    layers = layers,
-)
-
-/** Compose map surface with configurable accessibility and keyboard behavior. */
-@Composable
-@ExperimentalTiloApi
-fun TiloMap(
-    cameraState: MapCameraState,
-    modifier: Modifier = Modifier,
-    accessibility: MapAccessibilityOptions,
-    onTapWorld: ((Point) -> Unit)? = null,
-    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
-    onRenderError: ((Throwable) -> Unit)? = null,
-    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
-    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
-    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
-    invalidationKey: Any? = null,
-    gestureConfig: MapGestureConfig = MapGestureConfig.Default,
     layers: MapLayerBuilder.() -> Unit,
 ) = TiloMapImpl(
     cameraState = cameraState,
     modifier = modifier,
-    gestureConfig = gestureConfig,
-    accessibility = accessibility,
+    gestureConfig = options.gestureConfig,
+    accessibility = options.accessibility,
     onTapWorld = onTapWorld,
     onFeatureSelect = onFeatureSelect,
     onRenderError = onRenderError,
@@ -1571,143 +1551,7 @@ fun TiloMap(
     attributionContent = attributionContent,
     scaleBarContent = scaleBarContent,
     cameraControlsContent = cameraControlsContent,
-    invalidationKey = invalidationKey,
-    diagnosticsState = null,
-    layers = layers,
-)
-
-/** Compose map surface using [MapGestureConfig.Default]. */
-@Composable
-@ExperimentalTiloApi
-fun TiloMap(
-    cameraState: MapCameraState,
-    modifier: Modifier = Modifier,
-    onTapWorld: ((Point) -> Unit)? = null,
-    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
-    onRenderError: ((Throwable) -> Unit)? = null,
-    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
-    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
-    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
-    invalidationKey: Any? = null,
-    layers: MapLayerBuilder.() -> Unit,
-) = TiloMap(
-    cameraState = cameraState,
-    modifier = modifier,
-    onTapWorld = onTapWorld,
-    onFeatureSelect = onFeatureSelect,
-    onRenderError = onRenderError,
-    selectedFeatures = selectedFeatures,
-    attributionContent = attributionContent,
-    scaleBarContent = scaleBarContent,
-    cameraControlsContent = cameraControlsContent,
-    invalidationKey = invalidationKey,
-    gestureConfig = MapGestureConfig.Default,
-    layers = layers,
-)
-
-/**
- * Compose map surface with opt-in rendering diagnostics published to [diagnosticsState].
- *
- * Pointer routing is identical to the non-diagnostics [TiloMap] overload.
- */
-@Composable
-@ExperimentalTiloApi
-fun TiloMap(
-    cameraState: MapCameraState,
-    diagnosticsState: MapDiagnosticsState,
-    modifier: Modifier = Modifier,
-    onTapWorld: ((Point) -> Unit)? = null,
-    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
-    onRenderError: ((Throwable) -> Unit)? = null,
-    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
-    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
-    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
-    invalidationKey: Any? = null,
-    gestureConfig: MapGestureConfig,
-    layers: MapLayerBuilder.() -> Unit,
-) = TiloMapImpl(
-    cameraState = cameraState,
-    modifier = modifier,
-    gestureConfig = gestureConfig,
-    accessibility = MapAccessibilityOptions(),
-    onTapWorld = onTapWorld,
-    onFeatureSelect = onFeatureSelect,
-    onRenderError = onRenderError,
-    selectedFeatures = selectedFeatures,
-    attributionContent = attributionContent,
-    scaleBarContent = scaleBarContent,
-    cameraControlsContent = cameraControlsContent,
-    invalidationKey = invalidationKey,
     diagnosticsState = diagnosticsState,
-    layers = layers,
-)
-
-/** Diagnostics-enabled map surface using [MapGestureConfig.Default]. */
-@Composable
-@ExperimentalTiloApi
-fun TiloMap(
-    cameraState: MapCameraState,
-    diagnosticsState: MapDiagnosticsState,
-    modifier: Modifier = Modifier,
-    onTapWorld: ((Point) -> Unit)? = null,
-    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
-    onRenderError: ((Throwable) -> Unit)? = null,
-    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
-    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
-    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
-    invalidationKey: Any? = null,
-    layers: MapLayerBuilder.() -> Unit,
-) = TiloMap(
-    cameraState = cameraState,
-    diagnosticsState = diagnosticsState,
-    modifier = modifier,
-    accessibility = MapAccessibilityOptions(),
-    onTapWorld = onTapWorld,
-    onFeatureSelect = onFeatureSelect,
-    onRenderError = onRenderError,
-    selectedFeatures = selectedFeatures,
-    attributionContent = attributionContent,
-    scaleBarContent = scaleBarContent,
-    cameraControlsContent = cameraControlsContent,
-    invalidationKey = invalidationKey,
-    layers = layers,
-)
-
-/** Compose map surface with diagnostics plus configurable accessibility and keyboard behavior. */
-@Composable
-@ExperimentalTiloApi
-fun TiloMap(
-    cameraState: MapCameraState,
-    diagnosticsState: MapDiagnosticsState,
-    modifier: Modifier = Modifier,
-    accessibility: MapAccessibilityOptions,
-    onTapWorld: ((Point) -> Unit)? = null,
-    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
-    onRenderError: ((Throwable) -> Unit)? = null,
-    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
-    scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
-    cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
-    invalidationKey: Any? = null,
-    gestureConfig: MapGestureConfig = MapGestureConfig.Default,
-    layers: MapLayerBuilder.() -> Unit,
-) = TiloMapImpl(
-    cameraState = cameraState,
-    diagnosticsState = diagnosticsState,
-    modifier = modifier,
-    accessibility = accessibility,
-    onTapWorld = onTapWorld,
-    onFeatureSelect = onFeatureSelect,
-    onRenderError = onRenderError,
-    selectedFeatures = selectedFeatures,
-    attributionContent = attributionContent,
-    scaleBarContent = scaleBarContent,
-    cameraControlsContent = cameraControlsContent,
-    invalidationKey = invalidationKey,
-    gestureConfig = gestureConfig,
     layers = layers,
 )
 
@@ -1724,7 +1568,6 @@ private fun TiloMapImpl(
     attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)?,
     scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)?,
     cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)?,
-    invalidationKey: Any?,
     diagnosticsState: MapDiagnosticsState?,
     layers: MapLayerBuilder.() -> Unit,
 ) {
@@ -1741,7 +1584,6 @@ private fun TiloMapImpl(
                 onFeatureSelect = onFeatureSelect,
                 onRenderError = onRenderError,
                 selectedFeatures = selectedFeatures,
-                invalidationKey = invalidationKey,
                 diagnosticsState = diagnosticsState,
             )
             BottomMapOverlays(
@@ -1838,38 +1680,20 @@ private fun MapRendererLayer(
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
     onRenderError: ((Throwable) -> Unit)?,
     selectedFeatures: Set<FeatureSelectionRef>,
-    invalidationKey: Any?,
     diagnosticsState: MapDiagnosticsState?,
 ) {
-    val cameraControlRevision = cameraState.cameraControlRevision
-    if (diagnosticsState == null) {
-        MapRenderer(
-            map = cameraState.mapState,
-            layers = layers,
-            gestureConfig = gestureConfig,
-            modifier = Modifier.fillMaxSize().mapAccessibility(cameraState, accessibility),
-            onTapWorld = onTapWorld,
-            onFeatureSelect = onFeatureSelect,
-            onRenderError = onRenderError,
-            selectedFeatures = selectedFeatures,
-            invalidationKey = invalidationKey to cameraControlRevision,
-            onMapChanged = cameraState::markChanged,
-            onCameraInteractionStarted = cameraState::cancelCameraAnimation,
-        )
-    } else {
-        MapRenderer(
-            map = cameraState.mapState,
-            layers = layers,
-            gestureConfig = gestureConfig,
-            diagnosticsState = diagnosticsState,
-            modifier = Modifier.fillMaxSize().mapAccessibility(cameraState, accessibility),
-            onTapWorld = onTapWorld,
-            onFeatureSelect = onFeatureSelect,
-            onRenderError = onRenderError,
-            selectedFeatures = selectedFeatures,
-            invalidationKey = invalidationKey to cameraControlRevision,
-            onMapChanged = cameraState::markChanged,
-            onCameraInteractionStarted = cameraState::cancelCameraAnimation,
-        )
-    }
+    cameraState.revision
+    MapRenderer(
+        map = cameraState.mapState,
+        layers = layers,
+        diagnosticsState = diagnosticsState,
+        gestureConfig = gestureConfig,
+        modifier = Modifier.fillMaxSize().mapAccessibility(cameraState, accessibility),
+        onTapWorld = onTapWorld,
+        onFeatureSelect = onFeatureSelect,
+        onRenderError = onRenderError,
+        selectedFeatures = selectedFeatures,
+        onMapChanged = cameraState::markChanged,
+        onCameraInteractionStarted = cameraState::cancelCameraAnimation,
+    )
 }

@@ -13,6 +13,7 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 api(project(":spatial-index"))
+                api(libs.kotlinx.coroutines.core)
             }
         }
         val commonTest by getting {

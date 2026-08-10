@@ -64,7 +64,6 @@ internal fun BoxScope.DrawingSample() {
         attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = defaultCameraControlsContent(),
-        invalidationKey = drawState.revision to savedFeatures.size,
         layers = {
             openStreetMapLayer()
             featureLayer("saved-drawings", savedFeatures) {

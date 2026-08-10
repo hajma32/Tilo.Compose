@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import tilo.compose.core.feature.source.FeatureSource
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.raster.RasterTileFailure
@@ -71,6 +72,7 @@ import tilo.compose.render.backend.VectorBitmapRenderSceneLayer
 fun MapRenderer(
     map: MapState,
     layers: List<Layer>,
+    diagnosticsState: MapDiagnosticsState? = null,
     tileDecoder: (ByteArray) -> ImageBitmap? = ::decodeTileImageBitmap,
     modifier: Modifier = Modifier,
     backend: RenderBackend = ComposeCanvasRenderBackend,
@@ -78,7 +80,6 @@ fun MapRenderer(
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
     onRenderError: ((Throwable) -> Unit)? = null,
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    invalidationKey: Any? = null,
     onMapChanged: (() -> Unit)? = null,
     onCameraInteractionStarted: (() -> Unit)? = null,
     gestureConfig: MapGestureConfig = MapGestureConfig.Default,
@@ -93,42 +94,6 @@ fun MapRenderer(
     onFeatureSelect = onFeatureSelect,
     onRenderError = onRenderError,
     selectedFeatures = selectedFeatures,
-    invalidationKey = invalidationKey,
-    onMapChanged = onMapChanged,
-    onCameraInteractionStarted = onCameraInteractionStarted,
-    diagnosticsState = null,
-)
-
-/** Opt-in diagnostics overload of [MapRenderer]. */
-@Composable
-@ExperimentalTiloRenderingApi
-fun MapRenderer(
-    map: MapState,
-    layers: List<Layer>,
-    diagnosticsState: MapDiagnosticsState,
-    tileDecoder: (ByteArray) -> ImageBitmap? = ::decodeTileImageBitmap,
-    modifier: Modifier = Modifier,
-    backend: RenderBackend = ComposeCanvasRenderBackend,
-    onTapWorld: ((Point) -> Unit)? = null,
-    onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
-    onRenderError: ((Throwable) -> Unit)? = null,
-    selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    invalidationKey: Any? = null,
-    onMapChanged: (() -> Unit)? = null,
-    onCameraInteractionStarted: (() -> Unit)? = null,
-    gestureConfig: MapGestureConfig = MapGestureConfig.Default,
-) = MapRendererImpl(
-    map = map,
-    layers = layers,
-    gestureConfig = gestureConfig,
-    tileDecoder = tileDecoder,
-    modifier = modifier,
-    backend = backend,
-    onTapWorld = onTapWorld,
-    onFeatureSelect = onFeatureSelect,
-    onRenderError = onRenderError,
-    selectedFeatures = selectedFeatures,
-    invalidationKey = invalidationKey,
     onMapChanged = onMapChanged,
     onCameraInteractionStarted = onCameraInteractionStarted,
     diagnosticsState = diagnosticsState,
@@ -147,7 +112,6 @@ private fun MapRendererImpl(
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)?,
     onRenderError: ((Throwable) -> Unit)?,
     selectedFeatures: Set<FeatureSelectionRef>,
-    invalidationKey: Any?,
     onMapChanged: (() -> Unit)?,
     onCameraInteractionStarted: (() -> Unit)?,
     diagnosticsState: MapDiagnosticsState?,
@@ -191,6 +155,10 @@ private fun MapRendererImpl(
     val effectiveOpacitiesByLayerId = activeLayerSet.effectiveOpacitiesByLayerId
     val tileLayers = remember(activeLayers) { activeLayers.filterIsInstance<TileLayer>() }
     val vectorLayers = remember(activeLayers) { activeLayers.filterIsInstance<VectorLayer>() }
+    val vectorSourceKey =
+        remember(vectorLayers) {
+            FeatureSourceIdentityKey(vectorLayers.map { it.source }.distinctByIdentity())
+        }
     val currentRasterSourceIdentities = remember(tileLayers) { tileLayers.sourceIdentitiesByLayer() }
     val vectorLayerCacheSignature = vectorLayers.cacheSignature()
     val currentVectorCacheKeys =
@@ -204,6 +172,7 @@ private fun MapRendererImpl(
                     layoutDirection,
                 )
         }
+    val currentOnRenderError by rememberUpdatedState(onRenderError)
     val renderLoopInput by rememberUpdatedState(
         RenderLoopInput(
             activeLayers = activeLayers,
@@ -230,7 +199,15 @@ private fun MapRendererImpl(
     var lastVectorBitmapsByLayer by remember { mutableStateOf<Map<String, VectorBitmapRenderSceneLayer>>(emptyMap()) }
     var lastVectorCacheKeysByLayer by remember { mutableStateOf<Map<String, VectorLayerCacheKey>>(emptyMap()) }
 
-    LaunchedEffect(activeLayers, vectorLayerCacheSignature, invalidationKey) {
+    LaunchedEffect(vectorSourceKey) {
+        collectFeatureSourceInvalidations(
+            sources = vectorSourceKey.sources,
+            onInvalidate = { redrawVersion += 1 },
+            onError = { error -> currentOnRenderError?.invoke(error) },
+        )
+    }
+
+    LaunchedEffect(activeLayers, vectorLayerCacheSignature) {
         val validVectorCommands =
             lastVectorCommandsByLayer.validCommandsFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
         val validVectorBitmaps = lastVectorBitmapsByLayer.validFor(currentVectorCacheKeys, lastVectorCacheKeysByLayer)
@@ -280,7 +257,6 @@ private fun MapRendererImpl(
         layoutDirection,
         vectorLayerCacheSignature,
         selectedFeatures,
-        invalidationKey,
         diagnosticsState,
     ) {
         if (map.viewport.width <= 0 || map.viewport.height <= 0) return@LaunchedEffect
@@ -608,6 +584,36 @@ internal fun RenderScene.withLiveRasterPlaceholders(
 
 internal suspend fun <T> Flow<T>.collectLatestRenderRequest(block: suspend (T) -> Unit) {
     collectLatest(block)
+}
+
+internal suspend fun collectFeatureSourceInvalidations(
+    sources: List<FeatureSource>,
+    onInvalidate: () -> Unit,
+    onError: ((Throwable) -> Unit)? = null,
+) = supervisorScope {
+    sources.distinctByIdentity().forEach { source ->
+        launch {
+            runRenderBranch(onError) {
+                source.invalidations.collect { onInvalidate() }
+            }
+        }
+    }
+}
+
+private fun List<FeatureSource>.distinctByIdentity(): List<FeatureSource> =
+    fold(emptyList()) { distinct, source ->
+        if (distinct.any { it === source }) distinct else distinct + source
+    }
+
+private class FeatureSourceIdentityKey(
+    val sources: List<FeatureSource>,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is FeatureSourceIdentityKey &&
+            sources.size == other.sources.size &&
+            sources.indices.all { index -> sources[index] === other.sources[index] }
+
+    override fun hashCode(): Int = sources.size
 }
 
 private data class RenderLoopInput(

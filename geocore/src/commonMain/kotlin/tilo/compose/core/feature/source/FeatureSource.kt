@@ -1,5 +1,7 @@
 package tilo.compose.core.feature.source
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.map.MapState
 
@@ -22,6 +24,15 @@ interface FeatureSource {
      */
     val version: Long
         get() = 0L
+
+    /**
+     * Signals that this source's returned features changed while its identity stayed the same.
+     *
+     * Mutable sources should increment [version] before emitting. Renderers collect this flow only
+     * while a layer backed by this source is active. Static sources can keep the empty default.
+     */
+    val invalidations: Flow<Unit>
+        get() = emptyFlow()
 
     /**
      * Return features that are relevant for the provided [map] state.

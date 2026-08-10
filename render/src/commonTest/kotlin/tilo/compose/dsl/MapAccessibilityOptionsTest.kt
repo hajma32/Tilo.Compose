@@ -24,11 +24,11 @@ class MapAccessibilityOptionsTest {
 
     @Suppress("UNUSED_PARAMETER")
     @Composable
-    private fun originalPositionalOverloadsStillCompile(
+    private fun unifiedPositionalSignatureCompiles(
         cameraState: MapCameraState,
         diagnosticsState: MapDiagnosticsState,
     ) {
-        TiloMap(cameraState, Modifier, { _: Point -> }, layers = {})
-        TiloMap(cameraState, diagnosticsState, Modifier, { _: Point -> }, layers = {})
+        TiloMap(cameraState, Modifier, TiloMapOptions(), null, { _: Point -> }, layers = {})
+        TiloMap(cameraState, Modifier, TiloMapOptions(), diagnosticsState, { _: Point -> }, layers = {})
     }
 }

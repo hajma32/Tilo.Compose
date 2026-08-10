@@ -22,14 +22,19 @@ import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Rule
 import org.junit.runner.RunWith
 import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.source.FeatureSource
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.vector.VectorLayer
+import tilo.compose.core.map.MapState
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.MapGestureConfig
 import tilo.compose.dsl.TiloMap
+import tilo.compose.dsl.TiloMapOptions
 import tilo.compose.dsl.rememberMapCameraState
 import kotlin.math.min
 import kotlin.test.Test
@@ -182,7 +187,7 @@ class MapEventRoutingAndroidTest {
             TiloMap(
                 cameraState = camera,
                 modifier = Modifier.size(MAP_SIZE).testTag(MAP_TAG),
-                gestureConfig = gestureConfig.value,
+                options = TiloMapOptions(gestureConfig = gestureConfig.value),
                 onTapWorld = { mapTaps += 1 },
                 layers = {},
             )
@@ -347,6 +352,29 @@ class MapEventRoutingAndroidTest {
         }
     }
 
+    @Test
+    fun featureSourceInvalidationRendersWithoutAnotherComposeStateChange() {
+        val source = MutableInvalidatingFeatureSource()
+        var selectedFeatureKey: String? = null
+        composeRule.setContent {
+            camera = rememberMapCameraState()
+            TiloMap(
+                cameraState = camera,
+                modifier = Modifier.size(MAP_SIZE).testTag(MAP_TAG),
+                onFeatureSelect = { hits -> selectedFeatureKey = hits.singleOrNull()?.feature?.key },
+                layers = { +TestInvalidatingVectorLayer(source) },
+            )
+        }
+        composeRule.waitUntil(timeoutMillis = 2_000) { source.queriedVersion == 0L }
+
+        source.update(listOf(Feature(key = "updated", geometry = Point(0.0, 0.0))))
+
+        composeRule.waitUntil(timeoutMillis = 2_000) { source.queriedVersion == 1L }
+        composeRule.onNodeWithTag(MAP_TAG).performTouchInput { click(center) }
+        composeRule.waitUntil(timeoutMillis = 2_000) { selectedFeatureKey != null }
+        composeRule.runOnIdle { assertEquals("updated", selectedFeatureKey) }
+    }
+
     private fun setMapContent(
         overlay: Overlay = Overlay.None,
         includeCenterFeature: Boolean = false,
@@ -361,7 +389,7 @@ class MapEventRoutingAndroidTest {
             TiloMap(
                 cameraState = camera,
                 modifier = Modifier.size(MAP_SIZE).testTag(MAP_TAG),
-                gestureConfig = gestureConfig,
+                options = TiloMapOptions(gestureConfig = gestureConfig),
                 onTapWorld = {
                     mapTaps += 1
                     if (recordSelection) callbackCalls += "world"
@@ -429,6 +457,40 @@ class MapEventRoutingAndroidTest {
         None,
         Interactive,
         NonInteractive,
+    }
+
+    private class MutableInvalidatingFeatureSource : FeatureSource {
+        private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+        @Volatile
+        private var features: List<Feature> = emptyList()
+
+        @Volatile
+        override var version: Long = 0L
+            private set
+
+        @Volatile
+        var queriedVersion: Long = -1L
+            private set
+
+        override val invalidations = changes
+
+        fun update(features: List<Feature>) {
+            this.features = features
+            version += 1
+            check(changes.tryEmit(Unit))
+        }
+
+        override fun getFeatures(map: MapState): List<Feature> {
+            queriedVersion = version
+            return features
+        }
+    }
+
+    private class TestInvalidatingVectorLayer(
+        override val source: FeatureSource,
+    ) : VectorLayer {
+        override val id = "mutable-features"
     }
 
     private companion object {

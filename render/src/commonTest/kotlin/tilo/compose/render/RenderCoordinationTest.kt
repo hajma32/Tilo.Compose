@@ -8,6 +8,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import tilo.compose.core.feature.Feature
+import tilo.compose.core.feature.source.FeatureSource
+import tilo.compose.core.map.MapState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -17,6 +20,28 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RenderCoordinationTest {
+    /** One source shared by multiple layers still produces one renderer wake-up per emission. */
+    @Test
+    fun activeFeatureSourceInvalidationWakesRendererOnce() =
+        runTest {
+            val source = MutableInvalidatingFeatureSource()
+            var invalidationCount = 0
+            val collector =
+                backgroundScope.launch {
+                    collectFeatureSourceInvalidations(
+                        sources = listOf(source, source),
+                        onInvalidate = { invalidationCount += 1 },
+                    )
+                }
+            runCurrent()
+
+            source.invalidate()
+            runCurrent()
+
+            assertEquals(1, invalidationCount)
+            collector.cancel()
+        }
+
     /**
      * Verifies latest-request-wins behavior during rapid viewport changes.
      *
@@ -110,6 +135,22 @@ class RenderCoordinationTest {
             assertEquals(1, reported.size)
             assertSame(failure, reported.single())
         }
+
+    private class MutableInvalidatingFeatureSource : FeatureSource {
+        private val changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+        override var version: Long = 0L
+            private set
+
+        override val invalidations = changes
+
+        fun invalidate() {
+            version += 1
+            check(changes.tryEmit(Unit))
+        }
+
+        override fun getFeatures(map: MapState): List<Feature> = emptyList()
+    }
 
     /**
      * Verifies supervisor isolation when raster rendering fails.

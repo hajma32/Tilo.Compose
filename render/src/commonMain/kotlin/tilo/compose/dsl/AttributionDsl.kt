@@ -12,6 +12,3 @@ fun attribution(
     label: String,
     url: String? = null,
 ): Attribution = Attribution(label = label, url = url)
-
-internal fun List<Attribution>.withSingle(attribution: Attribution?): List<Attribution> =
-    if (attribution == null) this else this + attribution

@@ -11,8 +11,8 @@ import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.MapLayerBuilder
+import tilo.compose.dsl.epsg5514
 import tilo.compose.dsl.rememberMapCameraState
-import tilo.compose.dsl.sjtsk
 import tilo.compose.dsl.webMercator
 
 internal const val CUZK_ORTHOPHOTO_URL =
@@ -63,7 +63,7 @@ internal fun rememberSjtskCamera(): MapCameraState =
     rememberMapCameraState(
         initialCenter = Wgs84ToEpsg5514Transformation.sourceToTarget(PRAGUE),
         initialZoom = 12.2,
-        projection = sjtsk(),
+        projection = epsg5514(),
         config = SJTSK_MAP_CONFIG,
     )
 

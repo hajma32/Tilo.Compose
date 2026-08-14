@@ -11,7 +11,7 @@ import tilo.compose.core.tile.TileRequest
  * XYZ slippy-map sources are Web Mercator by default. Pass the projection and
  * grid explicitly for custom grids that use the same address shape.
  */
-class XYZTileSource internal constructor(
+class XyzTileSource internal constructor(
     private val urlTemplate: String,
     override val projection: Projection = Epsg3857Projection,
     override val grid: TileGrid = TileGrid.defaultFor(projection),

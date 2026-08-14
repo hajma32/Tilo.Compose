@@ -89,10 +89,8 @@ class FeatureListBuilder {
         feature(key = key, geometry = MultiPoint(points), block = block)
     }
 
-    /**
-     * Adds a line feature.
-     */
-    fun line(
+    /** Adds a line-string feature. */
+    fun lineString(
         key: String,
         points: List<Point>,
         block: FeatureOptions.() -> Unit = {},
@@ -100,18 +98,10 @@ class FeatureListBuilder {
         feature(key = key, geometry = LineString(points), block = block)
     }
 
-    fun lineString(
-        key: String,
-        points: List<Point>,
-        block: FeatureOptions.() -> Unit = {},
-    ) {
-        line(key = key, points = points, block = block)
-    }
-
     /**
-     * Adds a multi-line feature.
+     * Adds a multi-line-string feature.
      */
-    fun multiLine(
+    fun multiLineString(
         key: String,
         lines: List<LineString>,
         block: FeatureOptions.() -> Unit = {},

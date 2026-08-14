@@ -362,7 +362,7 @@ class MapEventRoutingAndroidTest {
                 cameraState = camera,
                 modifier = Modifier.size(MAP_SIZE).testTag(MAP_TAG),
                 onFeatureSelect = { hits -> selectedFeatureKey = hits.singleOrNull()?.feature?.key },
-                layers = { +TestInvalidatingVectorLayer(source) },
+                layers = { layer(TestInvalidatingVectorLayer(source)) },
             )
         }
         composeRule.waitUntil(timeoutMillis = 2_000) { source.queriedVersion == 0L }

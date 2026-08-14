@@ -60,7 +60,7 @@ fun MapScreen() {
     val cameraState = rememberMapCameraState(
         initialCenter = Wgs84ToEpsg5514Transformation.sourceToTarget(brno),
         initialZoom = 11.5,
-        projection = sjtsk(),
+        projection = epsg5514(),
     )
 
     val places = remember {
@@ -83,10 +83,11 @@ fun MapScreen() {
         wmsTileLayer(
             id = "cuzk-ortofoto",
             capabilitiesUrl = "https://ags.cuzk.gov.cz/arcgis1/services/ORTOFOTO/MapServer/WMSServer",
-            layerName = "0",
-            projection = sjtsk(),
-            format = "image/jpeg",
-        )
+            layerNames = listOf("0"),
+            projection = epsg5514(),
+        ) {
+            format = WmsImageFormat.Jpeg
+        }
 
         featureLayer("places", places) {
             projection = wgs84()

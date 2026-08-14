@@ -14,9 +14,112 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 
 class TileHttpTransportTest {
+    @Test
+    fun publicHttpValuesDefensivelyCopyAndRedactCredentials() {
+        val headers = mutableMapOf("Authorization" to "Bearer secret")
+        val responseBytes = png.copyOf()
+        val config = RasterHttpConfig(headers = headers)
+        headers["Authorization"] = "changed"
+        val request =
+            RasterHttpRequest(
+                url = "https://user:password@tiles.test/private-secret/tile?access_token=secret",
+                headers = config.headers,
+            )
+
+        assertEquals("Bearer secret", config.headers["Authorization"])
+        assertEquals(false, "secret" in config.toString())
+        assertEquals(false, "secret" in request.toString())
+        assertEquals(false, "password" in request.toString())
+        assertEquals(false, "private-secret" in request.toString())
+
+        val response = RasterHttpResponse(statusCode = 200, body = responseBytes)
+        responseBytes[0] = 0
+        val exposedBody = response.body
+        exposedBody[1] = 0
+        assertContentEquals(png, response.body)
+    }
+
+    @Test
+    fun headersReplaceNamesCaseInsensitivelyAndTransportKeysAreStable() {
+        val firstTransport = RasterHttpTransport { RasterHttpResponse(200, body = png) }
+        val secondTransport = RasterHttpTransport { RasterHttpResponse(200, body = png) }
+        val first =
+            RasterHttpConfig(
+                headers = linkedMapOf("Authorization" to "old", "authorization" to "new"),
+                transport = firstTransport,
+            )
+        val equivalentRecomposition =
+            RasterHttpConfig(
+                headers = mapOf("authorization" to "new"),
+                transport = secondTransport,
+            )
+        val replacement =
+            RasterHttpConfig(
+                headers = mapOf("authorization" to "new"),
+                transport = secondTransport,
+                transportKey = 1,
+            )
+
+        assertEquals(mapOf("Authorization" to "new"), first.headers)
+        assertEquals(first, equivalentRecomposition)
+        assertNotEquals(first, replacement)
+        assertEquals("new", RasterHttpRequest("https://example.test", first.headers).header("AUTHORIZATION"))
+    }
+
+    @Test
+    fun requestHeadersRejectInvalidNamesAndLineBreaks() {
+        assertFailsWith<IllegalArgumentException> {
+            RasterHttpConfig(headers = mapOf("Bad Header" to "value"))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            RasterHttpConfig(headers = mapOf("X-Value" to "safe\r\ninjected: value"))
+        }
+    }
+
+    @Test
+    fun customTransportFailuresRemainTransportDiagnostics() =
+        runTest {
+            val transport =
+                RasterHttpConfig(
+                    transport = RasterHttpTransport { error("socket failed") },
+                ).tileHttpTransport() as DiagnosticTileHttpTransport
+
+            val result = transport.readImageResult("https://tiles.test/tile") as TileReadResult.Failure
+
+            assertEquals(RasterTileFailureKind.NetworkUnavailable, result.kind)
+        }
+
+    @Test
+    fun ktorTransportForwardsConfiguredHeaders() =
+        runTest {
+            val client =
+                HttpClient(
+                    MockEngine { request ->
+                        assertEquals("Bearer secret", request.headers["Authorization"])
+                        assertEquals("maps", request.headers["X-Tenant"])
+                        respond(content = png, status = HttpStatusCode.OK)
+                    },
+                )
+            try {
+                val transport =
+                    KtorTileHttpTransport(
+                        http = client,
+                        headers =
+                            mapOf(
+                                "Authorization" to "Bearer secret",
+                                "X-Tenant" to "maps",
+                            ),
+                    )
+                assertContentEquals(png, transport.readImage("https://tiles.test/tile"))
+            } finally {
+                client.close()
+            }
+        }
+
     /**
      * Verifies recognition of all encoded image formats supported by tile transport.
      *
@@ -150,7 +253,7 @@ class TileHttpTransportTest {
         runTest {
             val urls = mutableListOf<String>()
             val source =
-                XYZTileSource(
+                XyzTileSource(
                     urlTemplate = "https://tiles.test/{z}/{x}/{y}.png",
                     transport =
                         TileHttpTransport { url ->
@@ -174,9 +277,9 @@ class TileHttpTransportTest {
         runTest {
             val urls = mutableListOf<String>()
             val source =
-                WMSTileSource(
+                WmsTileSource(
                     baseUrl = "https://maps.test/wms",
-                    layers = "roads",
+                    layerNames = listOf("roads"),
                     transport =
                         TileHttpTransport { url ->
                             urls += url

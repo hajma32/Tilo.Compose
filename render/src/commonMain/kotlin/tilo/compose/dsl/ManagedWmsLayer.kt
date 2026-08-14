@@ -16,13 +16,13 @@ import tilo.compose.core.layers.raster.RasterTileDiagnosticEvent
 import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileLayer
 
-internal data class ManagedWMSLayerKey(
+internal data class ManagedWmsLayerKey(
     val layerId: String,
     val configuration: Any,
 )
 
-internal class ManagedWMSLayerDeclaration(
-    val key: ManagedWMSLayerKey,
+internal class ManagedWmsLayerDeclaration(
+    val key: ManagedWmsLayerKey,
     val id: String,
     val zIndex: Int,
     val visible: Boolean,
@@ -39,7 +39,7 @@ internal class ManagedWMSLayerDeclaration(
 )
 
 /** Owns one asynchronously created WMS runtime for a stable source configuration. */
-internal class ManagedWMSRuntime {
+internal class ManagedWmsRuntime {
     var layer: RasterTileLayer? by mutableStateOf(null)
         private set
 
@@ -58,8 +58,8 @@ internal class ManagedWMSRuntime {
 /** Resolves one declarative WMS entry without exposing a separate public remember step. */
 @Composable
 @Suppress("TooGenericExceptionCaught")
-internal fun rememberManagedWMSLayer(declaration: ManagedWMSLayerDeclaration): TileLayer? {
-    val runtime = remember(declaration.key) { ManagedWMSRuntime() }
+internal fun rememberManagedWmsLayer(declaration: ManagedWmsLayerDeclaration): TileLayer? {
+    val runtime = remember(declaration.key) { ManagedWmsRuntime() }
     val diagnostics =
         remember(declaration.key) {
             MutableRasterLayerDiagnostics(declaration.state, declaration.onError)

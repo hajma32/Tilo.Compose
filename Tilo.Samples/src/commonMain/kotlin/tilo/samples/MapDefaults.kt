@@ -5,6 +5,7 @@ package tilo.samples
 import androidx.compose.runtime.Composable
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 import tilo.compose.core.transform.Wgs84ToWebMercatorTransformation
@@ -45,8 +46,11 @@ internal fun rememberWebMercatorCamera(
     cameraBounds: BoundingBox? = null,
 ): MapCameraState =
     rememberMapCameraState(
-        initialCenter = Wgs84ToWebMercatorTransformation.sourceToTarget(center),
-        initialZoom = zoom,
+        initialPosition =
+            CameraPosition(
+                center = Wgs84ToWebMercatorTransformation.sourceToTarget(center),
+                zoom = zoom,
+            ),
         projection = webMercator(),
         config = WEB_MERCATOR_MAP_CONFIG.copy(cameraBounds = cameraBounds),
     )
@@ -61,8 +65,11 @@ internal fun webMercatorBounds(
 @Composable
 internal fun rememberSjtskCamera(): MapCameraState =
     rememberMapCameraState(
-        initialCenter = Wgs84ToEpsg5514Transformation.sourceToTarget(PRAGUE),
-        initialZoom = 12.2,
+        initialPosition =
+            CameraPosition(
+                center = Wgs84ToEpsg5514Transformation.sourceToTarget(PRAGUE),
+                zoom = 12.2,
+            ),
         projection = epsg5514(),
         config = SJTSK_MAP_CONFIG,
     )
@@ -84,5 +91,7 @@ private fun transformedBounds(
     )
 
 internal fun MapLayerBuilder.openStreetMapLayer(opacity: Double = 1.0) {
-    osmLayer(id = "osm-standard", opacity = opacity)
+    osmLayer(id = "osm-standard") {
+        this.opacity = opacity
+    }
 }

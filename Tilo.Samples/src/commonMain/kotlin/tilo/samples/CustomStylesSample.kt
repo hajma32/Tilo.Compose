@@ -8,21 +8,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.painterResource
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.geometry.Point
 import tilo.compose.dsl.ExperimentalTiloApi
+import tilo.compose.dsl.LayerGroupOptions
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.features
+import tilo.compose.dsl.labelStyle
 import tilo.compose.dsl.lineStyle
-import tilo.compose.dsl.mediumLabelStyle
 import tilo.compose.dsl.pointStyle
 import tilo.compose.dsl.polygonStyle
-import tilo.compose.dsl.smallLabelStyle
 import tilo.compose.dsl.wgs84
-import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 import tilocompose.tilo_samples.generated.resources.Res
@@ -39,12 +39,14 @@ internal fun BoxScope.CustomStylesSample() {
     TiloMap(
         cameraState = camera,
         modifier = Modifier.fillMaxSize(),
-        attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = defaultCameraControlsContent(),
         layers = {
             openStreetMapLayer(opacity = 0.65)
-            layerGroup(id = "styled-content", zIndex = 3, opacity = 0.8) {
+            layerGroup(
+                id = "styled-content",
+                options = LayerGroupOptions(zIndex = 3, opacity = 0.8),
+            ) {
                 featureLayer("custom-styles", features) {
                     opacity = 0.75
                     projection = wgs84()
@@ -60,7 +62,7 @@ internal fun BoxScope.CustomStylesSample() {
         body =
             "Styles can live on a layer or on an individual feature. " +
                 "The faded raster and grouped vectors demonstrate cascading layer opacity.",
-        code = "layerGroup(opacity = 0.8) { featureLayer(...) { opacity = 0.75 } }",
+        code = "layerGroup(options = LayerGroupOptions(opacity = 0.8)) { featureLayer(...) }",
     )
 }
 
@@ -87,7 +89,7 @@ private fun customStyleFeatures(): List<Feature> =
                     casing(0xFFFFFFFF, width = 4.dp) { lineJoin = LineJoin.Round }
                     stroke(0xFF253E32, width = 3.dp) { lineJoin = LineJoin.Round }
                 }
-            labelStyle = mediumLabelStyle { color(0xFF17201C) }
+            labelStyle = labelStyle { color(0xFF17201C) }
         }
 
         lineString(
@@ -115,7 +117,10 @@ private fun customStyleFeatures(): List<Feature> =
                     }
                 }
             labelStyle =
-                smallLabelStyle {
+                labelStyle {
+                    fontSize(10.sp)
+                    halo(width = 2.5.dp)
+                    offsetY(10.dp)
                     color(0xFFFFFFFF)
                     noHalo()
                     background(0xFF17201C, cornerRadius = 3.dp, paddingHorizontal = 6.dp, paddingVertical = 3.dp)
@@ -140,7 +145,10 @@ private fun customStyleFeatures(): List<Feature> =
                         )
                     }
                 labelStyle =
-                    smallLabelStyle {
+                    labelStyle {
+                        fontSize(10.sp)
+                        halo(width = 2.5.dp)
+                        offsetY(10.dp)
                         color(0xFFFFFFFF)
                         noHalo()
                         offsetY(0.dp)

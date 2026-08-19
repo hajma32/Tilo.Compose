@@ -34,9 +34,7 @@ import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
-import tilo.compose.dsl.smallLabelStyle
 import tilo.compose.dsl.wgs84
-import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
@@ -66,7 +64,6 @@ internal fun BoxScope.CalloutSample() {
             selectedPlace = hits.firstNotNullOfOrNull { it.feature.place }
         },
         selectedFeatures = selectedFeatures,
-        attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = defaultCameraControlsContent(),
         layers = {
@@ -103,14 +100,18 @@ private fun calloutLayerStyle() =
             fill(0xFFF2663B)
             stroke(0xFFFFFFFF, width = 3.5.dp)
         }
-        label(smallLabelStyle())
+        label {
+            fontSize(10.sp)
+            halo(width = 2.5.dp)
+            offsetY(10.dp)
+        }
         selectedPoint {
             shape = PointShape.Circle
             size = 27.dp
             fill(0xFFBFED6F)
             stroke(0xFF17201C, width = 4.dp)
         }
-        selectedLabel(0xFF17201C)
+        selectedLabel { color(0xFF17201C) }
     }
 
 private fun calloutFeatures(): List<Feature> =

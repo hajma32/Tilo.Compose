@@ -13,19 +13,18 @@ import androidx.compose.ui.unit.dp
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.PointShape
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.raster.WmsImageFormat
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.RasterLayerAvailability
 import tilo.compose.dsl.RasterLayerStatus
 import tilo.compose.dsl.TiloMap
-import tilo.compose.dsl.attribution
 import tilo.compose.dsl.epsg5514
 import tilo.compose.dsl.features
-import tilo.compose.dsl.mediumLabelStyle
+import tilo.compose.dsl.labelStyle
 import tilo.compose.dsl.pointStyle
 import tilo.compose.dsl.rememberRasterLayerState
-import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
@@ -38,7 +37,6 @@ internal fun BoxScope.NonMercatorSample() {
     TiloMap(
         cameraState = camera,
         modifier = Modifier.fillMaxSize().background(Color(0xFFDBDED3)),
-        attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = defaultCameraControlsContent(),
         layers = {
@@ -51,7 +49,7 @@ internal fun BoxScope.NonMercatorSample() {
                 format = WmsImageFormat.Jpeg
                 attributions =
                     listOf(
-                        attribution(
+                        Attribution(
                             "© Český úřad zeměměřický a katastrální · Ortofoto České republiky · " +
                                 "WMS služba v souřadnicovém systému S‑JTSK / Křovák East North (EPSG:5514)",
                         ),
@@ -101,7 +99,7 @@ private fun transformedPragueReference(): List<Feature> {
                     fill(0xFFF2663B)
                     stroke(0xFFFFFFFF, width = 4.dp)
                 }
-            labelStyle = mediumLabelStyle { color(0xFF17201C) }
+            labelStyle = labelStyle { color(0xFF17201C) }
         }
     }
 }

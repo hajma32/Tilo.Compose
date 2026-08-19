@@ -13,10 +13,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipe
@@ -28,7 +34,9 @@ import org.junit.runner.RunWith
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.source.FeatureSource
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.vector.VectorLayer
+import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapState
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.MapCameraState
@@ -46,6 +54,39 @@ import kotlin.test.assertTrue
 class MapEventRoutingAndroidTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun activeLayerAttributionUsesTheDefaultAccessibilityContract() {
+        composeRule.setContent {
+            camera = rememberMapCameraState()
+            TiloMap(
+                cameraState = camera,
+                modifier = Modifier.size(MAP_SIZE),
+            ) {
+                featureLayer(id = "credited", features = emptyList()) {
+                    attributions =
+                        listOf(
+                            Attribution("Required provider credit"),
+                            Attribution("Linked provider credit", "https://example.com/credit"),
+                        )
+                }
+            }
+        }
+
+        composeRule
+            .onNodeWithText("Required provider credit")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 4.0f))
+        composeRule
+            .onNodeWithText("Linked provider credit")
+            .assert(hasClickAction())
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 5.0f))
+            .assert(
+                SemanticsMatcher("has a descriptive attribution click label") { node ->
+                    node.config[SemanticsActions.OnClick].label ==
+                        "Open attribution for Linked provider credit"
+                },
+            )
+    }
 
     private lateinit var camera: MapCameraState
     private var mapTaps = 0
@@ -213,8 +254,8 @@ class MapEventRoutingAndroidTest {
         lateinit var originalCamera: MapCameraState
         lateinit var replacementCamera: MapCameraState
         composeRule.setContent {
-            originalCamera = rememberMapCameraState(initialCenter = Point(0.0, 0.0))
-            replacementCamera = rememberMapCameraState(initialCenter = Point(100.0, 100.0))
+            originalCamera = rememberMapCameraState(initialPosition = CameraPosition(Point(0.0, 0.0), 0.0))
+            replacementCamera = rememberMapCameraState(initialPosition = CameraPosition(Point(100.0, 100.0), 0.0))
             camera = if (useReplacement.value) replacementCamera else originalCamera
             TiloMap(
                 cameraState = camera,
@@ -244,8 +285,8 @@ class MapEventRoutingAndroidTest {
         lateinit var originalCamera: MapCameraState
         lateinit var replacementCamera: MapCameraState
         composeRule.setContent {
-            originalCamera = rememberMapCameraState(initialCenter = Point(0.0, 0.0))
-            replacementCamera = rememberMapCameraState(initialCenter = Point(100.0, 100.0))
+            originalCamera = rememberMapCameraState(initialPosition = CameraPosition(Point(0.0, 0.0), 0.0))
+            replacementCamera = rememberMapCameraState(initialPosition = CameraPosition(Point(100.0, 100.0), 0.0))
             camera = if (useReplacement.value) replacementCamera else originalCamera
             TiloMap(
                 cameraState = camera,

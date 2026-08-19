@@ -26,7 +26,7 @@ fun features(block: FeatureListBuilder.() -> Unit): List<Feature> = FeatureListB
  */
 @ExperimentalTiloApi
 @TiloDsl
-class FeatureListBuilder {
+class FeatureListBuilder internal constructor() {
     private val items = mutableListOf<Feature>()
     private val keys = mutableSetOf<String>()
 
@@ -147,7 +147,7 @@ class FeatureListBuilder {
  */
 @ExperimentalTiloApi
 @TiloDsl
-class FeatureOptions {
+class FeatureOptions internal constructor() {
     /**
      * Text rendered near the feature geometry.
      */
@@ -163,20 +163,4 @@ class FeatureOptions {
     var labelStyle: LabelStyle? = null
     var selectedLabelStyle: LabelStyle? = null
     var data: Data? = null
-
-    /**
-     * Configures label text, collision priority, and optional styles in one
-     * call.
-     */
-    fun label(
-        text: String,
-        priority: Int? = null,
-        style: LabelStyle? = null,
-        selectedStyle: LabelStyle? = null,
-    ) {
-        label = text
-        labelPriority = priority
-        labelStyle = style
-        selectedLabelStyle = selectedStyle
-    }
 }

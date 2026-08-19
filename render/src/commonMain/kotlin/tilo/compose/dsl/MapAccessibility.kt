@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
 import org.jetbrains.compose.resources.stringResource
+import tilo.compose.core.layers.Attribution
 import tilo.compose.render.generated.resources.Res
 import tilo.compose.render.generated.resources.interactive_map
 import tilo.compose.render.generated.resources.map_camera_state
@@ -119,13 +120,14 @@ fun Modifier.tiloMapFocusTarget(traversalIndex: Float): Modifier {
 /**
  * Accessibility and hardware-keyboard behavior for a [TiloMap] surface.
  *
- * Null descriptions use resource-backed defaults bundled with the render artifact. Applications
- * can replace either description when they need domain-specific wording.
+ * Null descriptions and attribution labels use resource-backed defaults bundled with the render
+ * artifact. Applications can replace them when they need domain-specific wording.
  */
 @ExperimentalTiloApi
 data class MapAccessibilityOptions(
     val contentDescription: String? = null,
     val stateDescription: ((MapCameraState) -> String)? = null,
+    val attributionClickLabel: ((Attribution) -> String)? = null,
     val keyboardNavigationEnabled: Boolean = true,
     val keyboardPanStepPx: Double = 64.0,
     val keyboardZoomStep: Double = 1.0,

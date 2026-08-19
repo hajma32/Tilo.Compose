@@ -46,14 +46,9 @@ import tilo.compose.ui.generated.resources.map_scale
 /** Draws a two-segment scale bar at the bottom start of its containing map box. */
 @OptIn(ExperimentalTextApi::class)
 @Composable
-fun BoxScope.DefaultScaleBar(scaleBar: ScaleBar) = DefaultScaleBar(scaleBar, MapUiAccessibility())
-
-/** Draws a scale bar with configurable accessibility text. */
-@OptIn(ExperimentalTextApi::class)
-@Composable
 fun BoxScope.DefaultScaleBar(
     scaleBar: ScaleBar,
-    accessibility: MapUiAccessibility,
+    accessibility: MapUiAccessibility = MapUiAccessibility(),
 ) {
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()

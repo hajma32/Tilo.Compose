@@ -2,8 +2,6 @@
 
 package tilo.compose.dsl
 
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.raster.RasterTileDiagnosticEvent
 import tilo.compose.core.layers.raster.RasterTileFailure
@@ -53,66 +51,75 @@ internal class MutableRasterLayerDiagnostics(
     state: RasterLayerState?,
     onError: ((Throwable) -> Unit)?,
     private val localSource: Boolean,
+    private val beforeDispatch: suspend () -> Unit = {},
+    private val lock: RasterDiagnosticsLock = rasterDiagnosticsLock(),
 ) {
     constructor(
         state: RasterLayerState?,
         onError: ((Throwable) -> Unit)?,
     ) : this(state = state, onError = onError, localSource = false)
 
-    private var state = state
-    private var onError = onError
-    private var phase: RasterLayerPhase = RasterLayerPhase.Idle
+    // Application callbacks are claimed under this lock and invoked after releasing it. Retirement
+    // prevents new claims without making Compose disposal wait for application code already running.
+
+    private var lifecycle: RasterDiagnosticsLifecycle =
+        RasterDiagnosticsLifecycle.Active(
+            state = state,
+            onError = onError,
+            phase = RasterLayerPhase.Idle,
+        )
     private var snapshot = RasterLayerDiagnostics()
     private var availability = RasterLayerAvailability.Unknown
-    private val mutex = Mutex()
 
     fun update(
         state: RasterLayerState?,
         onError: ((Throwable) -> Unit)?,
-    ) {
-        if (this.state !== state) {
-            this.state?.idle()
-            this.state = state
-            publishPhase()
-            publishDiagnostics()
-            state?.publishTileError(snapshot.lastFailure?.cause)
+    ) = lock.withLock {
+        val current = activeLifecycle() ?: return@withLock
+        val updated = current.copy(state = state, onError = onError)
+        lifecycle = updated
+        if (current.state !== state) {
+            current.state?.idle()
+            publishPhase(updated)
+            publishDiagnostics(updated)
         }
-        this.onError = onError
     }
 
-    fun loading() {
-        if (phase == RasterLayerPhase.Retired) return
-        phase = RasterLayerPhase.Loading
-        state?.loading()
-    }
+    fun loading() =
+        lock.withLock {
+            val current = updatePhase(RasterLayerPhase.Loading) ?: return@withLock
+            publishPhase(current)
+            publishDiagnostics(current)
+        }
 
-    fun ready() {
-        if (phase == RasterLayerPhase.Retired) return
-        val enteringReady = phase != RasterLayerPhase.Ready
-        phase = RasterLayerPhase.Ready
-        state?.ready(clearTileError = enteringReady)
-    }
+    fun ready() =
+        lock.withLock {
+            val current = updatePhase(RasterLayerPhase.Ready) ?: return@withLock
+            publishPhase(current)
+            publishDiagnostics(current)
+        }
 
     fun initializationFailed(error: Throwable) {
-        if (phase == RasterLayerPhase.Retired) return
-        phase = RasterLayerPhase.Failed(error)
-        state?.initializationFailed(error)
+        val onError =
+            lock.withLock {
+                val current = updatePhase(RasterLayerPhase.Failed(error)) ?: return@withLock null
+                publishPhase(current)
+                current.onError.takeIf { isCurrent(current) }
+            }
         onError?.invoke(error)
     }
 
     fun tileFailed(error: Throwable) {
-        if (phase == RasterLayerPhase.Retired) return
-        state?.tileFailed(error)
+        val onError = lock.withLock { activeLifecycle()?.onError }
         onError?.invoke(error)
     }
 
     suspend fun onDiagnostic(event: RasterTileDiagnosticEvent) {
-        mutex.withLock {
-            if (phase == RasterLayerPhase.Retired) return
+        lock.withLock {
+            if (activeLifecycle() == null) return@withLock
             when (event) {
                 is RasterTileDiagnosticEvent.Failure -> {
                     snapshot = snapshot.copy(lastFailure = event.failure)
-                    state?.publishTileError(event.failure.cause)
                 }
                 is RasterTileDiagnosticEvent.BatchCompleted -> {
                     val summary = event.summary
@@ -128,7 +135,10 @@ internal class MutableRasterLayerDiagnostics(
                     }
                 }
             }
-            publishDiagnostics()
+        }
+        beforeDispatch()
+        lock.withLock {
+            activeLifecycle()?.let(::publishDiagnostics)
         }
     }
 
@@ -136,47 +146,59 @@ internal class MutableRasterLayerDiagnostics(
         failure: RasterTileFailure,
         affectsAvailability: Boolean,
     ) {
-        val errorCallback =
-            mutex.withLock {
-                if (phase == RasterLayerPhase.Retired) return
-                snapshot =
-                    snapshot.copy(
-                        decodeFailures = snapshot.decodeFailures + 1,
-                        lastFailure = failure,
-                    )
-                if (affectsAvailability) availability = RasterLayerAvailability.Degraded
-                publishDiagnostics()
-                state?.publishTileError(failure.cause)
-                onError
+        lock.withLock {
+            if (activeLifecycle() == null) return@withLock
+            snapshot =
+                snapshot.copy(
+                    decodeFailures = snapshot.decodeFailures + 1,
+                    lastFailure = failure,
+                )
+            if (affectsAvailability) availability = RasterLayerAvailability.Degraded
+        }
+        beforeDispatch()
+        val onError =
+            lock.withLock {
+                val current = activeLifecycle() ?: return@withLock null
+                publishDiagnostics(current)
+                current.onError.takeIf { failure.cause != null && isCurrent(current) }
             }
-        failure.cause?.let { error -> errorCallback?.invoke(error) }
+        failure.cause?.let { error -> onError?.invoke(error) }
     }
 
-    suspend fun snapshot(): RasterLayerDiagnostics = mutex.withLock { snapshot }
+    suspend fun snapshot(): RasterLayerDiagnostics = lock.withLock { snapshot }
 
-    fun retire() {
-        if (phase == RasterLayerPhase.Retired) return
-        phase = RasterLayerPhase.Retired
-        val retiredState = state
-        state = null
-        onError = null
-        retiredState?.idle()
+    fun retire() =
+        lock.withLock {
+            val retired = lifecycle
+            lifecycle = RasterDiagnosticsLifecycle.Retired
+            if (retired is RasterDiagnosticsLifecycle.Active) retired.state?.idle()
+        }
+
+    private fun updatePhase(phase: RasterLayerPhase): RasterDiagnosticsLifecycle.Active? {
+        val current = activeLifecycle() ?: return null
+        val updated = current.copy(phase = phase)
+        lifecycle = updated
+        return updated
     }
 
-    private fun publishPhase() {
-        when (val currentPhase = phase) {
-            RasterLayerPhase.Idle,
-            RasterLayerPhase.Retired,
-            -> state?.idle()
+    private fun activeLifecycle(): RasterDiagnosticsLifecycle.Active? = lifecycle as? RasterDiagnosticsLifecycle.Active
 
-            RasterLayerPhase.Loading -> state?.loading()
-            RasterLayerPhase.Ready -> state?.ready(clearTileError = true)
-            is RasterLayerPhase.Failed -> state?.initializationFailed(currentPhase.error)
+    private fun isCurrent(current: RasterDiagnosticsLifecycle.Active): Boolean = lifecycle === current
+
+    private fun publishPhase(current: RasterDiagnosticsLifecycle.Active) {
+        if (!isCurrent(current)) return
+        when (val phase = current.phase) {
+            RasterLayerPhase.Idle -> current.state?.idle()
+
+            RasterLayerPhase.Loading -> current.state?.loading()
+            RasterLayerPhase.Ready -> current.state?.ready()
+            is RasterLayerPhase.Failed -> current.state?.initializationFailed(phase.error)
         }
     }
 
-    private fun publishDiagnostics() {
-        state?.publishDiagnostics(snapshot, availability)
+    private fun publishDiagnostics(current: RasterDiagnosticsLifecycle.Active) {
+        if (!isCurrent(current)) return
+        current.state?.publishDiagnostics(snapshot, availability)
     }
 }
 
@@ -195,6 +217,16 @@ private fun nextAvailability(
         else -> current
     }
 
+private sealed interface RasterDiagnosticsLifecycle {
+    data class Active(
+        val state: RasterLayerState?,
+        val onError: ((Throwable) -> Unit)?,
+        val phase: RasterLayerPhase,
+    ) : RasterDiagnosticsLifecycle
+
+    data object Retired : RasterDiagnosticsLifecycle
+}
+
 private sealed interface RasterLayerPhase {
     data object Idle : RasterLayerPhase
 
@@ -205,8 +237,6 @@ private sealed interface RasterLayerPhase {
     data class Failed(
         val error: Throwable,
     ) : RasterLayerPhase
-
-    data object Retired : RasterLayerPhase
 }
 
 /** Lightweight presentation snapshot backed by a stable fetch/cache runtime. */

@@ -3,9 +3,11 @@
 package tilo.compose.dsl
 
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import tilo.compose.core.feature.LabelTextAlign
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -17,10 +19,13 @@ class StyleDslTest {
             LabelTextAlign.Right,
             labelStyle { textAlign = LabelTextAlign.Right }.textAlign,
         )
-        assertEquals(
-            LabelTextAlign.Left,
-            labelStyle { textAlign(LabelTextAlign.Left) }.textAlign,
-        )
+    }
+
+    @Test
+    fun labelFontSizeAcceptsOnlyScalablePixels() {
+        assertFailsWith<IllegalArgumentException> {
+            labelStyle { fontSize(1.em) }
+        }
     }
 
     @Test
@@ -48,7 +53,7 @@ class StyleDslTest {
                 }
                 zoom(minZoom = 14.0) {
                     line { stroke(0xFF000000, width = 20.dp) }
-                    hideLabels()
+                    labelsVisible = false
                 }
             }
 
@@ -61,5 +66,35 @@ class StyleDslTest {
         assertEquals(20.0, wideRule.line?.stroke?.width)
         assertFalse(wideRule.labelsVisible)
         assertTrue(style.resolveAtZoom(13.999).labelsVisible)
+    }
+
+    @Test
+    fun layerLabelColorUsesTheSingleBlockSpelling() {
+        val style =
+            featureLayerStyle {
+                label { color(0xFF123456) }
+                selectedLabel { color(0xFF654321) }
+                zoom(minZoom = 10.0) {
+                    label { color(0xFFABCDEF) }
+                    selectedLabel { color(0xFFFEDCBA) }
+                }
+            }
+
+        assertEquals(argb(0xFF123456), style.label?.color)
+        assertEquals(argb(0xFF654321), style.selectedLabel?.color)
+        assertEquals(
+            argb(0xFFABCDEF),
+            style.zoomRules
+                .single()
+                .label
+                ?.color,
+        )
+        assertEquals(
+            argb(0xFFFEDCBA),
+            style.zoomRules
+                .single()
+                .selectedLabel
+                ?.color,
+        )
     }
 }

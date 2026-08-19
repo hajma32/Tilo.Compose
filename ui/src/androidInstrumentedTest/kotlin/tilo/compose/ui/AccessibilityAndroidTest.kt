@@ -49,8 +49,10 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.runner.RunWith
+import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.Layer
+import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.scale.ScaleBar
 import tilo.compose.dsl.ExperimentalTiloApi
@@ -107,12 +109,27 @@ class AccessibilityAndroidTest {
             MapUiAccessibility(
                 resetNorthDescription = "Point north",
                 scaleBarDescription = { "Distance represented: ${it.label}" },
-                attributionClickLabel = { "Open ${it.label} credits" },
             )
         rule.setContent {
-            val cameraState = rememberMapCameraState(initialBearing = 0.0)
+            val cameraState = rememberMapCameraState()
             CompositionLocalProvider(LocalUriHandler provides uriHandler) {
                 Box(Modifier.size(320.dp)) {
+                    TiloMap(
+                        cameraState = cameraState,
+                        modifier = Modifier.size(320.dp),
+                        options =
+                            TiloMapOptions(
+                                accessibility =
+                                    MapAccessibilityOptions(
+                                        attributionClickLabel = { "Open ${it.label} credits" },
+                                    ),
+                            ),
+                    ) {
+                        featureLayer(id = "credited", features = emptyList()) {
+                            attributions =
+                                listOf(Attribution("OpenStreetMap", "https://openstreetmap.org"))
+                        }
+                    }
                     DefaultCompassControl(cameraState, accessibility = accessibility)
                     DefaultScaleBar(
                         ScaleBar(
@@ -121,10 +138,6 @@ class AccessibilityAndroidTest {
                             label = "500 m",
                             midpointLabel = "250 m",
                         ),
-                        accessibility = accessibility,
-                    )
-                    DefaultAttributionOverlay(
-                        listOf(Attribution("OpenStreetMap", "https://openstreetmap.org")),
                         accessibility = accessibility,
                     )
                 }
@@ -155,8 +168,7 @@ class AccessibilityAndroidTest {
         rule.setContent {
             cameraState =
                 rememberMapCameraState(
-                    initialZoom = 3.0,
-                    initialBearing = 25.0,
+                    initialPosition = CameraPosition(Point(0.0, 0.0), zoom = 3.0, bearing = 25.0),
                 )
             TiloMap(
                 cameraState = cameraState,
@@ -203,7 +215,10 @@ class AccessibilityAndroidTest {
         var modifiedArrowEscaped = false
         var modifiedTabEscaped = false
         rule.setContent {
-            cameraState = rememberMapCameraState(initialZoom = 3.0, initialBearing = 25.0)
+            cameraState =
+                rememberMapCameraState(
+                    initialPosition = CameraPosition(Point(0.0, 0.0), zoom = 3.0, bearing = 25.0),
+                )
             Column(
                 modifier =
                     Modifier.onKeyEvent { event ->
@@ -263,13 +278,12 @@ class AccessibilityAndroidTest {
         rule.setContent {
             val cameraState =
                 rememberMapCameraState(
-                    initialZoom = 5.0,
+                    initialPosition = CameraPosition(Point(0.0, 0.0), zoom = 5.0),
                     config = MapConfig(minZoom = 0.0, maxZoom = 10.0),
                 )
             TiloMap(
                 cameraState = cameraState,
                 modifier = Modifier.fillMaxSize(),
-                attributionContent = defaultAttributionContent(),
                 cameraControlsContent = { state ->
                     DefaultZoomControls(state)
                     BasicText(
@@ -356,14 +370,12 @@ class AccessibilityAndroidTest {
         rule.setContent {
             val cameraState =
                 rememberMapCameraState(
-                    initialZoom = 5.0,
-                    initialBearing = 15.0,
+                    initialPosition = CameraPosition(Point(0.0, 0.0), zoom = 5.0, bearing = 15.0),
                     config = MapConfig(minZoom = 0.0, maxZoom = 10.0),
                 )
             TiloMap(
                 cameraState = cameraState,
                 modifier = Modifier.fillMaxSize(),
-                attributionContent = defaultAttributionContent(),
                 cameraControlsContent = defaultCameraControlsContent(),
                 layers = {
                     layer(

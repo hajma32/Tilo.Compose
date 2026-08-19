@@ -1,4 +1,5 @@
 <resources>
     <string name="interactive_map">Interactive map</string>
     <string name="map_camera_state">Zoom %1$s, rotation %2$s degrees</string>
+    <string name="open_attribution">Open attribution for %1$s</string>
 </resources>

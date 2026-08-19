@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalTiloApi::class)
+@file:OptIn(ExperimentalTiloApi::class, tilo.compose.render.ExperimentalTiloRenderingApi::class)
 
 package tilo.samples
 
@@ -11,7 +11,6 @@ import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.rememberMapDiagnosticsState
 import tilo.compose.ui.DefaultMapDebugOverlay
-import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
@@ -29,7 +28,6 @@ internal fun BoxScope.OpenStreetMapSample() {
         cameraState = camera,
         diagnosticsState = diagnostics,
         modifier = Modifier.fillMaxSize(),
-        attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = { state ->
             defaultCameraControls(state)

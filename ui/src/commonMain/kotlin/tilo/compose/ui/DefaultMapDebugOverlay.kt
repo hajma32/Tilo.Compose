@@ -1,4 +1,7 @@
-@file:OptIn(tilo.compose.dsl.ExperimentalTiloApi::class)
+@file:OptIn(
+    tilo.compose.dsl.ExperimentalTiloApi::class,
+    tilo.compose.render.ExperimentalTiloRenderingApi::class,
+)
 
 package tilo.compose.ui
 
@@ -25,8 +28,10 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.isActive
 import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.MapDiagnosticsState
+import tilo.compose.render.ExperimentalTiloRenderingApi
 
 /** Frame statistics sampled by [DefaultMapDebugOverlay]. */
+@ExperimentalTiloRenderingApi
 data class MapDebugMetrics(
     val framesPerSecond: Double,
     val averageFramesPerSecond30Seconds: Double,
@@ -54,28 +59,10 @@ data class MapDebugMetrics(
  * [targetFrameRate] defines the frame budget used for skipped-frame estimates.
  */
 @Composable
+@ExperimentalTiloRenderingApi
 fun BoxScope.DefaultMapDebugOverlay(
     cameraState: MapCameraState,
-    enabled: Boolean = true,
-    targetFrameRate: Int = 60,
-    sampleWindowMillis: Long = 1_000L,
-    alignment: Alignment = Alignment.TopStart,
-    modifier: Modifier = Modifier,
-) = DefaultMapDebugOverlayImpl(
-    cameraState = cameraState,
-    diagnosticsState = null,
-    enabled = enabled,
-    targetFrameRate = targetFrameRate,
-    sampleWindowMillis = sampleWindowMillis,
-    alignment = alignment,
-    modifier = modifier,
-)
-
-/** Displays frame statistics and renderer diagnostics published by a `TiloMap`. */
-@Composable
-fun BoxScope.DefaultMapDebugOverlay(
-    cameraState: MapCameraState,
-    diagnosticsState: MapDiagnosticsState,
+    diagnosticsState: MapDiagnosticsState? = null,
     enabled: Boolean = true,
     targetFrameRate: Int = 60,
     sampleWindowMillis: Long = 1_000L,

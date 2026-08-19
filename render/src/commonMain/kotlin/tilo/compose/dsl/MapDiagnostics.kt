@@ -1,3 +1,5 @@
+@file:OptIn(tilo.compose.render.ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.dsl
 
 import androidx.compose.runtime.Composable
@@ -7,8 +9,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import tilo.compose.core.layers.raster.RasterTileFailure
+import tilo.compose.render.ExperimentalTiloRenderingApi
 
 /** Fetch and decode diagnostics for one raster layer. */
+@ExperimentalTiloRenderingApi
 data class MapRasterLayerMetrics(
     val succeeded: Long = 0,
     val missing: Long = 0,
@@ -20,6 +24,7 @@ data class MapRasterLayerMetrics(
 )
 
 /** Aggregate tile-cache activity for the raster runtimes currently attached to a map. */
+@ExperimentalTiloRenderingApi
 data class MapTileCacheMetrics(
     val entries: Int = 0,
     val maxEntries: Int = 0,
@@ -32,6 +37,7 @@ data class MapTileCacheMetrics(
 )
 
 /** Raster work represented by the latest diagnostic snapshot. */
+@ExperimentalTiloRenderingApi
 data class MapTileMetrics(
     val planned: Int = 0,
     val loaded: Int = 0,
@@ -43,6 +49,7 @@ data class MapTileMetrics(
 )
 
 /** Vector feature and cached-bitmap work represented by the latest vector frame. */
+@ExperimentalTiloRenderingApi
 data class MapFeatureMetrics(
     val returned: Int = 0,
     val visible: Int = 0,
@@ -52,6 +59,7 @@ data class MapFeatureMetrics(
 )
 
 /** Label placement and bitmap-cache activity represented by the latest canvas draw. */
+@ExperimentalTiloRenderingApi
 data class MapLabelMetrics(
     val candidates: Int = 0,
     val placed: Int = 0,
@@ -65,6 +73,7 @@ data class MapLabelMetrics(
 )
 
 /** Point-in-time rendering diagnostics published by one map instance. */
+@ExperimentalTiloRenderingApi
 data class MapRenderMetrics(
     val tiles: MapTileMetrics = MapTileMetrics(),
     val features: MapFeatureMetrics = MapFeatureMetrics(),
@@ -79,7 +88,8 @@ data class MapRenderMetrics(
  * in custom diagnostic UI.
  */
 @Stable
-class MapDiagnosticsState {
+class MapDiagnosticsState internal constructor() {
+    @ExperimentalTiloRenderingApi
     var metrics: MapRenderMetrics by mutableStateOf(MapRenderMetrics())
         private set
 
@@ -104,4 +114,5 @@ class MapDiagnosticsState {
 
 /** Remembers diagnostics for one map and its debug overlay. */
 @Composable
+@ExperimentalTiloRenderingApi
 fun rememberMapDiagnosticsState(): MapDiagnosticsState = remember { MapDiagnosticsState() }

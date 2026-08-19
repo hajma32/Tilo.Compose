@@ -40,15 +40,7 @@ import tilo.compose.ui.generated.resources.reset_map_rotation
 fun BoxScope.DefaultCompassControl(
     cameraState: MapCameraState,
     style: CameraControlsStyle = CameraControlsStyle(),
-) = DefaultCompassControl(cameraState, style, MapUiAccessibility())
-
-/** Displays the compass with configurable accessibility text. */
-@Composable
-@ExperimentalTiloApi
-fun BoxScope.DefaultCompassControl(
-    cameraState: MapCameraState,
-    style: CameraControlsStyle = CameraControlsStyle(),
-    accessibility: MapUiAccessibility,
+    accessibility: MapUiAccessibility = MapUiAccessibility(),
 ) {
     val coroutineScope = rememberCoroutineScope()
     val layoutDirection = LocalLayoutDirection.current

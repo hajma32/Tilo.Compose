@@ -292,8 +292,8 @@ internal class TileRequestFetcher(
                 }
             }
         if (failure != null) {
-            failure.cause?.let { onError?.invoke(it) }
             emitDiagnostic(RasterTileDiagnosticEvent.Failure(failure))
+            failure.cause?.let { onError?.invoke(it) }
         }
     }
 

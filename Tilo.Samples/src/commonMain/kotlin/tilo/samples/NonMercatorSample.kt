@@ -13,17 +13,18 @@ import androidx.compose.ui.unit.dp
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.feature.PointShape
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.raster.WmsImageFormat
 import tilo.compose.core.transform.Wgs84ToEpsg5514Transformation
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.RasterLayerAvailability
 import tilo.compose.dsl.RasterLayerStatus
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.attribution
+import tilo.compose.dsl.epsg5514
 import tilo.compose.dsl.features
 import tilo.compose.dsl.mediumLabelStyle
 import tilo.compose.dsl.pointStyle
 import tilo.compose.dsl.rememberRasterLayerState
-import tilo.compose.dsl.sjtsk
 import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
@@ -44,19 +45,22 @@ internal fun BoxScope.NonMercatorSample() {
             wmsTileLayer(
                 id = "cuzk-ortofoto-5514",
                 capabilitiesUrl = CUZK_ORTHOPHOTO_URL,
-                layerName = "0",
-                projection = sjtsk(),
-                format = "image/jpeg",
-                attribution =
-                    attribution(
-                        "© Český úřad zeměměřický a katastrální · Ortofoto České republiky · " +
-                            "WMS služba v souřadnicovém systému S‑JTSK / Křovák East North (EPSG:5514)",
-                    ),
-                state = wmsState,
-            )
+                layerNames = listOf("0"),
+                projection = epsg5514(),
+            ) {
+                format = WmsImageFormat.Jpeg
+                attributions =
+                    listOf(
+                        attribution(
+                            "© Český úřad zeměměřický a katastrální · Ortofoto České republiky · " +
+                                "WMS služba v souřadnicovém systému S‑JTSK / Křovák East North (EPSG:5514)",
+                        ),
+                    )
+                state = wmsState
+            }
             featureLayer("prague-wgs84-reference", pragueReference) {
                 zIndex = 10
-                projection = sjtsk()
+                projection = epsg5514()
             }
         },
     )

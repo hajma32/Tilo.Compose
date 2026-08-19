@@ -20,6 +20,16 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class RasterTileLayerTest {
+    @Test
+    fun invalidLoadingConfigurationIsRejectedAtConstruction() {
+        assertFailsWith<IllegalArgumentException> {
+            RasterTileLayer(id = "invalid", source = trackingSource(mutableListOf()), maxVisibleTiles = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            RasterTileLayer(id = "invalid", source = trackingSource(mutableListOf()), prefetchMargin = -1)
+        }
+    }
+
     /**
      * Verifies that speculative network work requires an explicit layer configuration.
      *
@@ -138,7 +148,7 @@ class RasterTileLayerTest {
      */
     @Test
     fun xyzSourceDefaultsToWebMercator() {
-        val source = XYZTileSource(urlTemplate = "https://example.com/{z}/{x}/{y}.png")
+        val source = XyzTileSource(urlTemplate = "https://example.com/{z}/{x}/{y}.png")
 
         assertEquals(Epsg3857Projection.id, source.projection.id)
         assertEquals(TileGrid.WebMercator, source.grid)

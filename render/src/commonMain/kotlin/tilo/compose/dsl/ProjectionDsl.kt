@@ -23,15 +23,7 @@ fun wgs84(): Projection = Epsg4326Projection
 @ExperimentalTiloApi
 fun webMercator(): Projection = Epsg3857Projection
 
-/**
- * S-JTSK / Krovak East North, EPSG:5514.
- */
-@ExperimentalTiloApi
-fun sjtsk(): Projection = Epsg5514Projection
-
-/**
- * Explicit alias for [sjtsk].
- */
+/** S-JTSK / Krovak East North, EPSG:5514. */
 @ExperimentalTiloApi
 fun epsg5514(): Projection = Epsg5514Projection
 

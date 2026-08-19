@@ -41,14 +41,19 @@ import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.Layer
 import tilo.compose.core.layers.LayerGroup
 import tilo.compose.core.layers.LayerSink
+import tilo.compose.core.layers.raster.RasterHttpConfig
+import tilo.compose.core.layers.raster.RasterHttpTransport
 import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.raster.TileRowScheme
 import tilo.compose.core.layers.raster.TileStoreTileSource
-import tilo.compose.core.layers.raster.WMSAxisOrder
-import tilo.compose.core.layers.raster.WMSCapabilities
-import tilo.compose.core.layers.raster.WMSCapabilitiesLoader
-import tilo.compose.core.layers.raster.XYZTileLayer
+import tilo.compose.core.layers.raster.WmsAxisOrder
+import tilo.compose.core.layers.raster.WmsCapabilities
+import tilo.compose.core.layers.raster.WmsCapabilitiesLoader
+import tilo.compose.core.layers.raster.WmsImageFormat
+import tilo.compose.core.layers.raster.WmsLayerOptions
+import tilo.compose.core.layers.raster.WmsVersion
+import tilo.compose.core.layers.raster.XyzTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapCameraController
@@ -581,8 +586,8 @@ internal fun shortestBearingDelta(
 /**
  * Receiver for the `TiloMap { ... }` layer DSL.
  *
- * Prefer high-level methods such as [wmsTileLayer], [featureLayer], and
- * [rasterLayer]. Use [layer] or unary `+` when integrating a custom layer.
+ * Prefer high-level methods such as [wmsTileLayer] and [featureLayer]. Use
+ * [layer] when integrating a custom or pre-built layer.
  */
 @ExperimentalTiloApi
 @TiloDsl
@@ -595,23 +600,25 @@ class MapLayerBuilder private constructor(
         this(
             MapLayerBuildContext(
                 rasterLayerStore = null,
-                loadWMSCapabilities = DEFAULT_WMS_CAPABILITIES_LOADER,
+                loadWmsCapabilities = DEFAULT_WMS_CAPABILITIES_LOADER,
             ),
         )
 
     internal companion object {
-        private val DEFAULT_WMS_CAPABILITIES_LOADER: suspend (String) -> WMSCapabilities = { url ->
-            WMSCapabilitiesLoader().load(url)
-        }
+        private val DEFAULT_WMS_CAPABILITIES_LOADER:
+            suspend (String, RasterHttpConfig) -> WmsCapabilities = { url, http ->
+                WmsCapabilitiesLoader().load(url, http)
+            }
 
         fun managed(
             rasterLayerStore: RasterLayerStore,
-            loadWMSCapabilities: suspend (String) -> WMSCapabilities = DEFAULT_WMS_CAPABILITIES_LOADER,
+            loadWmsCapabilities: suspend (String, RasterHttpConfig) -> WmsCapabilities =
+                DEFAULT_WMS_CAPABILITIES_LOADER,
         ): MapLayerBuilder =
             MapLayerBuilder(
                 MapLayerBuildContext(
                     rasterLayerStore = rasterLayerStore,
-                    loadWMSCapabilities = loadWMSCapabilities,
+                    loadWmsCapabilities = loadWmsCapabilities,
                 ),
             )
     }
@@ -628,14 +635,6 @@ class MapLayerBuilder private constructor(
     }
 
     /**
-     * Advanced shorthand for adding a custom or pre-built layer.
-     * Ownership remains with the caller.
-     */
-    operator fun Layer.unaryPlus() {
-        layer(this)
-    }
-
-    /**
      * Adds a composite layer whose children occupy one ordered slot among this builder's layers.
      *
      * Child [Layer.zIndex] values are local to the group. Visibility and zoom limits declared here
@@ -648,23 +647,10 @@ class MapLayerBuilder private constructor(
         visible: Boolean = true,
         minZoom: Double? = null,
         maxZoom: Double? = null,
-        attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
+        opacity: Double = 1.0,
         layers: MapLayerBuilder.() -> Unit,
-    ) = addLayerGroup(id, zIndex, visible, minZoom, maxZoom, attribution, attributions, 1.0, layers)
-
-    /** Adds a composite layer with [opacity] multiplied into every descendant. */
-    fun layerGroup(
-        id: String,
-        zIndex: Int = 0,
-        visible: Boolean = true,
-        minZoom: Double? = null,
-        maxZoom: Double? = null,
-        attribution: Attribution? = null,
-        attributions: List<Attribution> = emptyList(),
-        opacity: Double,
-        layers: MapLayerBuilder.() -> Unit,
-    ) = addLayerGroup(id, zIndex, visible, minZoom, maxZoom, attribution, attributions, opacity, layers)
+    ) = addLayerGroup(id, zIndex, visible, minZoom, maxZoom, attributions, opacity, layers)
 
     private fun addLayerGroup(
         id: String,
@@ -672,17 +658,11 @@ class MapLayerBuilder private constructor(
         visible: Boolean,
         minZoom: Double?,
         maxZoom: Double?,
-        attribution: Attribution?,
         attributions: List<Attribution>,
         opacity: Double,
         layers: MapLayerBuilder.() -> Unit,
     ) {
-        require(minZoom == null || minZoom.isFinite()) { "minZoom must be finite" }
-        require(maxZoom == null || maxZoom.isFinite()) { "maxZoom must be finite" }
-        require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
-            "minZoom must not be greater than maxZoom"
-        }
-        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
+        validateLayerPresentation(opacity, minZoom, maxZoom)
         registerLayerId(id)
         val childBuilder = MapLayerBuilder(context)
         childBuilder.layers()
@@ -694,21 +674,9 @@ class MapLayerBuilder private constructor(
                 opacity = opacity,
                 minZoom = minZoom,
                 maxZoom = maxZoom,
-                attributions = attributions.withSingle(attribution),
+                attributions = attributions.toList(),
                 children = childBuilder.items.toList(),
             )
-    }
-
-    /**
-     * Adds a pre-built raster tile layer.
-     *
-     * The builder borrows [layer] and never closes it. The caller must keep it
-     * alive while any map uses it and close resource-owning layers afterwards.
-     */
-    fun rasterLayer(layer: TileLayer?) {
-        if (layer != null) {
-            this.layer(layer)
-        }
     }
 
     /**
@@ -716,163 +684,104 @@ class MapLayerBuilder private constructor(
      *
      * The map loads capabilities asynchronously, owns the resulting raster
      * runtime, and closes it when the declaration leaves composition. The layer
-     * is skipped until loading succeeds. [onError] receives capabilities and
-     * tile transport failures without cancelling healthy tiles. Pass [state]
-     * to observe initialization, distinguish tile errors, and trigger retry.
-     * Prefetching and coarse overview loading are opt-in.
+     * is skipped until loading succeeds. Optional presentation, loading, WMS,
+     * and HTTP settings live in [WmsTileLayerOptions]. Styles are specified one
+     * per layer name; an empty style list selects every layer's default style.
      */
-    fun wmsTileLayer(
-        id: String,
-        capabilitiesUrl: String,
-        layerName: String,
-        projection: Projection,
-        styles: String = "",
-        format: String? = null,
-        getMapVersion: String = "1.1.1",
-        axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
-        zIndex: Int = 0,
-        visible: Boolean = true,
-        minZoom: Double? = null,
-        maxZoom: Double? = null,
-        tileSize: Int = 256,
-        maxVisibleTiles: Int = 9,
-        prefetchMargin: Int = 0,
-        overviewZoomOffset: Int = 0,
-        maxOverviewTiles: Int = 4,
-        overviewPrefetchMargin: Int = 0,
-        attribution: Attribution? = null,
-        attributions: List<Attribution> = emptyList(),
-        state: RasterLayerState? = null,
-        onError: ((Throwable) -> Unit)? = null,
-        opacity: Double = 1.0,
-    ) {
-        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
-        require(minZoom == null || minZoom.isFinite()) { "minZoom must be finite" }
-        require(maxZoom == null || maxZoom.isFinite()) { "maxZoom must be finite" }
-        require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
-            "minZoom must not be greater than maxZoom"
-        }
-        require(id.isNotBlank()) { "Layer id must not be blank" }
-        require(context.layerIds.add(id)) {
-            "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
-        }
-        val resolvedAttributions = attributions.withSingle(attribution)
-        val key =
-            ManagedWMSLayerKey(
-                layerId = id,
-                configuration =
-                    WMSRasterConfiguration(
-                        capabilitiesUrl = capabilitiesUrl,
-                        layerName = layerName,
-                        projectionId = projection.id,
-                        projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
-                        styles = styles,
-                        format = format,
-                        getMapVersion = getMapVersion,
-                        axisOrder = axisOrder,
-                        tileSize = tileSize,
-                        maxVisibleTiles = maxVisibleTiles,
-                        prefetchMargin = prefetchMargin,
-                        overviewZoomOffset = overviewZoomOffset,
-                        maxOverviewTiles = maxOverviewTiles,
-                        overviewPrefetchMargin = overviewPrefetchMargin,
-                        retryKey = state?.retryKey ?: 0,
-                    ),
-            )
-        items +=
-            MapLayerItem.ManagedWMS(
-                ManagedWMSLayerDeclaration(
-                    key = key,
-                    id = id,
-                    zIndex = zIndex,
-                    visible = visible,
-                    opacity = opacity,
-                    minZoom = minZoom,
-                    maxZoom = maxZoom,
-                    attributions = resolvedAttributions,
-                    state = state,
-                    onError = onError,
-                    create = { reportError, reportDiagnostic ->
-                        val capabilities = context.loadWMSCapabilities(capabilitiesUrl)
-                        capabilities.createTileLayer(
-                            id = id,
-                            layerName = layerName,
-                            projection = projection,
-                            styles = styles,
-                            format = format ?: capabilities.formats.firstOrNull() ?: "image/png",
-                            getMapVersion = getMapVersion,
-                            axisOrder = axisOrder,
-                            zIndex = 0,
-                            visible = true,
-                            minZoom = null,
-                            maxZoom = null,
-                            tileSize = tileSize,
-                            maxVisibleTiles = maxVisibleTiles,
-                            prefetchMargin = prefetchMargin,
-                            overviewZoomOffset = overviewZoomOffset,
-                            maxOverviewTiles = maxOverviewTiles,
-                            overviewPrefetchMargin = overviewPrefetchMargin,
-                            attributions = emptyList(),
-                            onError = reportError,
-                            onDiagnostic = reportDiagnostic,
-                        )
-                    },
-                ),
-            )
-    }
-
-    /** Adds several WMS sublayers as one composited GetMap tile layer. */
     fun wmsTileLayer(
         id: String,
         capabilitiesUrl: String,
         layerNames: List<String>,
         projection: Projection,
-        styles: String = "",
-        format: String? = null,
-        getMapVersion: String = "1.1.1",
-        axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(projection.id),
-        zIndex: Int = 0,
-        visible: Boolean = true,
-        minZoom: Double? = null,
-        maxZoom: Double? = null,
-        tileSize: Int = 256,
-        maxVisibleTiles: Int = 9,
-        prefetchMargin: Int = 0,
-        overviewZoomOffset: Int = 0,
-        maxOverviewTiles: Int = 4,
-        overviewPrefetchMargin: Int = 0,
-        attribution: Attribution? = null,
-        attributions: List<Attribution> = emptyList(),
-        state: RasterLayerState? = null,
-        onError: ((Throwable) -> Unit)? = null,
-        opacity: Double = 1.0,
+        block: WmsTileLayerOptions.() -> Unit = {},
     ) {
-        require(layerNames.isNotEmpty()) { "At least one WMS layer name is required." }
-        wmsTileLayer(
-            id = id,
-            capabilitiesUrl = capabilitiesUrl,
-            layerName = layerNames.joinToString(","),
-            projection = projection,
-            styles = styles,
-            format = format,
-            getMapVersion = getMapVersion,
-            axisOrder = axisOrder,
-            zIndex = zIndex,
-            visible = visible,
-            opacity = opacity,
-            minZoom = minZoom,
-            maxZoom = maxZoom,
-            tileSize = tileSize,
-            maxVisibleTiles = maxVisibleTiles,
-            prefetchMargin = prefetchMargin,
-            overviewZoomOffset = overviewZoomOffset,
-            maxOverviewTiles = maxOverviewTiles,
-            overviewPrefetchMargin = overviewPrefetchMargin,
-            attribution = attribution,
-            attributions = attributions,
-            state = state,
-            onError = onError,
+        val names = layerNames.toList()
+        require(names.isNotEmpty()) { "At least one WMS layer name is required." }
+        require(names.none(String::isBlank)) { "WMS layer names must not be blank." }
+        require(names.none { ',' in it }) { "WMS layer names must not contain commas." }
+        val options = WmsTileLayerOptions().apply(block)
+        val styles = options.styles.toList()
+        require(styles.isEmpty() || styles.size == names.size) {
+            "WMS styles must be empty or contain exactly one entry per layer name."
+        }
+        require(styles.none { ',' in it }) { "WMS style names must not contain commas." }
+        validateLayerPresentation(options.opacity, options.minZoom, options.maxZoom)
+        require(options.tileSize > 0) { "WMS tileSize must be positive." }
+        validateRasterLoading(
+            options.maxVisibleTiles,
+            options.prefetchMargin,
+            options.overviewZoomOffset,
+            options.maxOverviewTiles,
+            options.overviewPrefetchMargin,
         )
+        registerLayerId(id)
+        val axisOrder = options.axisOrder ?: WmsAxisOrder.forCrs(projection.id)
+        val http = options.http
+        val configuration =
+            WmsRasterConfiguration(
+                capabilitiesUrl = capabilitiesUrl,
+                layerNames = names,
+                projectionId = projection.id,
+                projectionDefinition = projection.definition,
+                projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
+                styles = styles,
+                format = options.format,
+                version = options.version,
+                axisOrder = axisOrder,
+                tileSize = options.tileSize,
+                maxVisibleTiles = options.maxVisibleTiles,
+                prefetchMargin = options.prefetchMargin,
+                overviewZoomOffset = options.overviewZoomOffset,
+                maxOverviewTiles = options.maxOverviewTiles,
+                overviewPrefetchMargin = options.overviewPrefetchMargin,
+                http = http,
+                retryKey = options.state?.retryKey ?: 0,
+            )
+        val key =
+            ManagedWmsLayerKey(
+                layerId = id,
+                configuration = configuration,
+            )
+        items +=
+            MapLayerItem.ManagedWms(
+                ManagedWmsLayerDeclaration(
+                    key = key,
+                    id = id,
+                    zIndex = options.zIndex,
+                    visible = options.visible,
+                    opacity = options.opacity,
+                    minZoom = options.minZoom,
+                    maxZoom = options.maxZoom,
+                    attributions = options.attributions.toList(),
+                    state = options.state,
+                    onError = options.onError,
+                    create = { reportError, reportDiagnostic ->
+                        val capabilities =
+                            context.loadWmsCapabilities(configuration.capabilitiesUrl, configuration.http)
+                        capabilities.createTileLayer(
+                            id = id,
+                            layerNames = configuration.layerNames,
+                            projection = projection,
+                            tileSize = configuration.tileSize,
+                            options =
+                                WmsLayerOptions(
+                                    styles = configuration.styles,
+                                    format = configuration.format,
+                                    version = configuration.version,
+                                    axisOrder = configuration.axisOrder,
+                                    maxVisibleTiles = configuration.maxVisibleTiles,
+                                    prefetchMargin = configuration.prefetchMargin,
+                                    overviewZoomOffset = configuration.overviewZoomOffset,
+                                    maxOverviewTiles = configuration.maxOverviewTiles,
+                                    overviewPrefetchMargin = configuration.overviewPrefetchMargin,
+                                    http = configuration.http,
+                                    onError = reportError,
+                                    onDiagnostic = reportDiagnostic,
+                                ),
+                        )
+                    },
+                ),
+            )
     }
 
     /**
@@ -898,97 +807,86 @@ class MapLayerBuilder private constructor(
         xyzTileLayer(
             id = id,
             urlTemplate = OPEN_STREET_MAP_URL,
-            zIndex = zIndex,
-            visible = visible,
-            opacity = opacity,
-            minZoom = minZoom,
-            maxZoom = maxZoom,
-            projection = Epsg3857Projection,
-            prefetchMargin = 0,
-            overviewZoomOffset = 0,
-            maxOverviewTiles = 0,
-            overviewPrefetchMargin = 0,
-            attribution = OPEN_STREET_MAP_ATTRIBUTION,
-            state = state,
-            onError = onError,
-        )
+        ) {
+            this.zIndex = zIndex
+            this.visible = visible
+            this.opacity = opacity
+            this.minZoom = minZoom
+            this.maxZoom = maxZoom
+            projection = Epsg3857Projection
+            prefetchMargin = 0
+            overviewZoomOffset = 0
+            maxOverviewTiles = 0
+            overviewPrefetchMargin = 0
+            attributions = listOf(OPEN_STREET_MAP_ATTRIBUTION)
+            this.state = state
+            this.onError = onError
+        }
     }
 
     /**
      * Adds a URL-template raster layer using `{z}`, `{x}`, `{y}` placeholders.
      *
      * Web Mercator is the default because that is what public XYZ slippy-map
-     * services normally use. Pass [projection] and [grid] for custom grids.
-     * Prefetching and coarse overview loading are opt-in.
-     * [state] observes readiness, recoverable tile errors, and explicit retry.
-     * [onError] receives source failures without cancelling healthy tiles.
+     * services normally use. Optional source, presentation, loading, and HTTP
+     * settings live in [XyzTileLayerOptions].
      */
     fun xyzTileLayer(
         id: String,
         urlTemplate: String,
-        zIndex: Int = 0,
-        visible: Boolean = true,
-        minZoom: Double? = null,
-        maxZoom: Double? = null,
-        projection: Projection = Epsg3857Projection,
-        grid: TileGrid = TileGrid.defaultFor(projection),
-        tms: Boolean = false,
-        maxVisibleTiles: Int = 9,
-        prefetchMargin: Int = 0,
-        overviewZoomOffset: Int = 0,
-        maxOverviewTiles: Int = 4,
-        overviewPrefetchMargin: Int = 0,
-        attribution: Attribution? = null,
-        attributions: List<Attribution> = emptyList(),
-        state: RasterLayerState? = null,
-        onError: ((Throwable) -> Unit)? = null,
-        opacity: Double = 1.0,
+        block: XyzTileLayerOptions.() -> Unit = {},
     ) {
-        val resolvedAttributions = attributions.withSingle(attribution)
+        val options = XyzTileLayerOptions().apply(block)
+        val projection = options.projection
+        val grid = options.grid ?: TileGrid.defaultFor(projection)
+        val attributions = options.attributions.toList()
         managedRasterLayer(
             id = id,
-            zIndex = zIndex,
-            visible = visible,
-            opacity = opacity,
-            minZoom = minZoom,
-            maxZoom = maxZoom,
-            attributions = resolvedAttributions,
+            zIndex = options.zIndex,
+            visible = options.visible,
+            opacity = options.opacity,
+            minZoom = options.minZoom,
+            maxZoom = options.maxZoom,
+            attributions = attributions,
             configuration =
                 XyzRasterConfiguration(
                     projectionId = projection.id,
+                    projectionDefinition = projection.definition,
                     projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
                     grid = grid,
                     urlTemplate = urlTemplate,
-                    tms = tms,
-                    maxVisibleTiles = maxVisibleTiles,
-                    prefetchMargin = prefetchMargin,
-                    overviewZoomOffset = overviewZoomOffset,
-                    maxOverviewTiles = maxOverviewTiles,
-                    overviewPrefetchMargin = overviewPrefetchMargin,
-                    retryKey = state?.retryKey ?: 0,
+                    tms = options.tms,
+                    maxVisibleTiles = options.maxVisibleTiles,
+                    prefetchMargin = options.prefetchMargin,
+                    overviewZoomOffset = options.overviewZoomOffset,
+                    maxOverviewTiles = options.maxOverviewTiles,
+                    overviewPrefetchMargin = options.overviewPrefetchMargin,
+                    http = options.http,
+                    retryKey = options.state?.retryKey ?: 0,
                 ),
-            update = RasterLayerUpdate.Source(state, onError),
+            update = RasterLayerUpdate.Source(options.state, options.onError),
         ) {
-            val diagnostics = MutableRasterLayerDiagnostics(state, onError)
+            val diagnostics = MutableRasterLayerDiagnostics(options.state, options.onError)
             StoredRasterLayer(
                 layer =
-                    XYZTileLayer(
+                    XyzTileLayer(
                         id = id,
                         projection = projection,
                         grid = grid,
                         urlTemplate = urlTemplate,
-                        tms = tms,
-                        zIndex = zIndex,
-                        visible = visible,
-                        opacity = opacity,
-                        minZoom = minZoom,
-                        maxZoom = maxZoom,
-                        maxVisibleTiles = maxVisibleTiles,
-                        prefetchMargin = prefetchMargin,
-                        overviewZoomOffset = overviewZoomOffset,
-                        maxOverviewTiles = maxOverviewTiles,
-                        overviewPrefetchMargin = overviewPrefetchMargin,
-                        attributions = resolvedAttributions,
+                        tms = options.tms,
+                        zIndex = options.zIndex,
+                        visible = options.visible,
+                        opacity = options.opacity,
+                        minZoom = options.minZoom,
+                        maxZoom = options.maxZoom,
+                        maxVisibleTiles = options.maxVisibleTiles,
+                        prefetchMargin = options.prefetchMargin,
+                        overviewZoomOffset = options.overviewZoomOffset,
+                        maxOverviewTiles = options.maxOverviewTiles,
+                        overviewPrefetchMargin = options.overviewPrefetchMargin,
+                        attributions = attributions,
+                        http = options.http,
                         onError = diagnostics::tileFailed,
                         onDiagnostic = diagnostics::onDiagnostic,
                     ),
@@ -1032,13 +930,12 @@ class MapLayerBuilder private constructor(
         overviewZoomOffset: Int = 0,
         maxOverviewTiles: Int = 4,
         overviewPrefetchMargin: Int = 0,
-        attribution: Attribution? = null,
         attributions: List<Attribution> = emptyList(),
         state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
         opacity: Double = 1.0,
     ) {
-        val resolvedAttributions = attributions.withSingle(attribution)
+        val resolvedAttributions = attributions.toList()
         managedRasterLayer(
             id = id,
             zIndex = zIndex,
@@ -1050,6 +947,7 @@ class MapLayerBuilder private constructor(
             configuration =
                 TileStoreRasterConfiguration(
                     projectionId = projection.id,
+                    projectionDefinition = projection.definition,
                     projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
                     grid = grid,
                     scheme = scheme,
@@ -1105,62 +1003,15 @@ class MapLayerBuilder private constructor(
     }
 
     /**
-     * Advanced alias for adding a pre-built raster tile layer.
-     * Ownership remains with the caller; see [rasterLayer].
-     */
-    fun tileLayer(layer: TileLayer?) {
-        rasterLayer(layer)
-    }
-
-    /**
      * Adds an in-memory vector feature layer.
      *
-     * Use [projection] when feature coordinates differ from the map projection.
-     * [renderMode] controls whether features are drawn immediately or cached to
-     * a bitmap for smoother navigation on heavier layers.
+     * Optional presentation, projection, and rendering settings live in
+     * [FeatureLayerOptions].
      */
     fun featureLayer(
         id: String,
         features: List<Feature>,
-        zIndex: Int = 0,
-        visible: Boolean = true,
-        minZoom: Double? = null,
-        maxZoom: Double? = null,
-        projection: Projection? = null,
-        renderMode: FeatureRenderMode = immediate(),
-        style: FeatureLayerStyle = FeatureLayerStyle(),
-        attribution: Attribution? = null,
-        attributions: List<Attribution> = emptyList(),
-        opacity: Double = 1.0,
-    ) {
-        validatePointIconReferences(
-            layerId = id,
-            features = features,
-            layerStyle = style,
-            registeredIconIds = emptySet(),
-        )
-        layer(
-            createFeatureLayer(
-                id,
-                features,
-                zIndex,
-                visible,
-                opacity,
-                minZoom,
-                maxZoom,
-                projection,
-                renderMode,
-                style,
-                attribution,
-                attributions,
-            ),
-        )
-    }
-
-    fun featureLayer(
-        id: String,
-        features: List<Feature>,
-        block: FeatureLayerOptions.() -> Unit,
+        block: FeatureLayerOptions.() -> Unit = {},
     ) {
         val options = FeatureLayerOptions().apply(block)
         validatePointIconReferences(
@@ -1181,8 +1032,7 @@ class MapLayerBuilder private constructor(
                 options.projection,
                 options.renderMode,
                 options.style,
-                options.attribution,
-                options.attributions,
+                options.attributions.toList(),
             )
         layer(
             if (options.pointIconPainters.isEmpty()) {
@@ -1204,7 +1054,6 @@ class MapLayerBuilder private constructor(
         projection: Projection?,
         renderMode: FeatureRenderMode,
         style: FeatureLayerStyle,
-        attribution: Attribution?,
         attributions: List<Attribution>,
     ): FeatureLayer =
         FeatureLayer(
@@ -1215,14 +1064,14 @@ class MapLayerBuilder private constructor(
             minZoom = minZoom,
             maxZoom = maxZoom,
             projection = projection,
-            attributions = attributions.withSingle(attribution),
+            attributions = attributions,
             features = features,
             renderStrategy = renderMode.toVectorRenderStrategy(),
             style = style,
         )
 
-    internal val managedWMSDeclarations: List<ManagedWMSLayerDeclaration>
-        get() = items.managedWMSDeclarations()
+    internal val managedWmsDeclarations: List<ManagedWmsLayerDeclaration>
+        get() = items.managedWmsDeclarations()
 
     internal val managedRasterKeys: Set<ManagedRasterLayerKey>
         get() = context.managedRasterKeys
@@ -1230,8 +1079,8 @@ class MapLayerBuilder private constructor(
     internal val managedRasterUpdates: Map<ManagedRasterLayerKey, RasterLayerUpdate>
         get() = context.managedRasterUpdates
 
-    internal fun build(resolvedWMSLayers: Map<ManagedWMSLayerKey, TileLayer?> = emptyMap()): List<Layer> =
-        items.buildLayers(resolvedWMSLayers)
+    internal fun build(resolvedWmsLayers: Map<ManagedWmsLayerKey, TileLayer?> = emptyMap()): List<Layer> =
+        items.buildLayers(resolvedWmsLayers)
 
     private fun registerLayerTree(layer: Layer) {
         val ids =
@@ -1282,16 +1131,8 @@ class MapLayerBuilder private constructor(
         update: RasterLayerUpdate = RasterLayerUpdate.None,
         create: () -> StoredRasterLayer,
     ) {
-        require(id.isNotBlank()) { "Layer id must not be blank" }
-        require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
-        require(minZoom == null || minZoom.isFinite()) { "minZoom must be finite" }
-        require(maxZoom == null || maxZoom.isFinite()) { "maxZoom must be finite" }
-        require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
-            "minZoom must not be greater than maxZoom"
-        }
-        require(context.layerIds.add(id)) {
-            "Duplicate layer id '$id'. Layer IDs must be unique within one TiloMap."
-        }
+        validateLayerPresentation(opacity, minZoom, maxZoom)
+        registerLayerId(id)
         val store = context.rasterLayerStore
         val layer =
             if (store == null) {
@@ -1317,9 +1158,36 @@ class MapLayerBuilder private constructor(
     }
 }
 
+private fun validateLayerPresentation(
+    opacity: Double,
+    minZoom: Double?,
+    maxZoom: Double?,
+) {
+    require(opacity in 0.0..1.0) { "opacity must be between 0.0 and 1.0" }
+    require(minZoom == null || minZoom.isFinite()) { "minZoom must be finite" }
+    require(maxZoom == null || maxZoom.isFinite()) { "maxZoom must be finite" }
+    require(minZoom == null || maxZoom == null || minZoom <= maxZoom) {
+        "minZoom must not be greater than maxZoom"
+    }
+}
+
+private fun validateRasterLoading(
+    maxVisibleTiles: Int,
+    prefetchMargin: Int,
+    overviewZoomOffset: Int,
+    maxOverviewTiles: Int,
+    overviewPrefetchMargin: Int,
+) {
+    require(maxVisibleTiles > 0) { "maxVisibleTiles must be positive." }
+    require(prefetchMargin >= 0) { "prefetchMargin must not be negative." }
+    require(overviewZoomOffset >= 0) { "overviewZoomOffset must not be negative." }
+    require(maxOverviewTiles >= 0) { "maxOverviewTiles must not be negative." }
+    require(overviewPrefetchMargin >= 0) { "overviewPrefetchMargin must not be negative." }
+}
+
 private class MapLayerBuildContext(
     val rasterLayerStore: RasterLayerStore?,
-    val loadWMSCapabilities: suspend (String) -> WMSCapabilities,
+    val loadWmsCapabilities: suspend (String, RasterHttpConfig) -> WmsCapabilities,
 ) {
     val layerIds = mutableSetOf<String>()
     val managedRasterKeys = mutableSetOf<ManagedRasterLayerKey>()
@@ -1331,8 +1199,8 @@ private sealed interface MapLayerItem {
         val layer: Layer,
     ) : MapLayerItem
 
-    class ManagedWMS(
-        val declaration: ManagedWMSLayerDeclaration,
+    class ManagedWms(
+        val declaration: ManagedWmsLayerDeclaration,
     ) : MapLayerItem
 
     class Group(
@@ -1347,24 +1215,24 @@ private sealed interface MapLayerItem {
     ) : MapLayerItem
 }
 
-private fun List<MapLayerItem>.managedWMSDeclarations(): List<ManagedWMSLayerDeclaration> =
+private fun List<MapLayerItem>.managedWmsDeclarations(): List<ManagedWmsLayerDeclaration> =
     flatMap { item ->
         when (item) {
-            is MapLayerItem.Group -> item.children.managedWMSDeclarations()
+            is MapLayerItem.Group -> item.children.managedWmsDeclarations()
             is MapLayerItem.LayerValue -> emptyList()
-            is MapLayerItem.ManagedWMS -> listOf(item.declaration)
+            is MapLayerItem.ManagedWms -> listOf(item.declaration)
         }
     }
 
-private fun List<MapLayerItem>.buildLayers(resolvedWMSLayers: Map<ManagedWMSLayerKey, TileLayer?>): List<Layer> =
+private fun List<MapLayerItem>.buildLayers(resolvedWmsLayers: Map<ManagedWmsLayerKey, TileLayer?>): List<Layer> =
     mapNotNull { item ->
         when (item) {
             is MapLayerItem.LayerValue -> item.layer
-            is MapLayerItem.ManagedWMS -> resolvedWMSLayers[item.declaration.key]
+            is MapLayerItem.ManagedWms -> resolvedWmsLayers[item.declaration.key]
             is MapLayerItem.Group ->
                 LayerGroup(
                     id = item.id,
-                    children = item.children.buildLayers(resolvedWMSLayers),
+                    children = item.children.buildLayers(resolvedWmsLayers),
                     zIndex = item.zIndex,
                     visible = item.visible,
                     opacity = item.opacity,
@@ -1377,6 +1245,7 @@ private fun List<MapLayerItem>.buildLayers(resolvedWMSLayers: Map<ManagedWMSLaye
 
 internal data class XyzRasterConfiguration(
     val projectionId: String,
+    val projectionDefinition: String,
     val projectionWorldUnitsPerMapUnit: Double,
     val grid: TileGrid,
     val urlTemplate: String,
@@ -1386,11 +1255,18 @@ internal data class XyzRasterConfiguration(
     val overviewZoomOffset: Int,
     val maxOverviewTiles: Int,
     val overviewPrefetchMargin: Int,
+    val http: RasterHttpConfig,
     val retryKey: Int,
-)
+) {
+    override fun toString(): String =
+        "XyzRasterConfiguration(projectionId=$projectionId, tms=$tms, " +
+            "loading=[$maxVisibleTiles,$prefetchMargin,$overviewZoomOffset,$maxOverviewTiles," +
+            "$overviewPrefetchMargin], http=$http, retryKey=$retryKey)"
+}
 
 internal data class TileStoreRasterConfiguration(
     val projectionId: String,
+    val projectionDefinition: String,
     val projectionWorldUnitsPerMapUnit: Double,
     val grid: TileGrid,
     val scheme: TileRowScheme,
@@ -1403,28 +1279,135 @@ internal data class TileStoreRasterConfiguration(
     val retryKey: Int,
 )
 
-internal data class WMSRasterConfiguration(
+internal data class WmsRasterConfiguration(
     val capabilitiesUrl: String,
-    val layerName: String,
+    val layerNames: List<String>,
     val projectionId: String,
+    val projectionDefinition: String,
     val projectionWorldUnitsPerMapUnit: Double,
-    val styles: String,
-    val format: String?,
-    val getMapVersion: String,
-    val axisOrder: WMSAxisOrder,
+    val styles: List<String>,
+    val format: WmsImageFormat?,
+    val version: WmsVersion?,
+    val axisOrder: WmsAxisOrder,
     val tileSize: Int,
     val maxVisibleTiles: Int,
     val prefetchMargin: Int,
     val overviewZoomOffset: Int,
     val maxOverviewTiles: Int,
     val overviewPrefetchMargin: Int,
+    val http: RasterHttpConfig,
     val retryKey: Int,
-)
+) {
+    override fun toString(): String =
+        "WmsRasterConfiguration(projectionId=$projectionId, version=$version, tileSize=$tileSize, " +
+            "layerCount=${layerNames.size}, styleCount=${styles.size}, http=$http, retryKey=$retryKey)"
+}
 
 private class MutableTileReader(
     var delegate: suspend (TileCoordinate) -> ByteArray?,
 ) {
     suspend fun read(coordinate: TileCoordinate): ByteArray? = delegate(coordinate)
+}
+
+/** HTTP settings shared by WMS metadata and tile requests, or by one XYZ source. */
+@ExperimentalTiloApi
+@TiloDsl
+class RasterHttpOptions internal constructor(
+    config: RasterHttpConfig = RasterHttpConfig(),
+) {
+    var headers: Map<String, String> = config.headers
+    var transport: RasterHttpTransport? = config.transport
+
+    /** Allows WMS request headers on a GetMap origin different from GetCapabilities. */
+    var allowCrossOriginHeaders: Boolean = config.allowCrossOriginHeaders
+
+    /** Change this stable semantic key when [transport] must recreate the raster runtime. */
+    var transportKey: Any = config.transportKey ?: Unit
+
+    /** Adds or replaces one request header. */
+    fun header(
+        name: String,
+        value: String,
+    ) {
+        require(name.isNotBlank()) { "HTTP header name must not be blank." }
+        headers = headers.filterKeys { !it.equals(name, ignoreCase = true) } + (name to value)
+    }
+
+    /** Configures an `Authorization: Bearer …` header. */
+    fun bearerToken(token: String) {
+        require(token.isNotBlank()) { "Bearer token must not be blank." }
+        header("Authorization", "Bearer $token")
+    }
+
+    internal fun build(): RasterHttpConfig =
+        RasterHttpConfig(
+            headers = headers.toMap(),
+            transport = transport,
+            transportKey = transportKey,
+            allowCrossOriginHeaders = allowCrossOriginHeaders,
+        )
+}
+
+/** Optional settings for [MapLayerBuilder.wmsTileLayer]. */
+@ExperimentalTiloApi
+@TiloDsl
+class WmsTileLayerOptions {
+    var styles: List<String> = emptyList()
+    var format: WmsImageFormat? = null
+    var version: WmsVersion? = null
+    var axisOrder: WmsAxisOrder? = null
+    var zIndex: Int = 0
+    var visible: Boolean = true
+    var opacity: Double = 1.0
+    var minZoom: Double? = null
+    var maxZoom: Double? = null
+    var tileSize: Int = 256
+    var maxVisibleTiles: Int = 9
+    var prefetchMargin: Int = 0
+    var overviewZoomOffset: Int = 0
+    var maxOverviewTiles: Int = 4
+    var overviewPrefetchMargin: Int = 0
+    var attributions: List<Attribution> = emptyList()
+    var state: RasterLayerState? = null
+    var onError: ((Throwable) -> Unit)? = null
+
+    internal var http: RasterHttpConfig = RasterHttpConfig()
+        private set
+
+    /** Configures authentication, headers, or a custom transport for capabilities and tiles. */
+    fun http(block: RasterHttpOptions.() -> Unit) {
+        http = RasterHttpOptions(http).apply(block).build()
+    }
+}
+
+/** Optional settings for [MapLayerBuilder.xyzTileLayer]. */
+@ExperimentalTiloApi
+@TiloDsl
+class XyzTileLayerOptions {
+    var projection: Projection = Epsg3857Projection
+    var grid: TileGrid? = null
+    var tms: Boolean = false
+    var zIndex: Int = 0
+    var visible: Boolean = true
+    var opacity: Double = 1.0
+    var minZoom: Double? = null
+    var maxZoom: Double? = null
+    var maxVisibleTiles: Int = 9
+    var prefetchMargin: Int = 0
+    var overviewZoomOffset: Int = 0
+    var maxOverviewTiles: Int = 4
+    var overviewPrefetchMargin: Int = 0
+    var attributions: List<Attribution> = emptyList()
+    var state: RasterLayerState? = null
+    var onError: ((Throwable) -> Unit)? = null
+
+    internal var http: RasterHttpConfig = RasterHttpConfig()
+        private set
+
+    /** Configures authentication, headers, or a custom transport for tile requests. */
+    fun http(block: RasterHttpOptions.() -> Unit) {
+        http = RasterHttpOptions(http).apply(block).build()
+    }
 }
 
 /**
@@ -1443,7 +1426,6 @@ class FeatureLayerOptions {
     var projection: Projection? = null
     var renderMode: FeatureRenderMode = immediate()
     var style: FeatureLayerStyle = FeatureLayerStyle()
-    var attribution: Attribution? = null
     var attributions: List<Attribution> = emptyList()
 
     /**
@@ -1610,15 +1592,15 @@ internal fun rememberManagedMapLayers(layers: MapLayerBuilder.() -> Unit): List<
     val rasterLayerStore = remember { RasterLayerStore() }
     val layerBuilder = MapLayerBuilder.managed(rasterLayerStore)
     layerBuilder.layers()
-    val resolvedWMSLayers =
+    val resolvedWmsLayers =
         buildMap {
-            layerBuilder.managedWMSDeclarations.forEach { declaration ->
+            layerBuilder.managedWmsDeclarations.forEach { declaration ->
                 key(declaration.key) {
-                    put(declaration.key, rememberManagedWMSLayer(declaration))
+                    put(declaration.key, rememberManagedWmsLayer(declaration))
                 }
             }
         }
-    val builtLayers = layerBuilder.build(resolvedWMSLayers)
+    val builtLayers = layerBuilder.build(resolvedWmsLayers)
     val activeRasterKeys = layerBuilder.managedRasterKeys.toSet()
     val activeRasterUpdates = layerBuilder.managedRasterUpdates.toMap()
     SideEffect {

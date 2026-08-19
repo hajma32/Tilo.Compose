@@ -108,7 +108,7 @@ private fun geometryFeatures(): List<Feature> =
     features {
         point("castle", 14.4005, 50.0909) { label = "Prague Castle" }
         point("station", 14.4361, 50.0831) { label = "Main station" }
-        line(
+        lineString(
             key = "river",
             points =
                 listOf(

@@ -121,7 +121,7 @@ private fun alignmentStyle(alignment: LabelTextAlign) =
 
 private fun styleLabRoute(): List<Feature> =
     features {
-        line(
+        lineString(
             key = "zoom-route",
             points =
                 listOf(

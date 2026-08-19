@@ -9,13 +9,15 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.feature.Feature
-import tilo.compose.core.feature.FeatureLayerStyle
 import tilo.compose.core.feature.PointIconStyle
 import tilo.compose.core.feature.PointStyle
 import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.LayerGroup
+import tilo.compose.core.layers.raster.RasterHttpRequest
+import tilo.compose.core.layers.raster.RasterHttpResponse
+import tilo.compose.core.layers.raster.RasterHttpTransport
 import tilo.compose.core.layers.raster.RasterTileBatchSummary
 import tilo.compose.core.layers.raster.RasterTileDiagnosticEvent
 import tilo.compose.core.layers.raster.RasterTileFailure
@@ -25,13 +27,16 @@ import tilo.compose.core.layers.raster.RasterTileRequestPurpose
 import tilo.compose.core.layers.raster.TileLayer
 import tilo.compose.core.layers.raster.TileRowScheme
 import tilo.compose.core.layers.raster.TileStoreTileSource
-import tilo.compose.core.layers.raster.WMSCapabilities
-import tilo.compose.core.layers.raster.WMSLayerCapabilities
+import tilo.compose.core.layers.raster.WmsCapabilities
+import tilo.compose.core.layers.raster.WmsImageFormat
+import tilo.compose.core.layers.raster.WmsLayerCapabilities
+import tilo.compose.core.layers.raster.WmsVersion
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
 import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.IdentityProjection
+import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
 import tilo.compose.render.PointIconPainterLayer
@@ -39,28 +44,44 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 class MapLayerBuilderTest {
     @Test
-    fun opacityDoesNotChangeExistingDslPositionalArguments() {
+    fun managedRasterIdentityIncludesProjectionDefinition() {
+        fun configuration(definition: String): Any {
+            val projection =
+                object : Projection {
+                    override val id: String = "CUSTOM:1"
+                    override val definition: String = definition
+                }
+            val store = RasterLayerStore()
+            try {
+                val builder = MapLayerBuilder.managed(store)
+                builder.xyzTileLayer("base", "https://example.test/{z}/{x}/{y}.png") {
+                    this.projection = projection
+                }
+                return builder.managedRasterKeys.single().configuration
+            } finally {
+                store.close()
+            }
+        }
+
+        assertNotEquals(configuration("+proj=longlat"), configuration("+proj=merc"))
+    }
+
+    @Test
+    fun layerOptionBlocksApplyPresentationSettings() {
         val builder = MapLayerBuilder()
 
-        builder.layerGroup("group", 2, true, 0.5, 2.0, null, emptyList()) {
-            featureLayer(
-                "features",
-                emptyList(),
-                3,
-                true,
-                0.75,
-                1.75,
-                null,
-                immediate(),
-                FeatureLayerStyle(),
-                null,
-                emptyList(),
-            )
+        builder.layerGroup(id = "group", zIndex = 2, minZoom = 0.5, maxZoom = 2.0) {
+            featureLayer("features", emptyList()) {
+                zIndex = 3
+                minZoom = 0.75
+                maxZoom = 1.75
+            }
         }
 
         val group = builder.build().single() as LayerGroup
@@ -82,9 +103,9 @@ class MapLayerBuilderTest {
             zIndex = 10,
             opacity = 0.5,
             minZoom = 11.0,
-            attribution = Attribution("Transport"),
+            attributions = listOf(Attribution("Transport")),
         ) {
-            featureLayer(id = "roads", features = emptyList(), zIndex = 0)
+            featureLayer(id = "roads", features = emptyList())
             layerGroup(id = "labels", zIndex = 10) {
                 featureLayer(id = "road-labels", features = emptyList())
             }
@@ -123,8 +144,9 @@ class MapLayerBuilderTest {
                 xyzTileLayer(
                     id = "base",
                     urlTemplate = "https://example.test/{z}/{x}/{y}.png",
-                    opacity = 0.4,
-                )
+                ) {
+                    opacity = 0.4
+                }
             }
 
             val group = builder.build().single() as LayerGroup
@@ -225,8 +247,8 @@ class MapLayerBuilderTest {
             val capabilitiesUrl = "https://example.test/wms"
             var loadedUrl: String? = null
             val capabilities =
-                WMSCapabilities(
-                    version = "1.3.0",
+                WmsCapabilities(
+                    version = WmsVersion.V1_3_0,
                     getMapUrl = "https://example.test/get-map",
                     formats = listOf("image/png"),
                     layers =
@@ -236,7 +258,7 @@ class MapLayerBuilderTest {
                         ),
                 )
             val builder =
-                MapLayerBuilder.managed(RasterLayerStore()) { url ->
+                MapLayerBuilder.managed(RasterLayerStore()) { url, _ ->
                     loadedUrl = url
                     capabilities
                 }
@@ -245,10 +267,11 @@ class MapLayerBuilderTest {
                 capabilitiesUrl = capabilitiesUrl,
                 layerNames = listOf("first", "second"),
                 projection = IdentityProjection,
-                tileSize = 512,
-            )
+            ) {
+                tileSize = 512
+            }
 
-            val declaration = builder.managedWMSDeclarations.single()
+            val declaration = builder.managedWmsDeclarations.single()
             val runtime = declaration.create({}, {})
             try {
                 val layer = builder.build(mapOf(declaration.key to runtime)).single() as TileLayer
@@ -258,6 +281,127 @@ class MapLayerBuilderTest {
                 assertEquals(30.0, layer.grid.worldWidth)
             } finally {
                 runtime.close()
+            }
+        }
+
+    @Test
+    fun wmsStylesMustMatchLayerNames() {
+        val error =
+            assertFailsWith<IllegalArgumentException> {
+                MapLayerBuilder().wmsTileLayer(
+                    id = "wms",
+                    capabilitiesUrl = "https://example.test/wms",
+                    layerNames = listOf("base", "labels"),
+                    projection = IdentityProjection,
+                ) {
+                    styles = listOf("default")
+                }
+            }
+
+        assertContains(error.message.orEmpty(), "one entry per layer name")
+    }
+
+    @Test
+    fun wmsPresentationRangeIsRejectedBeforeAsyncLoading() {
+        assertFailsWith<IllegalArgumentException> {
+            MapLayerBuilder().wmsTileLayer(
+                id = "wms",
+                capabilitiesUrl = "https://example.test/wms",
+                layerNames = listOf("base"),
+                projection = IdentityProjection,
+            ) {
+                minZoom = 10.0
+                maxZoom = 5.0
+            }
+        }
+    }
+
+    @Test
+    fun wmsHttpOptionsApplyToCapabilitiesAndTiles() =
+        runTest {
+            val requests = mutableListOf<RasterHttpRequest>()
+            val customTransport =
+                RasterHttpTransport { request ->
+                    requests += request
+                    if ("GetCapabilities" in request.url) {
+                        RasterHttpResponse(
+                            statusCode = 200,
+                            headers = mapOf("Content-Type" to listOf("text/xml; charset=UTF-8")),
+                            body = wmsCapabilitiesXml().encodeToByteArray(),
+                        )
+                    } else {
+                        RasterHttpResponse(statusCode = 200, body = png)
+                    }
+                }
+            val builder = MapLayerBuilder.managed(RasterLayerStore())
+            builder.wmsTileLayer(
+                id = "wms",
+                capabilitiesUrl = "https://example.test/capabilities",
+                layerNames = listOf("base", "labels"),
+                projection = IdentityProjection,
+            ) {
+                styles = listOf("default", "")
+                format = WmsImageFormat.Jpeg
+                version = WmsVersion.V1_3_0
+                maxVisibleTiles = 1
+                http {
+                    bearerToken("secret")
+                    header("X-Tenant", "maps")
+                    transport = customTransport
+                }
+            }
+
+            val declaration = builder.managedWmsDeclarations.single()
+            val runtime = declaration.create({}, {})
+            try {
+                runtime.loadTiles(testIdentityMap())
+
+                assertEquals(2, requests.size)
+                requests.forEach { request ->
+                    assertEquals("Bearer secret", request.headers["Authorization"])
+                    assertEquals("maps", request.headers["X-Tenant"])
+                }
+                val tileUrl = requests.last().url
+                assertContains(tileUrl, "VERSION=1.3.0")
+                assertContains(tileUrl, "LAYERS=base%2Clabels")
+                assertContains(tileUrl, "STYLES=default%2C")
+                assertContains(tileUrl, "FORMAT=image%2Fjpeg")
+            } finally {
+                runtime.close()
+            }
+        }
+
+    @Test
+    fun xyzHttpOptionsApplyHeadersAndCustomTransport() =
+        runTest {
+            var request: RasterHttpRequest? = null
+            val customTransport =
+                RasterHttpTransport { current ->
+                    request = current
+                    RasterHttpResponse(statusCode = 200, body = png)
+                }
+            val builder = MapLayerBuilder()
+            builder.xyzTileLayer(
+                id = "xyz",
+                urlTemplate = "https://example.test/{z}/{x}/{y}.png",
+            ) {
+                projection = IdentityProjection
+                grid = TileGrid(originX = -128.0, originY = 128.0, worldWidth = 256.0)
+                maxVisibleTiles = 1
+                http {
+                    header("X-Api-Key", "key")
+                    transport = customTransport
+                }
+            }
+
+            val layer = builder.build().single() as RasterTileLayer
+            try {
+                layer.loadTiles(testIdentityMap())
+                assertEquals("key", request?.headers?.get("X-Api-Key"))
+                assertTrue(request?.url.orEmpty().endsWith(".png"))
+                assertTrue("{" !in request?.url.orEmpty())
+            } finally {
+                layer.close()
             }
         }
 
@@ -284,7 +428,7 @@ class MapLayerBuilderTest {
                 )
             val store = RasterLayerStore()
             val builder = MapLayerBuilder.managed(store)
-            builder.rasterLayer(layer)
+            builder.layer(layer)
             store.retain(builder.managedRasterKeys)
             store.close()
 
@@ -552,8 +696,9 @@ class MapLayerBuilderTest {
         firstBuilder.xyzTileLayer(
             id = "base",
             urlTemplate = "https://example.test/{z}/{x}/{y}.png",
-            state = state,
-        )
+        ) {
+            this.state = state
+        }
         val firstLayer = firstBuilder.build().single()
         store.retain(firstBuilder.managedRasterKeys, firstBuilder.managedRasterUpdates)
         assertEquals(RasterLayerStatus.Ready, state.status)
@@ -563,8 +708,9 @@ class MapLayerBuilderTest {
         secondBuilder.xyzTileLayer(
             id = "base",
             urlTemplate = "https://example.test/{z}/{x}/{y}.png",
-            state = state,
-        )
+        ) {
+            this.state = state
+        }
         val secondLayer = secondBuilder.build().single()
         store.retain(secondBuilder.managedRasterKeys, secondBuilder.managedRasterUpdates)
 
@@ -583,8 +729,9 @@ class MapLayerBuilderTest {
         firstBuilder.xyzTileLayer(
             id = "base",
             urlTemplate = "https://first.test/{z}/{x}/{y}.png",
-            state = state,
-        )
+        ) {
+            this.state = state
+        }
         store.retain(firstBuilder.managedRasterKeys, firstBuilder.managedRasterUpdates)
         state.tileFailed(previousError)
         assertEquals(previousError, state.lastTileError)
@@ -593,8 +740,9 @@ class MapLayerBuilderTest {
         replacementBuilder.xyzTileLayer(
             id = "base",
             urlTemplate = "https://second.test/{z}/{x}/{y}.png",
-            state = state,
-        )
+        ) {
+            this.state = state
+        }
         store.retain(replacementBuilder.managedRasterKeys, replacementBuilder.managedRasterUpdates)
 
         assertEquals(RasterLayerStatus.Ready, state.status)
@@ -759,13 +907,13 @@ class MapLayerBuilderTest {
             wmsBuilder.wmsTileLayer(
                 id = "wms",
                 capabilitiesUrl = "https://example.test/wms",
-                layerName = "base",
+                layerNames = listOf("base"),
                 projection = IdentityProjection,
             )
             val wms =
-                wmsBuilder.managedWMSDeclarations
+                wmsBuilder.managedWmsDeclarations
                     .single()
-                    .key.configuration as WMSRasterConfiguration
+                    .key.configuration as WmsRasterConfiguration
 
             listOf(
                 Triple(xyz.prefetchMargin, xyz.overviewZoomOffset, xyz.overviewPrefetchMargin),
@@ -839,12 +987,46 @@ class MapLayerBuilderTest {
         }
     }
 
+    private fun testIdentityMap(): MapState =
+        MapState(
+            center = Point(0.0, 0.0),
+            zoom = 0.0,
+            viewport = Viewport(width = 256, height = 256),
+            projection = IdentityProjection,
+        )
+
+    private fun wmsCapabilitiesXml(): String =
+        """
+        <WMT_MS_Capabilities version="1.1.1">
+          <Capability>
+            <Request>
+              <GetMap>
+                <Format>image/png</Format>
+                <OnlineResource xlink:href="https://example.test/get-map"/>
+              </GetMap>
+            </Request>
+            <Layer>
+              <Layer>
+                <Name>base</Name>
+                <BoundingBox SRS="${IdentityProjection.id}"
+                  minx="-128" miny="-128" maxx="128" maxy="128"/>
+              </Layer>
+              <Layer>
+                <Name>labels</Name>
+                <BoundingBox SRS="${IdentityProjection.id}"
+                  minx="-128" miny="-128" maxx="128" maxy="128"/>
+              </Layer>
+            </Layer>
+          </Capability>
+        </WMT_MS_Capabilities>
+        """.trimIndent()
+
     private fun wmsCapabilitiesLayer(
         name: String,
         minX: Double,
         maxX: Double,
-    ): WMSLayerCapabilities =
-        WMSLayerCapabilities(
+    ): WmsLayerCapabilities =
+        WmsLayerCapabilities(
             name = name,
             crs = setOf(IdentityProjection.id),
             boundingBoxes =
@@ -858,4 +1040,8 @@ class MapLayerBuilderTest {
                         ),
                 ),
         )
+
+    private companion object {
+        val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x00)
+    }
 }

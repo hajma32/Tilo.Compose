@@ -35,7 +35,7 @@ open class RasterTileLayer(
     private val overviewZoomOffset: Int = 0,
     private val maxOverviewTiles: Int = 4,
     private val overviewPrefetchMargin: Int = 0,
-    override val attributions: List<Attribution> = emptyList(),
+    attributions: List<Attribution> = emptyList(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,
     override val opacity: Double = 1.0,
@@ -52,11 +52,17 @@ open class RasterTileLayer(
         require(minimum == null || maximum == null || minimum <= maximum) {
             "minZoom must not be greater than maxZoom"
         }
+        require(maxVisibleTiles > 0) { "maxVisibleTiles must be positive." }
+        require(prefetchMargin >= 0) { "prefetchMargin must not be negative." }
+        require(overviewZoomOffset >= 0) { "overviewZoomOffset must not be negative." }
+        require(maxOverviewTiles >= 0) { "maxOverviewTiles must not be negative." }
+        require(overviewPrefetchMargin >= 0) { "overviewPrefetchMargin must not be negative." }
     }
 
     override val projection: Projection = source.projection
     override val grid: TileGrid = source.grid
     override val sourceIdentity: Any = source
+    override val attributions: List<Attribution> = attributions.toList()
 
     private val fetcher =
         TileRequestFetcher(

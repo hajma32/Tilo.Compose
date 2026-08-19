@@ -13,6 +13,9 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import tilo.compose.core.geometry.Point
+import tilo.compose.core.layers.raster.RasterHttpConfig
+import tilo.compose.core.layers.raster.RasterHttpResponse
+import tilo.compose.core.layers.raster.RasterHttpTransport
 import tilo.compose.core.layers.raster.RasterTileLayer
 import tilo.compose.core.layers.raster.RasterTileSource
 import tilo.compose.core.layers.raster.TileLayer
@@ -29,7 +32,39 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /** Regression coverage for WMS runtimes owned by the declarative map DSL. */
-class WMSLayerCompositionRegressionTest {
+class WmsLayerCompositionRegressionTest {
+    @Test
+    fun inlineTransportLambdaDoesNotRestartRuntimeOnRecomposition() =
+        runTest {
+            val trigger = mutableStateOf(0)
+            var createCount = 0
+
+            withWMSComposition {
+                trigger.value
+                val http =
+                    RasterHttpConfig(
+                        transport = RasterHttpTransport { RasterHttpResponse(statusCode = 200) },
+                    )
+                rememberManagedWmsLayer(
+                    declaration(
+                        key = ManagedWmsLayerKey("wms", http),
+                        create = {
+                            createCount += 1
+                            rasterRuntime { byteArrayOf(1) }
+                        },
+                    ),
+                )
+            }.use { composition ->
+                runCurrent()
+                composition.recompose()
+                trigger.value += 1
+                composition.recompose()
+                runCurrent()
+
+                assertEquals(1, createCount)
+            }
+        }
+
     @Test
     fun capabilitiesFailureReachesLayerErrorCallback() =
         runTest {
@@ -38,9 +73,9 @@ class WMSLayerCompositionRegressionTest {
             var reported: Throwable? = null
             val composition =
                 withWMSComposition {
-                    rememberManagedWMSLayer(
+                    rememberManagedWmsLayer(
                         declaration(
-                            key = ManagedWMSLayerKey("wms", "failing-source"),
+                            key = ManagedWmsLayerKey("wms", "failing-source"),
                             state = state,
                             onError = { reported = it },
                             create = { throw expected },
@@ -65,9 +100,9 @@ class WMSLayerCompositionRegressionTest {
 
             withWMSComposition {
                 currentLayer =
-                    rememberManagedWMSLayer(
+                    rememberManagedWmsLayer(
                         declaration(
-                            key = ManagedWMSLayerKey("wms", "source-${state.retryKey}"),
+                            key = ManagedWmsLayerKey("wms", "source-${state.retryKey}"),
                             state = state,
                             create = {
                                 attempts += 1
@@ -110,12 +145,12 @@ class WMSLayerCompositionRegressionTest {
                     tileReadCount += 1
                     byteArrayOf(1)
                 }
-            val key = ManagedWMSLayerKey("wms", "stable-source")
+            val key = ManagedWmsLayerKey("wms", "stable-source")
             val state = RasterLayerState()
 
             withWMSComposition {
                 currentLayer =
-                    rememberManagedWMSLayer(
+                    rememberManagedWmsLayer(
                         declaration(
                             key = key,
                             visible = visible.value,
@@ -158,16 +193,16 @@ class WMSLayerCompositionRegressionTest {
             withWMSComposition {
                 val second = useSecond.value
                 currentLayer =
-                    rememberManagedWMSLayer(
+                    rememberManagedWmsLayer(
                         if (second) {
                             declaration(
-                                key = ManagedWMSLayerKey("wms", "second"),
+                                key = ManagedWmsLayerKey("wms", "second"),
                                 state = state,
                                 create = { secondRuntime },
                             )
                         } else {
                             declaration(
-                                key = ManagedWMSLayerKey("wms", "first"),
+                                key = ManagedWmsLayerKey("wms", "first"),
                                 state = state,
                                 create = {
                                     firstStarted.complete(Unit)
@@ -212,9 +247,9 @@ class WMSLayerCompositionRegressionTest {
             val loadingStarted = CompletableDeferred<Unit>()
             val composition =
                 withWMSComposition {
-                    rememberManagedWMSLayer(
+                    rememberManagedWmsLayer(
                         declaration(
-                            key = ManagedWMSLayerKey("wms", "stable-source"),
+                            key = ManagedWmsLayerKey("wms", "stable-source"),
                             state = selectedState.value,
                             create = {
                                 loadingStarted.complete(Unit)
@@ -255,9 +290,9 @@ class WMSLayerCompositionRegressionTest {
             val composition =
                 withWMSComposition {
                     currentLayer =
-                        rememberManagedWMSLayer(
+                        rememberManagedWmsLayer(
                             declaration(
-                                key = ManagedWMSLayerKey("wms", "source"),
+                                key = ManagedWmsLayerKey("wms", "source"),
                                 create = { runtime },
                             ),
                         )
@@ -275,13 +310,13 @@ class WMSLayerCompositionRegressionTest {
         }
 
     private fun declaration(
-        key: ManagedWMSLayerKey,
+        key: ManagedWmsLayerKey,
         visible: Boolean = true,
         state: RasterLayerState? = null,
         onError: ((Throwable) -> Unit)? = null,
         create: suspend ((Throwable) -> Unit) -> RasterTileLayer,
-    ): ManagedWMSLayerDeclaration =
-        ManagedWMSLayerDeclaration(
+    ): ManagedWmsLayerDeclaration =
+        ManagedWmsLayerDeclaration(
             key = key,
             id = "wms",
             zIndex = 0,

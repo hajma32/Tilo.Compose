@@ -90,7 +90,7 @@ private fun customStyleFeatures(): List<Feature> =
             labelStyle = mediumLabelStyle { color(0xFF17201C) }
         }
 
-        line(
+        lineString(
             key = "styled-route",
             points =
                 listOf(

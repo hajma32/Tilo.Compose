@@ -1,33 +1,26 @@
 package tilo.compose.core.layers.raster
 
 import tilo.compose.core.layers.Attribution
-import tilo.compose.core.projection.Epsg4326Projection
+import tilo.compose.core.projection.Epsg3857Projection
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.TileGrid
 
 /**
- * WMS tile layer (OGC WMS GetMap).
+ * XYZ (slippy-map) tile layer.
  *
- * Tiles are expected to be served in the same CRS as the map itself.
- * No client-side tile reprojection is performed.
+ * `urlTemplate` uses `{z}`, `{x}`, `{y}` placeholders, e.g.:
+ * `"https://tile.openstreetmap.org/{z}/{x}/{y}.png"`.
  *
- * `crs` is the WMS SRS/CRS value, e.g. "EPSG:5514".
- * WMS 1.3.0 uses `CRS` and honors `axisOrder`; older versions use `SRS` and
- * x/y BBOX order.
+ * For TMS row addressing set `tms = true`.
  * Prefetching and coarse overview loading are opt-in.
  * The caller owns directly constructed instances and must close them after use.
  */
-class WMSTileLayer(
+class XyzTileLayer(
     id: String,
-    projection: Projection = Epsg4326Projection,
+    projection: Projection = Epsg3857Projection,
     grid: TileGrid = TileGrid.defaultFor(projection),
-    baseUrl: String,
-    layers: String,
-    crs: String = projection.id,
-    styles: String = "",
-    format: String = "image/png",
-    version: String = "1.1.1",
-    axisOrder: WMSAxisOrder = WMSAxisOrder.forCrs(crs),
+    urlTemplate: String,
+    tms: Boolean = false,
     zIndex: Int = 0,
     visible: Boolean = true,
     minZoom: Double? = null,
@@ -38,6 +31,7 @@ class WMSTileLayer(
     maxOverviewTiles: Int = 4,
     overviewPrefetchMargin: Int = 0,
     attributions: List<Attribution> = emptyList(),
+    http: RasterHttpConfig = RasterHttpConfig(),
     fetchConfig: TileFetchConfig = TileFetchConfig(),
     onError: ((Throwable) -> Unit)? = null,
     opacity: Double = 1.0,
@@ -45,16 +39,12 @@ class WMSTileLayer(
 ) : RasterTileLayer(
         id = id,
         source =
-            WMSTileSource(
+            XyzTileSource(
+                urlTemplate = urlTemplate,
                 projection = projection,
                 grid = grid,
-                baseUrl = baseUrl,
-                layers = layers,
-                crs = crs,
-                styles = styles,
-                format = format,
-                version = version,
-                axisOrder = axisOrder,
+                tms = tms,
+                transport = http.tileHttpTransport(),
             ),
         zIndex = zIndex,
         visible = visible,

@@ -1,24 +1,20 @@
 package tilo.compose.core.layers.raster
 
-import io.ktor.client.call.body
-import io.ktor.client.statement.HttpResponse
-import io.ktor.http.isSuccess
-
-internal suspend fun HttpResponse.readTileImageBytesOrNull(): ByteArray? =
+internal fun RasterHttpResponse.readTileImageBytesOrNull(): ByteArray? =
     (readTileImageResult() as? TileReadResult.Success)?.bytes
 
-internal suspend fun HttpResponse.readTileImageResult(): TileReadResult {
-    if (status.value == 404 || status.value == 410 || status.value == 204) {
+internal fun RasterHttpResponse.readTileImageResult(): TileReadResult {
+    if (statusCode == 404 || statusCode == 410 || statusCode == 204) {
         return TileReadResult.Missing
     }
-    if (!status.isSuccess()) {
+    if (!isSuccess) {
         return TileReadResult.Failure(
             kind = RasterTileFailureKind.HttpStatus,
-            message = "Tile request returned HTTP ${status.value}",
-            httpStatus = status.value,
+            message = "Tile request returned HTTP $statusCode",
+            httpStatus = statusCode,
         )
     }
-    val bytes = body<ByteArray>()
+    val bytes = bodyBytes
     return if (bytes.isSupportedImageBytes()) {
         TileReadResult.Success(bytes)
     } else {

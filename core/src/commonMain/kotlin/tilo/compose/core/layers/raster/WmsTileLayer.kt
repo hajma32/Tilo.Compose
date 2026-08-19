@@ -30,6 +30,7 @@ class WmsTileLayer(
                 format = options.format ?: WmsImageFormat.Png,
                 version = options.version ?: WmsVersion.V1_1_1,
                 axisOrder = options.axisOrder ?: WmsAxisOrder.forCrs(projection.id),
+                transparent = options.transparent,
                 transport = options.http.tileHttpTransport(),
             ),
         zIndex = options.zIndex,

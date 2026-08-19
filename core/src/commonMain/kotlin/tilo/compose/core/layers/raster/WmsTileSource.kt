@@ -31,7 +31,11 @@ enum class WmsAxisOrder {
  * OGC WMS GetMap raster source.
  *
  * The requested `crs` must match the supplied projection. Raster reprojection is
- * intentionally left to the service or to a custom source implementation.
+ * intentionally left to the service or to a custom source implementation. The
+ * `transparent` constructor option requests transparent server background and
+ * no-data pixels; it does not apply client-side layer opacity. The default is
+ * false, and the selected image format must support transparency for the server to
+ * honour the request.
  */
 class WmsTileSource internal constructor(
     override val projection: Projection = Epsg4326Projection,
@@ -42,6 +46,7 @@ class WmsTileSource internal constructor(
     private val format: WmsImageFormat = WmsImageFormat.Png,
     private val version: WmsVersion = WmsVersion.V1_1_1,
     private val axisOrder: WmsAxisOrder = WmsAxisOrder.forCrs(projection.id),
+    private val transparent: Boolean = false,
     private val transport: TileHttpTransport,
 ) : DiagnosticRasterTileSource {
     constructor(
@@ -53,7 +58,19 @@ class WmsTileSource internal constructor(
         format: WmsImageFormat = WmsImageFormat.Png,
         version: WmsVersion = WmsVersion.V1_1_1,
         axisOrder: WmsAxisOrder = WmsAxisOrder.forCrs(projection.id),
-    ) : this(projection, grid, baseUrl, layerNames, styles, format, version, axisOrder, KtorTileHttpTransport())
+        transparent: Boolean = false,
+    ) : this(
+        projection,
+        grid,
+        baseUrl,
+        layerNames,
+        styles,
+        format,
+        version,
+        axisOrder,
+        transparent,
+        KtorTileHttpTransport(),
+    )
 
     private val layers: String
     private val styles: String
@@ -103,7 +120,7 @@ class WmsTileSource internal constructor(
                     "LAYERS" to layers,
                     "STYLES" to styles,
                     "FORMAT" to format.mimeType,
-                    "TRANSPARENT" to "FALSE",
+                    "TRANSPARENT" to if (transparent) "TRUE" else "FALSE",
                     crsParamName to projection.id,
                     "WIDTH" to grid.tileSize.toString(),
                     "HEIGHT" to grid.tileSize.toString(),

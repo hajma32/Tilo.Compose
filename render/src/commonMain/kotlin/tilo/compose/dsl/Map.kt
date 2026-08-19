@@ -728,6 +728,7 @@ class MapLayerBuilder private constructor(
                 format = options.format,
                 version = options.version,
                 axisOrder = axisOrder,
+                transparent = options.transparent,
                 tileSize = options.tileSize,
                 maxVisibleTiles = options.maxVisibleTiles,
                 prefetchMargin = options.prefetchMargin,
@@ -769,6 +770,7 @@ class MapLayerBuilder private constructor(
                                     format = configuration.format,
                                     version = configuration.version,
                                     axisOrder = configuration.axisOrder,
+                                    transparent = configuration.transparent,
                                     maxVisibleTiles = configuration.maxVisibleTiles,
                                     prefetchMargin = configuration.prefetchMargin,
                                     overviewZoomOffset = configuration.overviewZoomOffset,
@@ -1289,6 +1291,7 @@ internal data class WmsRasterConfiguration(
     val format: WmsImageFormat?,
     val version: WmsVersion?,
     val axisOrder: WmsAxisOrder,
+    val transparent: Boolean,
     val tileSize: Int,
     val maxVisibleTiles: Int,
     val prefetchMargin: Int,
@@ -1299,7 +1302,8 @@ internal data class WmsRasterConfiguration(
     val retryKey: Int,
 ) {
     override fun toString(): String =
-        "WmsRasterConfiguration(projectionId=$projectionId, version=$version, tileSize=$tileSize, " +
+        "WmsRasterConfiguration(projectionId=$projectionId, version=$version, transparent=$transparent, " +
+            "tileSize=$tileSize, " +
             "layerCount=${layerNames.size}, styleCount=${styles.size}, http=$http, retryKey=$retryKey)"
 }
 
@@ -1356,8 +1360,21 @@ class WmsTileLayerOptions {
     var format: WmsImageFormat? = null
     var version: WmsVersion? = null
     var axisOrder: WmsAxisOrder? = null
+
+    /**
+     * Requests transparent WMS background and no-data pixels from the server.
+     *
+     * This does not change client-side [opacity]. The default is false, and the
+     * selected image format must support transparency for the server to honour the request.
+     * With no explicit [format], Tilo selects an advertised transparency-capable
+     * format and fails layer creation if the service offers none. An explicit
+     * [format] overrides that automatic selection.
+     */
+    var transparent: Boolean = false
     var zIndex: Int = 0
     var visible: Boolean = true
+
+    /** Client-side alpha applied while composing the complete WMS tile layer. */
     var opacity: Double = 1.0
     var minZoom: Double? = null
     var maxZoom: Double? = null

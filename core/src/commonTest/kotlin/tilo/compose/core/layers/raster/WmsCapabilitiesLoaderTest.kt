@@ -146,11 +146,86 @@ class WmsCapabilitiesLoaderTest {
                     ),
             )
 
-        val resolvedFormat = resolveWmsImageFormat(requested = null, advertised = capabilities.formats)
+        val resolvedFormat =
+            resolveWmsImageFormat(
+                requested = null,
+                advertised = capabilities.formats,
+                requireTransparency = false,
+            )
 
         assertEquals(WmsImageFormat.Jpeg, resolvedFormat)
         assertTrue("password" !in capabilities.toString())
         assertTrue("secret" !in capabilities.toString())
+    }
+
+    @Test
+    fun transparentLayersPreferAnAdvertisedTransparentFormat() {
+        fun capabilities(formats: List<String>) =
+            WmsCapabilities(
+                version = WmsVersion.V1_1_1,
+                getMapUrl = "https://example.test/wms",
+                formats = formats,
+                layers =
+                    listOf(
+                        WmsLayerCapabilities(
+                            name = "base",
+                            boundingBoxes =
+                                mapOf(
+                                    Epsg5514Projection.id to
+                                        BoundingBox.fromExtents(-10.0, 10.0, -10.0, 10.0),
+                                ),
+                        ),
+                    ),
+            )
+
+        val resolvedFormat =
+            resolveWmsImageFormat(
+                requested = null,
+                advertised = listOf("image/jpeg", "image/png", "image/gif"),
+                requireTransparency = true,
+            )
+
+        assertEquals(WmsImageFormat.Png, resolvedFormat)
+        assertEquals(
+            WmsImageFormat.Gif,
+            resolveWmsImageFormat(
+                requested = null,
+                advertised = listOf("image/jpeg", "image/gif"),
+                requireTransparency = true,
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            resolveWmsImageFormat(
+                requested = null,
+                advertised = listOf("image/jpeg"),
+                requireTransparency = true,
+            )
+        }
+        assertEquals(
+            WmsImageFormat.Jpeg,
+            resolveWmsImageFormat(
+                requested = WmsImageFormat.Jpeg,
+                advertised = listOf("image/png"),
+                requireTransparency = true,
+            ),
+        )
+
+        capabilities(listOf("image/jpeg", "image/png"))
+            .createTileLayer(
+                id = "base",
+                layerNames = listOf("base"),
+                projection = Epsg5514Projection,
+                options = WmsLayerOptions(transparent = true),
+            ).close()
+        assertFailsWith<IllegalArgumentException> {
+            capabilities(listOf("image/jpeg"))
+                .createTileLayer(
+                    id = "base",
+                    layerNames = listOf("base"),
+                    projection = Epsg5514Projection,
+                    options = WmsLayerOptions(transparent = true),
+                )
+        }
     }
 
     @Test
@@ -205,6 +280,126 @@ class WmsCapabilitiesLoaderTest {
         val bounds = assertNotNull(capabilities.layer("world")).boundingBoxes["EPSG:4326"]
 
         assertEquals(BoundingBox.fromExtents(-10.0, 20.0, 30.0, 50.0), bounds)
+    }
+
+    /**
+     * Verifies WMS layer-property inheritance across multiple hierarchy levels.
+     *
+     * Input: a root CRS/bounds pair, a named intermediate group adding another CRS,
+     * one child inheriting both, one child overriding a bound and adding a third CRS,
+     * and a root sibling. Expected: descendants receive only ancestor metadata,
+     * local bounds replace inherited bounds for the same CRS, and child metadata
+     * never leaks back into its named parent.
+     */
+    @Test
+    fun namedLayersInheritCrsAndBoundingBoxesFromAncestors() {
+        val capabilities =
+            WmsCapabilitiesLoader().parse(
+                """
+                <WMT_MS_Capabilities version="1.1.1">
+                  <Capability>
+                    <Layer>
+                      <SRS>EPSG:4326</SRS>
+                      <BoundingBox SRS="EPSG:4326"
+                        minx="-180.0" miny="-90.0" maxx="180.0" maxy="90.0"/>
+                      <Layer>
+                        <Name>group</Name>
+                        <SRS>EPSG:5514</SRS>
+                        <BoundingBox SRS="EPSG:5514"
+                          minx="-900000.0" miny="-1200000.0" maxx="-400000.0" maxy="-900000.0"/>
+                        <Layer>
+                          <Name>inherited</Name>
+                        </Layer>
+                        <Layer>
+                          <Name>overridden</Name>
+                          <SRS>EPSG:3857</SRS>
+                          <BoundingBox SRS="EPSG:5514"
+                            minx="-800000.0" miny="-1100000.0" maxx="-500000.0" maxy="-950000.0"/>
+                          <BoundingBox SRS="EPSG:3857"
+                            minx="-1000.0" miny="-2000.0" maxx="3000.0" maxy="4000.0"/>
+                        </Layer>
+                      </Layer>
+                      <Layer>
+                        <Name>sibling</Name>
+                      </Layer>
+                    </Layer>
+                  </Capability>
+                </WMT_MS_Capabilities>
+                """.trimIndent(),
+            )
+
+        val rootBounds = BoundingBox.fromExtents(-180.0, 180.0, -90.0, 90.0)
+        val groupBounds = BoundingBox.fromExtents(-900000.0, -400000.0, -1200000.0, -900000.0)
+        val overriddenBounds = BoundingBox.fromExtents(-800000.0, -500000.0, -1100000.0, -950000.0)
+        val childOnlyBounds = BoundingBox.fromExtents(-1000.0, 3000.0, -2000.0, 4000.0)
+        val group = assertNotNull(capabilities.layer("group"))
+        val inherited = assertNotNull(capabilities.layer("inherited"))
+        val overridden = assertNotNull(capabilities.layer("overridden"))
+        val sibling = assertNotNull(capabilities.layer("sibling"))
+
+        assertEquals(
+            listOf("inherited", "overridden", "group", "sibling"),
+            capabilities.layers.map(WmsLayerCapabilities::name),
+        )
+        assertEquals(setOf("EPSG:4326", "EPSG:5514"), group.crs)
+        assertEquals(setOf("EPSG:4326", "EPSG:5514"), group.boundingBoxes.keys)
+        assertEquals(rootBounds, group.boundingBoxes["EPSG:4326"])
+        assertEquals(groupBounds, group.boundingBoxes["EPSG:5514"])
+        assertEquals(setOf("EPSG:4326", "EPSG:5514"), inherited.crs)
+        assertEquals(rootBounds, inherited.boundingBoxes["EPSG:4326"])
+        assertEquals(groupBounds, inherited.boundingBoxes["EPSG:5514"])
+        assertEquals(setOf("EPSG:4326", "EPSG:5514", "EPSG:3857"), overridden.crs)
+        assertEquals(setOf("EPSG:4326", "EPSG:5514", "EPSG:3857"), overridden.boundingBoxes.keys)
+        assertEquals(rootBounds, overridden.boundingBoxes["EPSG:4326"])
+        assertEquals(overriddenBounds, overridden.boundingBoxes["EPSG:5514"])
+        assertEquals(childOnlyBounds, overridden.boundingBoxes["EPSG:3857"])
+        assertEquals(setOf("EPSG:4326"), sibling.crs)
+        assertEquals(setOf("EPSG:4326"), sibling.boundingBoxes.keys)
+        assertEquals(rootBounds, sibling.boundingBoxes["EPSG:4326"])
+
+        val inheritedGrid = capabilities.tileGridFor(listOf("inherited"), Epsg5514Projection)
+        assertEquals(-900000.0, inheritedGrid.originX)
+        assertEquals(-900000.0, inheritedGrid.originY)
+        assertEquals(500000.0, inheritedGrid.worldWidth)
+    }
+
+    /** Verifies bounded traversal state for well-formed, deeply nested layer parser input. */
+    @Test
+    fun deeplyNestedLayerHierarchyIsParsedIteratively() {
+        val nestingDepth = 4_096
+        val xml =
+            buildString {
+                append("<WMT_MS_Capabilities version=\"1.1.1\"><Capability>")
+                repeat(nestingDepth) { level ->
+                    append("<Layer>")
+                    if (level == nestingDepth - 1) append("<Name>deep</Name>")
+                    append("<Title>Layer ")
+                    append(level)
+                    append("</Title><SRS>")
+                    val crs = if (level == 0) "EPSG:4326" else "TEST:$level"
+                    append(crs)
+                    append("</SRS>")
+                    if (level == 0) {
+                        append("<LatLonBoundingBox minx=\"-10\" miny=\"-20\" maxx=\"30\" maxy=\"40\"/>")
+                    }
+                    append("<BoundingBox SRS=\"")
+                    append(crs)
+                    append("\" minx=\"-10\" miny=\"-20\" maxx=\"30\" maxy=\"40\"/>")
+                }
+                repeat(nestingDepth) { append("</Layer>") }
+                append("</Capability></WMT_MS_Capabilities>")
+            }
+
+        val layer = assertNotNull(WmsCapabilitiesLoader().parse(xml).layer("deep"))
+
+        assertEquals(nestingDepth, layer.crs.size)
+        assertEquals(nestingDepth, layer.boundingBoxes.size)
+        assertTrue("EPSG:4326" in layer.crs)
+        assertTrue("TEST:${nestingDepth - 1}" in layer.crs)
+        assertEquals(
+            BoundingBox.fromExtents(-10.0, 30.0, -20.0, 40.0),
+            layer.boundingBoxes["EPSG:4326"],
+        )
     }
 
     /**
@@ -273,7 +468,7 @@ class WmsCapabilitiesLoaderTest {
         assertEquals("https://example.test/wms?", capabilities.getMapUrl)
         assertEquals(listOf("image/png", "image/jpeg"), capabilities.formats)
         assertEquals("Ortofoto", layer.title)
-        assertEquals(setOf("EPSG:5514"), layer.crs)
+        assertEquals(setOf("EPSG:4326", "EPSG:5514"), layer.crs)
         assertEquals(-907841.056021, grid.originX)
         assertEquals(-932111.729700, grid.originY)
         assertTrue(kotlin.math.abs(491149.385742 - grid.worldWidth) < 0.000001)

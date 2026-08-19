@@ -140,7 +140,12 @@ class WmsCapabilities internal constructor(
                 "WMS GetMap URL was not found in GetCapabilities. Pass baseUrl explicitly."
             }
         validateWmsHeaderOrigin(sourceOrigin, resolvedBaseUrl, options.http)
-        val resolvedFormat = resolveWmsImageFormat(options.format, formats)
+        val resolvedFormat =
+            resolveWmsImageFormat(
+                requested = options.format,
+                advertised = formats,
+                requireTransparency = options.transparent,
+            )
         return WmsTileLayer(
             id = id,
             baseUrl = resolvedBaseUrl,
@@ -155,14 +160,25 @@ class WmsCapabilities internal constructor(
 internal fun resolveWmsImageFormat(
     requested: WmsImageFormat?,
     advertised: List<String>,
-): WmsImageFormat =
-    requested
-        ?: advertised.firstNotNullOfOrNull { value -> WmsImageFormat.advertisedOrNull(value) }
-        ?: WmsImageFormat.Png.takeIf { advertised.isEmpty() }
+    requireTransparency: Boolean,
+): WmsImageFormat {
+    requested?.let { return it }
+    if (advertised.isEmpty()) return WmsImageFormat.Png
+
+    val supported = advertised.mapNotNull(WmsImageFormat::advertisedOrNull)
+    if (requireTransparency) {
+        supported.firstOrNull(WmsImageFormat::supportsTransparency)?.let { return it }
+        throw IllegalArgumentException(
+            "WMS does not advertise a supported transparent raster image format; " +
+                "set options.format explicitly to override automatic format selection.",
+        )
+    }
+    return supported.firstOrNull()
         ?: throw IllegalArgumentException(
             "WMS does not advertise a supported raster image format; pass options.format explicitly " +
                 "only when its payload decodes as PNG, JPEG, GIF, or WebP.",
         )
+}
 
 /** Downloads and parses the WMS capabilities metadata needed by Tilo's raster pipeline. */
 class WmsCapabilitiesLoader {
@@ -190,23 +206,80 @@ class WmsCapabilitiesLoader {
             version = version,
             getMapUrl = getMapBlock?.let(::onlineResourceHref),
             formats = getMapBlock?.let { tagTexts(it, "Format") }.orEmpty(),
-            layers = parseLayerBlocks(xml).mapNotNull { parseLayer(it, version) },
+            layers = parseLayers(xml, version),
             sourceOrigin = sourceOrigin,
         )
     }
 
-    private fun parseLayer(
-        block: String,
+    private fun parseLayers(
+        xml: String,
         version: WmsVersion,
-    ): WmsLayerCapabilities? {
-        val name = directTagText(block, "Name") ?: return null
-        val boundingBoxes = boundingBoxes(block, version)
-        return WmsLayerCapabilities(
-            name = name,
-            title = directTagText(block, "Title"),
-            crs = crsValues(block) + boundingBoxes.keys,
-            boundingBoxes = boundingBoxes,
-        )
+    ): List<WmsLayerCapabilities> =
+        buildList {
+            parseLayerNodes(xml).forEach { root ->
+                collectLayers(
+                    node = root,
+                    version = version,
+                    destination = this,
+                )
+            }
+        }
+
+    private fun collectLayers(
+        node: WmsLayerNode,
+        version: WmsVersion,
+        destination: MutableList<WmsLayerCapabilities>,
+    ) {
+        val effectiveCrs = mutableSetOf<String>()
+        val effectiveBoundingBoxes = mutableMapOf<String, BoundingBox>()
+        val frames = ArrayDeque<WmsLayerTraversalFrame>()
+        frames.addLast(WmsLayerTraversalFrame.Visit(node))
+        while (frames.isNotEmpty()) {
+            when (val frame = frames.removeLast()) {
+                is WmsLayerTraversalFrame.Visit -> {
+                    val localBoundingBoxes = boundingBoxes(frame.node.directContent, version)
+                    val previousBoundingBoxes =
+                        localBoundingBoxes.map { (crs, bounds) ->
+                            WmsBoundingBoxOverride(crs, effectiveBoundingBoxes.put(crs, bounds))
+                        }
+                    val addedCrs =
+                        buildList {
+                            (crsValues(frame.node.directContent) + localBoundingBoxes.keys).forEach { crs ->
+                                if (effectiveCrs.add(crs)) add(crs)
+                            }
+                        }
+                    val layer =
+                        tagTexts(frame.node.directContent, "Name").firstOrNull()?.let { name ->
+                            WmsLayerCapabilities(
+                                name = name,
+                                title = tagTexts(frame.node.directContent, "Title").firstOrNull(),
+                                crs = effectiveCrs,
+                                boundingBoxes = effectiveBoundingBoxes,
+                            )
+                        }
+                    frames.addLast(
+                        WmsLayerTraversalFrame.Leave(
+                            addedCrs = addedCrs,
+                            previousBoundingBoxes = previousBoundingBoxes,
+                            layer = layer,
+                        ),
+                    )
+                    frame.node.children.asReversed().forEach { child ->
+                        frames.addLast(WmsLayerTraversalFrame.Visit(child))
+                    }
+                }
+
+                is WmsLayerTraversalFrame.Leave -> {
+                    frame.layer?.let(destination::add)
+                    frame.addedCrs.forEach(effectiveCrs::remove)
+                    frame.previousBoundingBoxes.asReversed().forEach { overridden ->
+                        overridden.previous?.let { previous ->
+                            effectiveBoundingBoxes[overridden.crs] = previous
+                        } ?: effectiveBoundingBoxes.remove(overridden.crs)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -354,33 +427,102 @@ private fun capabilitiesVersion(xml: String): String? {
     return attr(rootTag, "version")
 }
 
-private fun parseLayerBlocks(xml: String): List<String> {
-    val tags = Regex("""</?Layer\b[^>]*>""").findAll(xml)
-    val stack = mutableListOf<Int>()
-    val blocks = mutableListOf<String>()
-    for (tag in tags) {
-        if (tag.value.startsWith("</")) {
-            val start = stack.removeLastOrNull() ?: continue
-            blocks += xml.substring(start, tag.range.last + 1)
-        } else if (!tag.value.endsWith("/>")) {
-            stack += tag.range.first
-        }
-    }
-    return blocks
+private data class WmsLayerNode(
+    val directContent: String,
+    val children: List<WmsLayerNode>,
+)
+
+private sealed interface WmsLayerTraversalFrame {
+    data class Visit(
+        val node: WmsLayerNode,
+    ) : WmsLayerTraversalFrame
+
+    data class Leave(
+        val addedCrs: List<String>,
+        val previousBoundingBoxes: List<WmsBoundingBoxOverride>,
+        val layer: WmsLayerCapabilities?,
+    ) : WmsLayerTraversalFrame
 }
 
-private fun crsValues(block: String): Set<String> =
-    (directTagTexts(block, "SRS") + directTagTexts(block, "CRS"))
+private data class WmsBoundingBoxOverride(
+    val crs: String,
+    val previous: BoundingBox?,
+)
+
+private data class ParsedWmsLayerNode(
+    val node: WmsLayerNode,
+    val startIndex: Int,
+    val endIndexExclusive: Int,
+)
+
+private data class OpenWmsLayer(
+    val startIndex: Int,
+    val contentStartIndex: Int,
+    val children: MutableList<ParsedWmsLayerNode> = mutableListOf(),
+)
+
+private fun parseLayerNodes(xml: String): List<WmsLayerNode> {
+    val tags = Regex("""</?Layer\b[^>]*>""").findAll(xml)
+    val stack = mutableListOf<OpenWmsLayer>()
+    val roots = mutableListOf<ParsedWmsLayerNode>()
+    for (tag in tags) {
+        if (tag.value.startsWith("</")) {
+            val open = stack.removeLastOrNull() ?: continue
+            val parsed =
+                ParsedWmsLayerNode(
+                    node =
+                        WmsLayerNode(
+                            directContent =
+                                directLayerContent(
+                                    xml = xml,
+                                    contentStartIndex = open.contentStartIndex,
+                                    contentEndIndex = tag.range.first,
+                                    children = open.children,
+                                ),
+                            children = open.children.map(ParsedWmsLayerNode::node),
+                        ),
+                    startIndex = open.startIndex,
+                    endIndexExclusive = tag.range.last + 1,
+                )
+            stack.lastOrNull()?.children?.add(parsed) ?: roots.add(parsed)
+        } else if (!tag.value.endsWith("/>")) {
+            stack +=
+                OpenWmsLayer(
+                    startIndex = tag.range.first,
+                    contentStartIndex = tag.range.last + 1,
+                )
+        }
+    }
+    return roots.map(ParsedWmsLayerNode::node)
+}
+
+private fun directLayerContent(
+    xml: String,
+    contentStartIndex: Int,
+    contentEndIndex: Int,
+    children: List<ParsedWmsLayerNode>,
+): String =
+    buildString {
+        var nextIndex = contentStartIndex
+        children.forEach { child ->
+            append(xml, nextIndex, child.startIndex)
+            nextIndex = child.endIndexExclusive
+        }
+        append(xml, nextIndex, contentEndIndex)
+    }
+
+private fun crsValues(content: String): Set<String> =
+    (tagTexts(content, "SRS") + tagTexts(content, "CRS"))
         .flatMap { it.split(Regex("""\s+""")) }
         .filter { it.isNotBlank() }
         .toSet()
 
 private fun boundingBoxes(
-    block: String,
+    content: String,
     version: WmsVersion,
 ): Map<String, BoundingBox> =
     Regex("""<BoundingBox\b[^>]*>""")
-        .findAll(block)
+        .findAll(content)
         .mapNotNull { match ->
             val attributes = attrs(match.value)
             val crs = attributes["CRS"] ?: attributes["SRS"] ?: return@mapNotNull null
@@ -419,32 +561,6 @@ private fun tagTexts(
         .map { it.groupValues[1].trim().xmlUnescaped() }
         .filter { it.isNotBlank() }
         .toList()
-
-private fun directTagText(
-    block: String,
-    tag: String,
-): String? = directTagTexts(block, tag).firstOrNull()
-
-private fun directTagTexts(
-    block: String,
-    tag: String,
-): List<String> {
-    val content =
-        block
-            .substringAfter('>', missingDelimiterValue = block)
-            .substringBeforeLast("</Layer>", missingDelimiterValue = block)
-    val nestedRanges =
-        parseLayerBlocks(content).map { nested ->
-            val start = content.indexOf(nested)
-            start until (start + nested.length)
-        }
-    return Regex("""<$tag\b[^>]*>([\s\S]*?)</$tag>""")
-        .findAll(content)
-        .filter { match -> nestedRanges.none { range -> match.range.first in range } }
-        .map { it.groupValues[1].trim().xmlUnescaped() }
-        .filter { it.isNotBlank() }
-        .toList()
-}
 
 private fun attr(
     xml: String,

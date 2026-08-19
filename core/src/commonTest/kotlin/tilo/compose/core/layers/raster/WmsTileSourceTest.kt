@@ -79,6 +79,22 @@ class WmsTileSourceTest {
         assertEquals("-10.0,30.0,20.0,50.0", parameters["BBOX"])
     }
 
+    /** Verifies typed control of the WMS `TRANSPARENT` GetMap parameter. */
+    @Test
+    fun transparencyUsesWmsBooleanValues() {
+        val opaque = Url(source(version = WmsVersion.V1_3_0).cacheKey(request)).parameters
+        val transparent =
+            Url(
+                source(
+                    version = WmsVersion.V1_3_0,
+                    transparent = true,
+                ).cacheKey(request),
+            ).parameters
+
+        assertEquals("FALSE", opaque["TRANSPARENT"])
+        assertEquals("TRUE", transparent["TRANSPARENT"])
+    }
+
     /**
      * Verifies explicit axis-order override for non-standard server behavior.
      *
@@ -125,6 +141,7 @@ class WmsTileSourceTest {
     private fun source(
         version: WmsVersion,
         axisOrder: WmsAxisOrder = WmsAxisOrder.forCrs(Epsg4326Projection.id),
+        transparent: Boolean = false,
     ): WmsTileSource =
         WmsTileSource(
             projection = Epsg4326Projection,
@@ -132,5 +149,6 @@ class WmsTileSourceTest {
             layerNames = listOf("base"),
             version = version,
             axisOrder = axisOrder,
+            transparent = transparent,
         )
 }

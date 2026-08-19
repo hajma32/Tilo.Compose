@@ -73,6 +73,26 @@ class MapLayerBuilderTest {
     }
 
     @Test
+    fun managedWmsIdentityIncludesTransparency() {
+        fun configuration(transparent: Boolean): Any {
+            val builder = MapLayerBuilder()
+            builder.wmsTileLayer(
+                id = "wms",
+                capabilitiesUrl = "https://example.test/wms",
+                layerNames = listOf("base"),
+                projection = IdentityProjection,
+            ) {
+                this.transparent = transparent
+            }
+            return builder.managedWmsDeclarations
+                .single()
+                .key.configuration
+        }
+
+        assertNotEquals(configuration(false), configuration(true))
+    }
+
+    @Test
     fun layerOptionBlocksApplyPresentationSettings() {
         val builder = MapLayerBuilder()
 
@@ -341,8 +361,9 @@ class MapLayerBuilderTest {
                 projection = IdentityProjection,
             ) {
                 styles = listOf("default", "")
-                format = WmsImageFormat.Jpeg
+                format = WmsImageFormat.Png
                 version = WmsVersion.V1_3_0
+                transparent = true
                 maxVisibleTiles = 1
                 http {
                     bearerToken("secret")
@@ -365,7 +386,8 @@ class MapLayerBuilderTest {
                 assertContains(tileUrl, "VERSION=1.3.0")
                 assertContains(tileUrl, "LAYERS=base%2Clabels")
                 assertContains(tileUrl, "STYLES=default%2C")
-                assertContains(tileUrl, "FORMAT=image%2Fjpeg")
+                assertContains(tileUrl, "FORMAT=image%2Fpng")
+                assertContains(tileUrl, "TRANSPARENT=TRUE")
             } finally {
                 runtime.close()
             }

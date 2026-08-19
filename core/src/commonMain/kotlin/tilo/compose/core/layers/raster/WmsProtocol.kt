@@ -35,9 +35,17 @@ value class WmsImageFormat(
         ) { "WMS image format must be PNG, JPEG, GIF, or WebP." }
     }
 
+    internal fun supportsTransparency(): Boolean =
+        ContentType
+            .parse(mimeType)
+            .withoutParameters()
+            .toString()
+            .lowercase() in transparentBaseMimeTypes
+
     companion object {
         private val supportedBaseMimeTypes =
             setOf("image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp")
+        private val transparentBaseMimeTypes = setOf("image/png", "image/gif", "image/webp")
 
         val Png = WmsImageFormat("image/png")
         val Jpeg = WmsImageFormat("image/jpeg")
@@ -56,12 +64,25 @@ value class WmsImageFormat(
  * entry per requested layer. Blank entries select the corresponding default style.
  * The layer and style lists are serialized only inside the WMS source. A null
  * `version` uses the capabilities version, or WMS 1.1.1 for a direct layer.
+ * `transparent` requests transparent WMS background and no-data pixels; it does
+ * not change the client-side layer `opacity`. The default is false, and the
+ * server can honour the request only for an image format that supports transparency.
  */
 class WmsLayerOptions(
     styles: List<String> = emptyList(),
     val format: WmsImageFormat? = null,
     val version: WmsVersion? = null,
     val axisOrder: WmsAxisOrder? = null,
+    /**
+     * Requests transparent WMS background and no-data pixels from the server.
+     *
+     * This does not change client-side `opacity`. The default is false, and the
+     * selected image format must support transparency for the server to honour the request.
+     * For a capabilities-backed layer with no explicit `format`, Tilo selects an
+     * advertised transparency-capable format and fails if the service offers none.
+     * An explicit `format` overrides that automatic selection.
+     */
+    val transparent: Boolean = false,
     val zIndex: Int = 0,
     val visible: Boolean = true,
     val minZoom: Double? = null,
@@ -75,6 +96,7 @@ class WmsLayerOptions(
     val http: RasterHttpConfig = RasterHttpConfig(),
     val fetchConfig: TileFetchConfig = TileFetchConfig(),
     val onError: ((Throwable) -> Unit)? = null,
+    /** Client-side alpha applied while composing the complete WMS tile layer. */
     val opacity: Double = 1.0,
     val onDiagnostic: (suspend (RasterTileDiagnosticEvent) -> Unit)? = null,
 ) {
@@ -103,6 +125,7 @@ class WmsLayerOptions(
             format = resolvedFormat,
             version = version ?: resolvedVersion,
             axisOrder = axisOrder,
+            transparent = transparent,
             zIndex = zIndex,
             visible = visible,
             minZoom = minZoom,

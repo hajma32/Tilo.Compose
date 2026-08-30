@@ -261,9 +261,13 @@ subprojects {
                     url = testRepository.get().asFile.toURI()
                 }
             }
-            tasks.matching { it.name == "publishAllPublicationsToTiloTestRepository" }.configureEach {
-                mustRunAfter(":cleanTiloTestRepository")
-            }
+            tasks
+                .matching {
+                    it.name == "publishAllPublicationsToTiloTestRepository" ||
+                        it.name.endsWith("PublicationToTiloTestRepository")
+                }.configureEach {
+                    mustRunAfter(":cleanTiloTestRepository")
+                }
         }
 
         tasks.withType<Jar>().configureEach {

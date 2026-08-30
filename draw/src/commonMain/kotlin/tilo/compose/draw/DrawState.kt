@@ -1,10 +1,10 @@
 package tilo.compose.draw
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import tilo.compose.core.feature.Feature
 import tilo.compose.core.geometry.Point
@@ -13,13 +13,13 @@ import tilo.compose.core.geometry.Point
  * Observable owner of an interactive drawing draft and its undo/redo history.
  *
  * Feed map taps to [onMapTap] while [isDrawing] is true and render [draftFeatures] through
- * `drawLayer`. Saving invokes the application callback and clears the current draft.
+ * `drawLayer`. [save] returns the finished feature and clears the current draft.
  */
+@Stable
+@ExperimentalTiloDrawApi
 class DrawState internal constructor(
     initialMode: DrawMode = DrawMode.Point,
     private val featureFactory: DrawingFeatureFactory,
-    private val onSave: (Feature) -> Unit = {},
-    private val onChange: (DrawState) -> Unit = {},
 ) {
     var isDrawing: Boolean by mutableStateOf(false)
         private set
@@ -30,14 +30,16 @@ class DrawState internal constructor(
     var draftPoints: List<Point> by mutableStateOf(emptyList())
         private set
 
-    var revision: Int by mutableStateOf(0)
-        private set
-
     private var undoStack: List<List<Point>> by mutableStateOf(emptyList())
     private var redoStack: List<List<Point>> by mutableStateOf(emptyList())
 
     val canSave: Boolean
-        get() = savedFeature() != null
+        get() =
+            when (mode) {
+                DrawMode.Point -> draftPoints.isNotEmpty()
+                DrawMode.Line -> draftPoints.size >= 2
+                DrawMode.Polygon -> draftPoints.size >= 3
+            }
 
     val canUndo: Boolean
         get() = undoStack.isNotEmpty()
@@ -48,28 +50,16 @@ class DrawState internal constructor(
     val draftFeatures: List<Feature>
         get() = featureFactory.draftFeatures(mode, draftPoints)
 
-    fun toggleDrawing() {
-        isDrawing = !isDrawing
-        if (!isDrawing) {
-            clearDraftHistory()
-        }
-        invalidate()
-    }
-
     fun startDrawing() {
         if (!isDrawing) {
             isDrawing = true
-            invalidate()
         }
     }
 
     fun stopDrawing(clearDraft: Boolean = true) {
-        if (isDrawing || clearDraft && draftPoints.isNotEmpty()) {
-            isDrawing = false
-            if (clearDraft) {
-                clearDraftHistory()
-            }
-            invalidate()
+        isDrawing = false
+        if (clearDraft) {
+            clearDraftHistory()
         }
     }
 
@@ -77,7 +67,6 @@ class DrawState internal constructor(
         if (this.mode == mode) return
         this.mode = mode
         clearDraftHistory()
-        invalidate()
     }
 
     fun onMapTap(point: Point) {
@@ -91,22 +80,19 @@ class DrawState internal constructor(
                 -> draftPoints + point
             }
         redoStack = emptyList()
-        invalidate()
     }
 
-    fun clear() {
+    fun clearDraft() {
         if (draftPoints.isEmpty()) return
         pushUndo()
         draftPoints = emptyList()
         redoStack = emptyList()
-        invalidate()
     }
 
-    fun save(): Feature? {
-        val feature = savedFeature() ?: return null
-        onSave(feature)
+    fun save(key: String): Feature? {
+        require(key.isNotBlank()) { "Saved drawing key must not be blank" }
+        val feature = featureFactory.drawingFeature(key = key, mode = mode, points = draftPoints) ?: return null
         clearDraftHistory()
-        invalidate()
         return feature
     }
 
@@ -115,7 +101,6 @@ class DrawState internal constructor(
         undoStack = undoStack.dropLast(1)
         redoStack = redoStack + listOf(draftPoints)
         draftPoints = previous
-        invalidate()
         return true
     }
 
@@ -124,20 +109,7 @@ class DrawState internal constructor(
         redoStack = redoStack.dropLast(1)
         undoStack = undoStack + listOf(draftPoints)
         draftPoints = next
-        invalidate()
         return true
-    }
-
-    private fun savedFeature(): Feature? =
-        featureFactory.drawingFeature(
-            key = "drawing-${revision + 1}",
-            mode = mode,
-            points = draftPoints,
-        )
-
-    private fun invalidate() {
-        revision++
-        onChange(this)
     }
 
     private fun pushUndo() {
@@ -157,41 +129,30 @@ class DrawState internal constructor(
  * The returned state is independent of Compose lifecycle management; the caller owns and
  * retains it for as long as the drawing session should survive.
  */
+@ExperimentalTiloDrawApi
 fun createDrawState(
     initialMode: DrawMode = DrawMode.Point,
     style: DrawStyle = DefaultDrawStyle(),
-    onSave: (Feature) -> Unit = {},
-    onChange: (DrawState) -> Unit = {},
 ): DrawState =
     DrawState(
         initialMode = initialMode,
         featureFactory = DrawingFeatureFactory(style),
-        onSave = onSave,
-        onChange = onChange,
     )
 
 /**
  * Remembers drawing state for [initialMode] and [style] in the current composition.
  *
- * Updated callbacks are observed without discarding draft history. Changing the initial mode
- * or style intentionally creates a fresh state.
+ * Changing the initial mode or style intentionally creates a fresh state.
  */
 @Composable
+@ExperimentalTiloDrawApi
 fun rememberDrawState(
     initialMode: DrawMode = DrawMode.Point,
     style: DrawStyle = DefaultDrawStyle(),
-    onSave: (Feature) -> Unit = {},
-    onChange: (DrawState) -> Unit = {},
-): DrawState {
-    val currentOnSave by rememberUpdatedState(onSave)
-    val currentOnChange by rememberUpdatedState(onChange)
-
-    return remember(initialMode, style) {
+): DrawState =
+    remember(initialMode, style) {
         DrawState(
             initialMode = initialMode,
             featureFactory = DrawingFeatureFactory(style),
-            onSave = { feature -> currentOnSave(feature) },
-            onChange = { state -> currentOnChange(state) },
         )
     }
-}

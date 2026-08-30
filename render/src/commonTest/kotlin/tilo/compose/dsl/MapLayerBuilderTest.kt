@@ -4,6 +4,7 @@ package tilo.compose.dsl
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -15,6 +16,7 @@ import tilo.compose.core.geometry.BoundingBox
 import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.LayerGroup
+import tilo.compose.core.layers.raster.RasterHttpConfig
 import tilo.compose.core.layers.raster.RasterHttpRequest
 import tilo.compose.core.layers.raster.RasterHttpResponse
 import tilo.compose.core.layers.raster.RasterHttpTransport
@@ -31,6 +33,7 @@ import tilo.compose.core.layers.raster.WmsCapabilities
 import tilo.compose.core.layers.raster.WmsImageFormat
 import tilo.compose.core.layers.raster.WmsLayerCapabilities
 import tilo.compose.core.layers.raster.WmsVersion
+import tilo.compose.core.layers.raster.XyzTileSource
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.Viewport
@@ -39,11 +42,13 @@ import tilo.compose.core.projection.IdentityProjection
 import tilo.compose.core.projection.Projection
 import tilo.compose.core.tile.TileCoordinate
 import tilo.compose.core.tile.TileGrid
+import tilo.compose.core.tile.TileRequest
 import tilo.compose.render.PointIconPainterLayer
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
@@ -93,10 +98,79 @@ class MapLayerBuilderTest {
     }
 
     @Test
+    fun wmsCrossOriginHeaderPolicyIsResolvedIndependentlyOfBlockOrder() {
+        fun configuration(configureHttpFirst: Boolean): RasterHttpConfig {
+            val builder = MapLayerBuilder()
+            builder.wmsTileLayer(
+                id = "wms",
+                capabilitiesUrl = "https://capabilities.test/wms",
+                layerNames = listOf("base"),
+                projection = IdentityProjection,
+            ) {
+                if (configureHttpFirst) {
+                    http { header("Authorization", "Bearer secret") }
+                    allowCrossOriginHeaders = true
+                } else {
+                    allowCrossOriginHeaders = true
+                    http { header("Authorization", "Bearer secret") }
+                }
+            }
+            return (
+                builder.managedWmsDeclarations
+                    .single()
+                    .key.configuration as WmsRasterConfiguration
+            ).http
+        }
+
+        val httpFirst = configuration(configureHttpFirst = true)
+        val policyFirst = configuration(configureHttpFirst = false)
+        assertEquals(httpFirst, policyFirst)
+        assertEquals(true, httpFirst.allowCrossOriginHeaders)
+        assertEquals("Bearer secret", httpFirst.headers["Authorization"])
+    }
+
+    @Test
+    fun rasterHttpBlocksPreserveTransportIdentityIndependentlyOfOrder() {
+        val transport = RasterHttpTransport { RasterHttpResponse(statusCode = 200) }
+
+        fun configuration(keyFirst: Boolean): RasterHttpConfig {
+            val builder = MapLayerBuilder()
+            builder.wmsTileLayer(
+                id = "wms",
+                capabilitiesUrl = "https://example.test/wms",
+                layerNames = listOf("base"),
+                projection = IdentityProjection,
+            ) {
+                if (keyFirst) {
+                    http { transportKey = "session-42" }
+                    http { this.transport = transport }
+                } else {
+                    http { this.transport = transport }
+                    http { transportKey = "session-42" }
+                }
+            }
+            return (
+                builder.managedWmsDeclarations
+                    .single()
+                    .key.configuration as WmsRasterConfiguration
+            ).http
+        }
+
+        val keyFirst = configuration(keyFirst = true)
+        val transportFirst = configuration(keyFirst = false)
+        assertEquals(keyFirst, transportFirst)
+        assertEquals("session-42", keyFirst.transportKey)
+        assertEquals(transport, keyFirst.transport)
+    }
+
+    @Test
     fun layerOptionBlocksApplyPresentationSettings() {
         val builder = MapLayerBuilder()
 
-        builder.layerGroup(id = "group", zIndex = 2, minZoom = 0.5, maxZoom = 2.0) {
+        builder.layerGroup(
+            id = "group",
+            options = LayerGroupOptions(zIndex = 2, minZoom = 0.5, maxZoom = 2.0),
+        ) {
             featureLayer("features", emptyList()) {
                 zIndex = 3
                 minZoom = 0.75
@@ -117,19 +191,24 @@ class MapLayerBuilderTest {
     @Test
     fun layerGroupBuildsNestedMixedLayerTree() {
         val builder = MapLayerBuilder()
+        val attributions = mutableListOf(Attribution("Transport"))
 
         builder.layerGroup(
             id = "transport",
-            zIndex = 10,
-            opacity = 0.5,
-            minZoom = 11.0,
-            attributions = listOf(Attribution("Transport")),
+            options =
+                LayerGroupOptions(
+                    zIndex = 10,
+                    opacity = 0.5,
+                    minZoom = 11.0,
+                    attributions = attributions,
+                ),
         ) {
             featureLayer(id = "roads", features = emptyList())
-            layerGroup(id = "labels", zIndex = 10) {
+            layerGroup(id = "labels", options = LayerGroupOptions(zIndex = 10)) {
                 featureLayer(id = "road-labels", features = emptyList())
             }
         }
+        attributions += Attribution("Late mutation")
 
         val group = builder.build().single() as LayerGroup
         assertEquals("transport", group.id)
@@ -142,6 +221,12 @@ class MapLayerBuilderTest {
             listOf("road-labels"),
             (group.children.last() as LayerGroup).children.map { it.id },
         )
+    }
+
+    @Test
+    fun layerGroupOptionsRejectInvalidPresentation() {
+        assertFailsWith<IllegalArgumentException> { LayerGroupOptions(opacity = 1.1) }
+        assertFailsWith<IllegalArgumentException> { LayerGroupOptions(minZoom = 2.0, maxZoom = 1.0) }
     }
 
     @Test
@@ -160,7 +245,7 @@ class MapLayerBuilderTest {
         val store = RasterLayerStore()
         try {
             val builder = MapLayerBuilder.managed(store)
-            builder.layerGroup(id = "base-maps", opacity = 0.5) {
+            builder.layerGroup(id = "base-maps", options = LayerGroupOptions(opacity = 0.5)) {
                 xyzTileLayer(
                     id = "base",
                     urlTemplate = "https://example.test/{z}/{x}/{y}.png",
@@ -427,6 +512,41 @@ class MapLayerBuilderTest {
             }
         }
 
+    @Test
+    fun xyzSchemeUsesTypedTmsRowAddressing() {
+        val grid =
+            TileGrid(
+                originX = -128.0,
+                originY = 128.0,
+                worldWidth = 256.0,
+                nTilesX0 = 2,
+                nTilesY0 = 2,
+            )
+        val builder = MapLayerBuilder()
+        builder.xyzTileLayer(
+            id = "tms",
+            urlTemplate = "https://example.test/{z}/{x}/{y}.png",
+        ) {
+            projection = IdentityProjection
+            this.grid = grid
+            scheme = TileRowScheme.TMS
+        }
+
+        val layer = builder.build().single() as RasterTileLayer
+        try {
+            val source = layer.sourceIdentity as XyzTileSource
+            val request =
+                TileRequest(
+                    coordinate = TileCoordinate(z = 0, x = 0, y = 0),
+                    bounds = grid.tileBounds(x = 0, y = 0, zoom = 0),
+                )
+
+            assertEquals("https://example.test/0/0/1.png", source.cacheKey(request))
+        } finally {
+            layer.close()
+        }
+    }
+
     /**
      * Verifies that the advanced pre-built-layer path borrows its raster runtime.
      *
@@ -558,12 +678,13 @@ class MapLayerBuilderTest {
                 projection = IdentityProjection,
                 grid = grid,
                 readTile = readTile,
-                scheme = TileRowScheme.XYZ,
-                maxVisibleTiles = 1,
-                prefetchMargin = 0,
-                state = state,
-                onError = { firstReports += 1 },
-            )
+            ) {
+                scheme = TileRowScheme.XYZ
+                maxVisibleTiles = 1
+                prefetchMargin = 0
+                this.state = state
+                onError = { firstReports += 1 }
+            }
             val firstLayer = firstBuilder.build().single() as TileLayer
             store.retain(firstBuilder.managedRasterKeys, firstBuilder.managedRasterUpdates)
             assertEquals(RasterLayerStatus.Ready, state.status)
@@ -578,7 +699,7 @@ class MapLayerBuilderTest {
             firstLayer.loadTiles(map)
             assertTrue(firstReports > 0)
             assertEquals(RasterLayerStatus.Ready, state.status)
-            assertEquals(expectedError, state.lastTileError)
+            assertEquals(expectedError, state.diagnostics.lastFailure?.cause)
             val firstReportCount = firstReports
 
             val secondBuilder = MapLayerBuilder.managed(store)
@@ -588,12 +709,13 @@ class MapLayerBuilderTest {
                 projection = IdentityProjection,
                 grid = grid,
                 readTile = readTile,
-                scheme = TileRowScheme.XYZ,
-                maxVisibleTiles = 1,
-                prefetchMargin = 0,
-                state = state,
-                onError = { secondReports += 1 },
-            )
+            ) {
+                scheme = TileRowScheme.XYZ
+                maxVisibleTiles = 1
+                prefetchMargin = 0
+                this.state = state
+                onError = { secondReports += 1 }
+            }
             val secondLayer = secondBuilder.build().single() as TileLayer
             store.retain(secondBuilder.managedRasterKeys, secondBuilder.managedRasterUpdates)
             secondLayer.loadTiles(map)
@@ -637,9 +759,7 @@ class MapLayerBuilderTest {
             assertEquals(RasterLayerAvailability.Offline, networkState.availability)
             assertEquals(RasterTileFailureKind.NetworkUnavailable, networkState.diagnostics.lastFailure?.kind)
             assertEquals(1, networkState.diagnostics.failed)
-            assertEquals(networkError, networkState.lastTileError)
-
-            networkState.clearTileError()
+            assertEquals(networkError, networkState.diagnostics.lastFailure?.cause)
 
             networkDiagnostics.onDiagnostic(
                 RasterTileDiagnosticEvent.BatchCompleted(
@@ -647,7 +767,7 @@ class MapLayerBuilderTest {
                 ),
             )
             assertEquals(RasterLayerAvailability.Available, networkState.availability)
-            assertEquals(null, networkState.lastTileError)
+            assertEquals(networkError, networkState.diagnostics.lastFailure?.cause)
 
             networkDiagnostics.onDiagnostic(
                 RasterTileDiagnosticEvent.BatchCompleted(
@@ -678,6 +798,38 @@ class MapLayerBuilderTest {
                 ),
             )
             assertEquals(RasterLayerAvailability.Empty, localState.availability)
+        }
+
+    @Test
+    fun rasterFailureIsPublishedBeforeApplicationOnError() =
+        runTest {
+            val store = RasterLayerStore()
+            val state = RasterLayerState()
+            val expectedError = IllegalStateException("reader failed")
+            var failureObservedByCallback: RasterTileFailure? = null
+            try {
+                val builder = MapLayerBuilder.managed(store)
+                builder.tileStoreLayer(
+                    id = "offline",
+                    projection = IdentityProjection,
+                    grid = TileGrid(originX = -128.0, originY = 128.0, worldWidth = 256.0),
+                    readTile = { throw expectedError },
+                ) {
+                    scheme = TileRowScheme.XYZ
+                    maxVisibleTiles = 1
+                    this.state = state
+                    onError = { failureObservedByCallback = state.diagnostics.lastFailure }
+                }
+                val layer = builder.build().single() as TileLayer
+                store.retain(builder.managedRasterKeys, builder.managedRasterUpdates)
+
+                layer.loadTiles(testIdentityMap())
+
+                assertEquals(expectedError, failureObservedByCallback?.cause)
+                assertEquals(RasterTileFailureKind.Source, failureObservedByCallback?.kind)
+            } finally {
+                store.close()
+            }
         }
 
     @Test
@@ -743,7 +895,7 @@ class MapLayerBuilderTest {
     }
 
     @Test
-    fun xyzSourceReplacementClearsPreviousTileError() {
+    fun xyzSourceReplacementClearsPreviousDiagnostics() {
         val store = RasterLayerStore()
         val state = RasterLayerState()
         val previousError = IllegalStateException("old source failed")
@@ -755,8 +907,21 @@ class MapLayerBuilderTest {
             this.state = state
         }
         store.retain(firstBuilder.managedRasterKeys, firstBuilder.managedRasterUpdates)
-        state.tileFailed(previousError)
-        assertEquals(previousError, state.lastTileError)
+        state.publishDiagnostics(
+            value =
+                RasterLayerDiagnostics(
+                    failed = 1,
+                    lastFailure =
+                        RasterTileFailure(
+                            kind = RasterTileFailureKind.NetworkUnavailable,
+                            coordinate = TileCoordinate(x = 0, y = 0, z = 0),
+                            message = previousError.message.orEmpty(),
+                            cause = previousError,
+                        ),
+                ),
+            availability = RasterLayerAvailability.Offline,
+        )
+        assertEquals(previousError, state.diagnostics.lastFailure?.cause)
 
         val replacementBuilder = MapLayerBuilder.managed(store)
         replacementBuilder.xyzTileLayer(
@@ -768,7 +933,8 @@ class MapLayerBuilderTest {
         store.retain(replacementBuilder.managedRasterKeys, replacementBuilder.managedRasterUpdates)
 
         assertEquals(RasterLayerStatus.Ready, state.status)
-        assertEquals(null, state.lastTileError)
+        assertEquals(RasterLayerDiagnostics(), state.diagnostics)
+        assertEquals(RasterLayerAvailability.Unknown, state.availability)
         store.close()
     }
 
@@ -786,9 +952,88 @@ class MapLayerBuilderTest {
         diagnostics.tileFailed(lateError)
 
         assertEquals(RasterLayerStatus.Idle, state.status)
-        assertEquals(firstError, state.lastTileError)
         assertEquals(1, reports)
     }
+
+    @Test
+    fun errorCallbacksRunOutsideLifecycleLockAndRetirementSuppressesNewCallbacks() =
+        runTest {
+            val lock = TrackingRasterDiagnosticsLock()
+            var callbacks = 0
+            val diagnostics =
+                MutableRasterLayerDiagnostics(
+                    state = null,
+                    onError = {
+                        assertFalse(lock.isHeld, "application callbacks must run outside the lifecycle lock")
+                        callbacks += 1
+                    },
+                    localSource = false,
+                    lock = lock,
+                )
+            diagnostics.ready()
+            diagnostics.tileFailed(IllegalStateException("tile callback"))
+            diagnostics.initializationFailed(IllegalStateException("initialization callback"))
+            diagnostics.decodeFailed(
+                failure =
+                    RasterTileFailure(
+                        kind = RasterTileFailureKind.Decode,
+                        coordinate = TileCoordinate(0, 0, 0),
+                        message = "decode callback",
+                        cause = IllegalStateException("decode callback"),
+                    ),
+                affectsAvailability = true,
+            )
+            assertEquals(3, callbacks)
+
+            diagnostics.retire()
+            diagnostics.tileFailed(IllegalStateException("retired callback"))
+            assertEquals(3, callbacks)
+        }
+
+    @Test
+    fun retirementSuppressesDecodeFailureWaitingToDispatch() =
+        runTest {
+            val state = RasterLayerState()
+            val failureCause = IllegalStateException("late decode")
+            val dispatchReached = CompletableDeferred<Unit>()
+            val dispatchRelease = CompletableDeferred<Unit>()
+            var reports = 0
+            val diagnostics =
+                MutableRasterLayerDiagnostics(
+                    state = state,
+                    onError = { reports += 1 },
+                    localSource = false,
+                    beforeDispatch = {
+                        dispatchReached.complete(Unit)
+                        dispatchRelease.await()
+                    },
+                )
+            diagnostics.ready()
+
+            val decodeJob =
+                launch {
+                    diagnostics.decodeFailed(
+                        failure =
+                            RasterTileFailure(
+                                kind = RasterTileFailureKind.Decode,
+                                coordinate = TileCoordinate(0, 0, 0),
+                                message = failureCause.message.orEmpty(),
+                                cause = failureCause,
+                            ),
+                        affectsAvailability = true,
+                    )
+                }
+            dispatchReached.await()
+
+            diagnostics.retire()
+            dispatchRelease.complete(Unit)
+            decodeJob.join()
+
+            assertEquals(RasterLayerStatus.Idle, state.status)
+            assertEquals(RasterLayerDiagnostics(), state.diagnostics)
+            assertEquals(RasterLayerAvailability.Unknown, state.availability)
+            assertEquals(0, reports)
+        }
 
     /**
      * Verifies reuse of a managed raster runtime and its byte cache across equivalent builders.
@@ -819,8 +1064,9 @@ class MapLayerBuilderTest {
                 projection = IdentityProjection,
                 grid = grid,
                 readTile = readTile,
-                scheme = TileRowScheme.XYZ,
-            )
+            ) {
+                scheme = TileRowScheme.XYZ
+            }
             val firstLayer = firstBuilder.build().single() as TileLayer
             store.retain(firstBuilder.managedRasterKeys)
 
@@ -839,8 +1085,9 @@ class MapLayerBuilderTest {
                 projection = IdentityProjection,
                 grid = grid,
                 readTile = readTile,
-                scheme = TileRowScheme.XYZ,
-            )
+            ) {
+                scheme = TileRowScheme.XYZ
+            }
             val secondLayer = secondBuilder.build().single() as TileLayer
             store.retain(secondBuilder.managedRasterKeys)
             secondLayer.loadTiles(map)
@@ -901,6 +1148,46 @@ class MapLayerBuilderTest {
         }
     }
 
+    @Test
+    fun osmOptionsForwardPresentationLifecycleAndHttpConfiguration() {
+        val store = RasterLayerStore()
+        val state = RasterLayerState()
+        val transport = RasterHttpTransport { RasterHttpResponse(statusCode = 200, body = byteArrayOf(1)) }
+        try {
+            val builder = MapLayerBuilder.managed(store)
+            builder.osmLayer(id = "background") {
+                zIndex = 4
+                visible = false
+                opacity = 0.6
+                minZoom = 2.0
+                maxZoom = 18.0
+                this.state = state
+                http {
+                    header("X-Client", "tilo-test")
+                    transportKey = "test-transport"
+                }
+                http { this.transport = transport }
+            }
+
+            val layer = builder.build().single()
+            val configuration = builder.managedRasterKeys.single().configuration as XyzRasterConfiguration
+            store.retain(builder.managedRasterKeys, builder.managedRasterUpdates)
+
+            assertEquals("background", layer.id)
+            assertEquals(4, layer.zIndex)
+            assertEquals(false, layer.visible)
+            assertEquals(0.6, layer.opacity)
+            assertEquals(2.0, layer.minZoom)
+            assertEquals(18.0, layer.maxZoom)
+            assertEquals(mapOf("X-Client" to "tilo-test"), configuration.http.headers)
+            assertEquals(transport, configuration.http.transport)
+            assertEquals("test-transport", configuration.http.transportKey)
+            assertEquals(RasterLayerStatus.Ready, state.status)
+        } finally {
+            store.close()
+        }
+    }
+
     /**
      * Verifies that every high-level tile declaration defaults to visible requests only.
      *
@@ -949,6 +1236,18 @@ class MapLayerBuilderTest {
         }
     }
 
+    @Test
+    fun xyzOptionsRejectInvalidLoadingLimitsBeforeCreatingARuntime() {
+        assertFailsWith<IllegalArgumentException> {
+            MapLayerBuilder().xyzTileLayer(
+                id = "invalid",
+                urlTemplate = "https://example.test/{z}/{x}/{y}.png",
+            ) {
+                prefetchMargin = -1
+            }
+        }
+    }
+
     /**
      * Verifies that the OSM preset pins the public-service-safe loading policy.
      *
@@ -971,6 +1270,51 @@ class MapLayerBuilderTest {
             assertEquals(0, configuration.overviewPrefetchMargin)
         } finally {
             store.close()
+        }
+    }
+
+    @Test
+    fun tileStoreOptionsAreValidatedAndDefineRuntimeIdentity() {
+        val grid = TileGrid()
+        val readTile: suspend (TileCoordinate) -> ByteArray? = { byteArrayOf(1) }
+
+        fun configuration(sourceId: String): TileStoreRasterConfiguration {
+            val store = RasterLayerStore()
+            try {
+                val builder = MapLayerBuilder.managed(store)
+                builder.tileStoreLayer(
+                    id = "offline",
+                    projection = IdentityProjection,
+                    grid = grid,
+                    readTile = readTile,
+                ) {
+                    this.sourceId = sourceId
+                    scheme = TileRowScheme.XYZ
+                    maxVisibleTiles = 3
+                    prefetchMargin = 1
+                }
+                return builder.managedRasterKeys.single().configuration as TileStoreRasterConfiguration
+            } finally {
+                store.close()
+            }
+        }
+
+        val first = configuration("database-v1")
+        val second = configuration("database-v2")
+        assertNotEquals(first, second)
+        assertEquals(TileRowScheme.XYZ, first.scheme)
+        assertEquals(3, first.maxVisibleTiles)
+        assertEquals(1, first.prefetchMargin)
+
+        assertFailsWith<IllegalArgumentException> {
+            MapLayerBuilder().tileStoreLayer(
+                id = "invalid",
+                projection = IdentityProjection,
+                grid = grid,
+                readTile = readTile,
+            ) {
+                maxVisibleTiles = 0
+            }
         }
     }
 
@@ -1006,6 +1350,22 @@ class MapLayerBuilderTest {
 
         assertFailsWith<IllegalArgumentException> {
             builder.xyzTileLayer(id = "base", urlTemplate = "https://b/{z}/{x}/{y}.png")
+        }
+    }
+
+    private class TrackingRasterDiagnosticsLock : RasterDiagnosticsLock {
+        private var depth = 0
+
+        val isHeld: Boolean
+            get() = depth > 0
+
+        override fun <T> withLock(block: () -> T): T {
+            depth += 1
+            return try {
+                block()
+            } finally {
+                depth -= 1
+            }
         }
     }
 

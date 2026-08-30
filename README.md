@@ -58,15 +58,23 @@ kotlin {
 fun MapScreen() {
     val brno = Point(16.6068, 49.1951)
     val cameraState = rememberMapCameraState(
-        initialCenter = Wgs84ToEpsg5514Transformation.sourceToTarget(brno),
-        initialZoom = 11.5,
+        initialPosition =
+            CameraPosition(
+                center = Wgs84ToEpsg5514Transformation.sourceToTarget(brno),
+                zoom = 11.5,
+            ),
         projection = epsg5514(),
     )
 
     val places = remember {
         features {
             point("brno", brno) {
-                label("Brno", style = largeLabelStyle())
+                label = "Brno"
+                labelStyle = labelStyle {
+                    fontSize(15.sp)
+                    halo(width = 3.5.dp)
+                    offsetY(14.dp)
+                }
                 style = pointStyle {
                     size = 14.dp
                     fill(0xFF43A047)
@@ -91,7 +99,6 @@ fun MapScreen() {
 
         featureLayer("places", places) {
             projection = wgs84()
-            renderMode = cachedBitmap()
         }
     }
 }

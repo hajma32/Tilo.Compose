@@ -14,11 +14,11 @@ import tilo.compose.core.feature.LineCap
 import tilo.compose.core.feature.LineJoin
 import tilo.compose.core.geometry.Point
 import tilo.compose.dsl.ExperimentalTiloApi
+import tilo.compose.dsl.LayerGroupOptions
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
 import tilo.compose.dsl.wgs84
-import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
@@ -32,16 +32,13 @@ internal fun BoxScope.StyleLabSample() {
     TiloMap(
         cameraState = camera,
         modifier = Modifier.fillMaxSize(),
-        attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = defaultCameraControlsContent(),
         layers = {
             openStreetMapLayer()
             layerGroup(
                 id = "style-lab-overlays",
-                zIndex = 3,
-                opacity = 0.85,
-                minZoom = 11.0,
+                options = LayerGroupOptions(zIndex = 3, opacity = 0.85, minZoom = 11.0),
             ) {
                 featureLayer("zoom-style", route) {
                     zIndex = 0
@@ -74,7 +71,7 @@ internal fun BoxScope.StyleLabSample() {
                                         lineJoin = LineJoin.Round
                                     }
                                 }
-                                hideLabels()
+                                labelsVisible = false
                             }
                         }
                 }
@@ -94,7 +91,7 @@ internal fun BoxScope.StyleLabSample() {
         body =
             "Zoom from 13 to 14: the route changes from 6 dp orange to 20 dp blue and its label disappears. " +
                 "The translucent group also exercises cascading opacity and multi-line alignment.",
-        code = "layerGroup(\"style-lab-overlays\", opacity = 0.85) { … }",
+        code = "layerGroup(\"style-lab-overlays\", LayerGroupOptions(opacity = 0.85)) { … }",
     )
     MapPill("Casing width is +2 dp · zoom across 14")
 }

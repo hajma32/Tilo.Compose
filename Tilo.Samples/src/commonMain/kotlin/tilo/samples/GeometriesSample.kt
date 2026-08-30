@@ -21,9 +21,7 @@ import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.TiloMap
 import tilo.compose.dsl.featureLayerStyle
 import tilo.compose.dsl.features
-import tilo.compose.dsl.mediumLabelStyle
 import tilo.compose.dsl.wgs84
-import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
@@ -40,7 +38,6 @@ internal fun BoxScope.GeometriesSample() {
         modifier = Modifier.fillMaxSize(),
         onFeatureSelect = { hits -> selectedFeatures = hits.map { it.ref }.toSet() },
         selectedFeatures = selectedFeatures,
-        attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = defaultCameraControlsContent(),
         layers = {
@@ -86,7 +83,7 @@ private fun geometryLayerStyle() =
             fill(0x55BFED6F)
             stroke(0xFF253E32, width = 3.dp) { lineJoin = LineJoin.Round }
         }
-        label(mediumLabelStyle())
+        label {}
         selectedPoint {
             shape = PointShape.Circle
             size = 25.dp
@@ -101,7 +98,7 @@ private fun geometryLayerStyle() =
             fill(0x77F2663B)
             stroke(0xFFF2663B, width = 5.dp)
         }
-        selectedLabel(0xFF17201C)
+        selectedLabel { color(0xFF17201C) }
     }
 
 private fun geometryFeatures(): List<Feature> =

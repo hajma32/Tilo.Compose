@@ -57,7 +57,6 @@ class MapLayerCompositionRegressionTest {
                                     id = "base",
                                     projection = IdentityProjection,
                                     grid = singleTileGrid,
-                                    sourceId = "grouped-blocking-source",
                                     readTile = {
                                         requestStarted.complete(Unit)
                                         try {
@@ -66,8 +65,10 @@ class MapLayerCompositionRegressionTest {
                                             requestCancelled.complete(Unit)
                                         }
                                     },
-                                    scheme = TileRowScheme.XYZ,
-                                )
+                                ) {
+                                    sourceId = "grouped-blocking-source"
+                                    scheme = TileRowScheme.XYZ
+                                }
                             }
                         }
                     }
@@ -115,8 +116,9 @@ class MapLayerCompositionRegressionTest {
                             projection = IdentityProjection,
                             grid = singleTileGrid,
                             readTile = reader,
-                            scheme = TileRowScheme.XYZ,
-                        )
+                        ) {
+                            scheme = TileRowScheme.XYZ
+                        }
                     }
             }.use { composition ->
                 val firstLayer = currentLayers.single() as TileLayer
@@ -156,7 +158,6 @@ class MapLayerCompositionRegressionTest {
                                 id = "base",
                                 projection = IdentityProjection,
                                 grid = singleTileGrid,
-                                sourceId = "blocking-source",
                                 readTile = {
                                     requestStarted.complete(Unit)
                                     try {
@@ -165,8 +166,10 @@ class MapLayerCompositionRegressionTest {
                                         requestCancelled.complete(Unit)
                                     }
                                 },
-                                scheme = TileRowScheme.XYZ,
-                            )
+                            ) {
+                                sourceId = "blocking-source"
+                                scheme = TileRowScheme.XYZ
+                            }
                         }
                     }
             }.use { composition ->
@@ -209,7 +212,6 @@ class MapLayerCompositionRegressionTest {
                             id = "base",
                             projection = IdentityProjection,
                             grid = singleTileGrid,
-                            sourceId = currentSourceId,
                             readTile = {
                                 if (currentSourceId == "first") {
                                     firstRequestStarted.complete(Unit)
@@ -222,8 +224,10 @@ class MapLayerCompositionRegressionTest {
                                     byteArrayOf(2)
                                 }
                             },
-                            scheme = TileRowScheme.XYZ,
-                        )
+                        ) {
+                            this.sourceId = currentSourceId
+                            scheme = TileRowScheme.XYZ
+                        }
                     }
             }.use { composition ->
                 val firstLayer = currentLayers.single() as TileLayer
@@ -271,14 +275,15 @@ class MapLayerCompositionRegressionTest {
                             id = "base",
                             projection = IdentityProjection,
                             grid = singleTileGrid,
-                            sourceId = "stable-source",
-                            visible = isVisible,
                             readTile = {
                                 tileReadCount += 1
                                 byteArrayOf(1)
                             },
-                            scheme = TileRowScheme.XYZ,
-                        )
+                        ) {
+                            sourceId = "stable-source"
+                            this.visible = isVisible
+                            scheme = TileRowScheme.XYZ
+                        }
                     }
             }.use { composition ->
                 (currentLayers.single() as TileLayer).loadTiles(singleTileMap)
@@ -320,10 +325,11 @@ class MapLayerCompositionRegressionTest {
                             id = "base",
                             projection = IdentityProjection,
                             grid = twoTileGrid,
-                            sourceId = "stable-source",
                             readTile = { byteArrayOf(currentVersion.toByte()) },
-                            scheme = TileRowScheme.XYZ,
-                        )
+                        ) {
+                            sourceId = "stable-source"
+                            scheme = TileRowScheme.XYZ
+                        }
                     }
             }.use { composition ->
                 val firstTile = (currentLayers.single() as TileLayer).loadTiles(leftTileMap).single()

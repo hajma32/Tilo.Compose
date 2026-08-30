@@ -1,3 +1,5 @@
+@file:OptIn(tilo.compose.render.ExperimentalTiloRenderingApi::class)
+
 package tilo.compose.ui
 
 import kotlin.test.Test

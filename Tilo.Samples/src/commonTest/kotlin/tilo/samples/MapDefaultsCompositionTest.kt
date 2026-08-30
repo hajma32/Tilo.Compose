@@ -40,7 +40,7 @@ class MapDefaultsCompositionTest {
 
         composition.use {
             val initialCamera = requireNotNull(camera)
-            initialCamera.zoomIn()
+            initialCamera.zoomBy(1.0)
             val changedZoom = initialCamera.zoom
 
             recompositionTrigger.value += 1

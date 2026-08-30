@@ -100,7 +100,7 @@ class MapCameraStateCompositionRegressionTest {
                 trigger.value
                 cameraState =
                     rememberMapCameraState(
-                        initialCenter = Point(1.0, 2.0),
+                        initialPosition = CameraPosition(Point(1.0, 2.0), zoom = 0.0),
                         projection = projection("EPSG:3857"),
                     )
             }.use { composition ->
@@ -159,9 +159,7 @@ class MapCameraStateCompositionRegressionTest {
             withCameraComposition {
                 cameraState =
                     rememberMapCameraState(
-                        initialCenter = center.value,
-                        initialZoom = zoom.value,
-                        initialBearing = bearing.value,
+                        initialPosition = CameraPosition(center.value, zoom.value, bearing.value),
                     )
             }.use { composition ->
                 val initialState = requireNotNull(cameraState)
@@ -197,8 +195,7 @@ class MapCameraStateCompositionRegressionTest {
             withCameraComposition {
                 cameraState =
                     rememberMapCameraState(
-                        initialCenter = center.value,
-                        initialZoom = zoom.value,
+                        initialPosition = CameraPosition(center.value, zoom.value),
                         projection = projection.value,
                         config = config.value,
                     )

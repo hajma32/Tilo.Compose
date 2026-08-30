@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -56,7 +57,6 @@ import tilo.compose.core.layers.raster.WmsVersion
 import tilo.compose.core.layers.raster.XyzTileLayer
 import tilo.compose.core.layers.vector.FeatureLayer
 import tilo.compose.core.map.CameraPosition
-import tilo.compose.core.map.MapCameraController
 import tilo.compose.core.map.MapConfig
 import tilo.compose.core.map.MapState
 import tilo.compose.core.map.ScreenPoint
@@ -119,6 +119,21 @@ data class TiloMapOptions(
     val gestureConfig: MapGestureConfig = MapGestureConfig.Default,
 )
 
+/** Immutable presentation settings for [MapLayerBuilder.layerGroup]. */
+@ExperimentalTiloApi
+data class LayerGroupOptions(
+    val zIndex: Int = 0,
+    val visible: Boolean = true,
+    val opacity: Double = 1.0,
+    val minZoom: Double? = null,
+    val maxZoom: Double? = null,
+    val attributions: List<Attribution> = emptyList(),
+) {
+    init {
+        validateLayerPresentation(opacity, minZoom, maxZoom)
+    }
+}
+
 /**
  * Immutable camera snapshot suitable for viewport-dependent data loading.
  *
@@ -145,9 +160,10 @@ data class MapViewportSnapshot(
  * across recompositions. Coordinates are expressed in [projection].
  */
 @ExperimentalTiloApi
+@Stable
 class MapCameraState internal constructor(
     internal val mapState: MapState,
-) : MapCameraController {
+) {
     internal var revision by mutableIntStateOf(0)
         private set
 
@@ -260,15 +276,6 @@ class MapCameraState internal constructor(
         setCameraInternal(position)
     }
 
-    /** Convenience overload for atomically setting all camera components. */
-    fun setCamera(
-        center: Point,
-        zoom: Double,
-        bearing: Double = this.bearing,
-    ) {
-        setCamera(CameraPosition(center = center, zoom = zoom, bearing = bearing))
-    }
-
     /** Animates center, zoom, and bearing together, using the shortest rotation around north. */
     suspend fun animateTo(
         position: CameraPosition,
@@ -326,36 +333,10 @@ class MapCameraState internal constructor(
             }
     }
 
-    /**
-     * Zooms in by [step] map zoom levels around the current viewport center.
-     */
-    fun zoomIn() {
-        zoomIn(step = 1.0)
-    }
-
-    override fun zoomIn(step: Double) {
-        zoomBy(step)
-    }
-
-    /**
-     * Zooms out by [step] map zoom levels around the current viewport center.
-     */
-    fun zoomOut() {
-        zoomOut(step = 1.0)
-    }
-
-    override fun zoomOut(step: Double) {
-        zoomBy(-step)
-    }
-
-    /** Changes zoom by [delta] levels around the current viewport center. */
-    fun zoomBy(delta: Double) {
-        zoomBy(delta = delta, focus = null)
-    }
-
-    override fun zoomBy(
+    /** Changes zoom by [delta] levels, optionally keeping [focus] fixed on screen. */
+    fun zoomBy(
         delta: Double,
-        focus: ScreenPoint?,
+        focus: ScreenPoint? = null,
     ) {
         cancelCameraAnimation()
         zoomByInternal(delta, focus)
@@ -392,22 +373,6 @@ class MapCameraState internal constructor(
                 zoomByInternal(value.toDouble() - mapState.zoom, focus)
                 expectedRevision = mapState.cameraRevision
             }
-    }
-
-    suspend fun animateZoomIn(
-        step: Double = 1.0,
-        focus: ScreenPoint? = null,
-        animationSpec: AnimationSpec<Float> = DefaultZoomAnimationSpec,
-    ) {
-        animateZoomBy(delta = step, focus = focus, animationSpec = animationSpec)
-    }
-
-    suspend fun animateZoomOut(
-        step: Double = 1.0,
-        focus: ScreenPoint? = null,
-        animationSpec: AnimationSpec<Float> = DefaultZoomAnimationSpec,
-    ) {
-        animateZoomBy(delta = -step, focus = focus, animationSpec = animationSpec)
     }
 
     /** Rotates the map clockwise by [delta] degrees while keeping [focus] fixed on screen. */
@@ -596,7 +561,7 @@ class MapLayerBuilder private constructor(
 ) : LayerSink {
     private val items = mutableListOf<MapLayerItem>()
 
-    constructor() :
+    internal constructor() :
         this(
             MapLayerBuildContext(
                 rasterLayerStore = null,
@@ -637,44 +602,33 @@ class MapLayerBuilder private constructor(
     /**
      * Adds a composite layer whose children occupy one ordered slot among this builder's layers.
      *
-     * Child [Layer.zIndex] values are local to the group. Visibility and zoom limits declared here
+     * Child [Layer.zIndex] values are local to the group. Visibility and zoom limits in [options]
      * constrain all descendants. Group opacity is multiplied with each descendant's opacity. The
      * nested block supports the same layer DSL, including further groups and managed raster layers.
      */
     fun layerGroup(
         id: String,
-        zIndex: Int = 0,
-        visible: Boolean = true,
-        minZoom: Double? = null,
-        maxZoom: Double? = null,
-        attributions: List<Attribution> = emptyList(),
-        opacity: Double = 1.0,
+        options: LayerGroupOptions = LayerGroupOptions(),
         layers: MapLayerBuilder.() -> Unit,
-    ) = addLayerGroup(id, zIndex, visible, minZoom, maxZoom, attributions, opacity, layers)
+    ) = addLayerGroup(id, options, layers)
 
     private fun addLayerGroup(
         id: String,
-        zIndex: Int,
-        visible: Boolean,
-        minZoom: Double?,
-        maxZoom: Double?,
-        attributions: List<Attribution>,
-        opacity: Double,
+        options: LayerGroupOptions,
         layers: MapLayerBuilder.() -> Unit,
     ) {
-        validateLayerPresentation(opacity, minZoom, maxZoom)
         registerLayerId(id)
         val childBuilder = MapLayerBuilder(context)
         childBuilder.layers()
         items +=
             MapLayerItem.Group(
                 id = id,
-                zIndex = zIndex,
-                visible = visible,
-                opacity = opacity,
-                minZoom = minZoom,
-                maxZoom = maxZoom,
-                attributions = attributions.toList(),
+                zIndex = options.zIndex,
+                visible = options.visible,
+                opacity = options.opacity,
+                minZoom = options.minZoom,
+                maxZoom = options.maxZoom,
+                attributions = options.attributions.toList(),
                 children = childBuilder.items.toList(),
             )
     }
@@ -716,7 +670,7 @@ class MapLayerBuilder private constructor(
         )
         registerLayerId(id)
         val axisOrder = options.axisOrder ?: WmsAxisOrder.forCrs(projection.id)
-        val http = options.http
+        val http = options.resolvedHttp()
         val configuration =
             WmsRasterConfiguration(
                 capabilitiesUrl = capabilitiesUrl,
@@ -793,36 +747,32 @@ class MapLayerBuilder private constructor(
      * URL and required contributor attribution. Prefetching and coarse overview
      * loading are explicitly disabled to respect the OpenStreetMap tile usage
      * policy. Applications remain responsible for following the rest of it.
-     * [state] uses the same observable lifecycle and retry contract as WMS.
-     * [onError] receives tile transport failures without cancelling healthy tiles.
+     * Optional presentation, lifecycle, and HTTP settings live in [OsmLayerOptions].
      */
     fun osmLayer(
         id: String = "osm",
-        zIndex: Int = 0,
-        visible: Boolean = true,
-        minZoom: Double? = null,
-        maxZoom: Double? = null,
-        state: RasterLayerState? = null,
-        onError: ((Throwable) -> Unit)? = null,
-        opacity: Double = 1.0,
+        block: OsmLayerOptions.() -> Unit = {},
     ) {
+        val options = OsmLayerOptions().apply(block)
+        val http = options.resolvedHttp()
         xyzTileLayer(
             id = id,
             urlTemplate = OPEN_STREET_MAP_URL,
         ) {
-            this.zIndex = zIndex
-            this.visible = visible
-            this.opacity = opacity
-            this.minZoom = minZoom
-            this.maxZoom = maxZoom
+            zIndex = options.zIndex
+            visible = options.visible
+            opacity = options.opacity
+            minZoom = options.minZoom
+            maxZoom = options.maxZoom
             projection = Epsg3857Projection
             prefetchMargin = 0
             overviewZoomOffset = 0
             maxOverviewTiles = 0
             overviewPrefetchMargin = 0
             attributions = listOf(OPEN_STREET_MAP_ATTRIBUTION)
-            this.state = state
-            this.onError = onError
+            state = options.state
+            onError = options.onError
+            copyHttpConfig(http)
         }
     }
 
@@ -839,9 +789,17 @@ class MapLayerBuilder private constructor(
         block: XyzTileLayerOptions.() -> Unit = {},
     ) {
         val options = XyzTileLayerOptions().apply(block)
+        validateRasterLoading(
+            options.maxVisibleTiles,
+            options.prefetchMargin,
+            options.overviewZoomOffset,
+            options.maxOverviewTiles,
+            options.overviewPrefetchMargin,
+        )
         val projection = options.projection
         val grid = options.grid ?: TileGrid.defaultFor(projection)
         val attributions = options.attributions.toList()
+        val http = options.resolvedHttp()
         managedRasterLayer(
             id = id,
             zIndex = options.zIndex,
@@ -857,13 +815,13 @@ class MapLayerBuilder private constructor(
                     projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
                     grid = grid,
                     urlTemplate = urlTemplate,
-                    tms = options.tms,
+                    scheme = options.scheme,
                     maxVisibleTiles = options.maxVisibleTiles,
                     prefetchMargin = options.prefetchMargin,
                     overviewZoomOffset = options.overviewZoomOffset,
                     maxOverviewTiles = options.maxOverviewTiles,
                     overviewPrefetchMargin = options.overviewPrefetchMargin,
-                    http = options.http,
+                    http = http,
                     retryKey = options.state?.retryKey ?: 0,
                 ),
             update = RasterLayerUpdate.Source(options.state, options.onError),
@@ -876,7 +834,7 @@ class MapLayerBuilder private constructor(
                         projection = projection,
                         grid = grid,
                         urlTemplate = urlTemplate,
-                        tms = options.tms,
+                        tms = options.scheme == TileRowScheme.TMS,
                         zIndex = options.zIndex,
                         visible = options.visible,
                         opacity = options.opacity,
@@ -888,7 +846,7 @@ class MapLayerBuilder private constructor(
                         maxOverviewTiles = options.maxOverviewTiles,
                         overviewPrefetchMargin = options.overviewPrefetchMargin,
                         attributions = attributions,
-                        http = options.http,
+                        http = http,
                         onError = diagnostics::tileFailed,
                         onDiagnostic = diagnostics::onDiagnostic,
                     ),
@@ -910,41 +868,34 @@ class MapLayerBuilder private constructor(
      * The caller provides the tile reader so platform-specific SQLite access and
      * project-specific metadata stay outside the renderer. This supports
      * WebMercator, S-JTSK/Krovak, or any custom [projection] + [grid] pair.
-     * [sourceId] is the stable identity of the stored content; change it when
+     * `sourceId` in [TileStoreLayerOptions] is the stable identity of the stored content; change it when
      * switching databases or revisions that must not share cached tiles.
-     * Prefetching and coarse overview loading are opt-in.
-     * [state] observes readiness, recoverable reader errors, and explicit retry.
-     * [onError] receives reader failures without cancelling healthy tiles.
+     * Optional presentation, loading, lifecycle, and source settings live in
+     * [TileStoreLayerOptions]. Prefetching and coarse overview loading are opt-in.
      */
     fun tileStoreLayer(
         id: String,
         projection: Projection,
         grid: TileGrid,
         readTile: suspend (TileCoordinate) -> ByteArray?,
-        zIndex: Int = 0,
-        visible: Boolean = true,
-        minZoom: Double? = null,
-        maxZoom: Double? = null,
-        scheme: TileRowScheme = TileRowScheme.TMS,
-        sourceId: String = id,
-        maxVisibleTiles: Int = 9,
-        prefetchMargin: Int = 0,
-        overviewZoomOffset: Int = 0,
-        maxOverviewTiles: Int = 4,
-        overviewPrefetchMargin: Int = 0,
-        attributions: List<Attribution> = emptyList(),
-        state: RasterLayerState? = null,
-        onError: ((Throwable) -> Unit)? = null,
-        opacity: Double = 1.0,
+        block: TileStoreLayerOptions.() -> Unit = {},
     ) {
-        val resolvedAttributions = attributions.toList()
+        val options = TileStoreLayerOptions(id).apply(block)
+        validateRasterLoading(
+            options.maxVisibleTiles,
+            options.prefetchMargin,
+            options.overviewZoomOffset,
+            options.maxOverviewTiles,
+            options.overviewPrefetchMargin,
+        )
+        val resolvedAttributions = options.attributions.toList()
         managedRasterLayer(
             id = id,
-            zIndex = zIndex,
-            visible = visible,
-            opacity = opacity,
-            minZoom = minZoom,
-            maxZoom = maxZoom,
+            zIndex = options.zIndex,
+            visible = options.visible,
+            opacity = options.opacity,
+            minZoom = options.minZoom,
+            maxZoom = options.maxZoom,
             attributions = resolvedAttributions,
             configuration =
                 TileStoreRasterConfiguration(
@@ -952,19 +903,19 @@ class MapLayerBuilder private constructor(
                     projectionDefinition = projection.definition,
                     projectionWorldUnitsPerMapUnit = projection.worldUnitsPerMapUnit,
                     grid = grid,
-                    scheme = scheme,
-                    sourceId = sourceId,
-                    maxVisibleTiles = maxVisibleTiles,
-                    prefetchMargin = prefetchMargin,
-                    overviewZoomOffset = overviewZoomOffset,
-                    maxOverviewTiles = maxOverviewTiles,
-                    overviewPrefetchMargin = overviewPrefetchMargin,
-                    retryKey = state?.retryKey ?: 0,
+                    scheme = options.scheme,
+                    sourceId = options.sourceId,
+                    maxVisibleTiles = options.maxVisibleTiles,
+                    prefetchMargin = options.prefetchMargin,
+                    overviewZoomOffset = options.overviewZoomOffset,
+                    maxOverviewTiles = options.maxOverviewTiles,
+                    overviewPrefetchMargin = options.overviewPrefetchMargin,
+                    retryKey = options.state?.retryKey ?: 0,
                 ),
-            update = RasterLayerUpdate.TileStore(readTile, state, onError),
+            update = RasterLayerUpdate.TileStore(readTile, options.state, options.onError),
         ) {
             val reader = MutableTileReader(readTile)
-            val diagnostics = MutableRasterLayerDiagnostics(state, onError, localSource = true)
+            val diagnostics = MutableRasterLayerDiagnostics(options.state, options.onError, localSource = true)
             StoredRasterLayer(
                 layer =
                     RasterTileLayer(
@@ -973,20 +924,20 @@ class MapLayerBuilder private constructor(
                             TileStoreTileSource(
                                 projection = projection,
                                 grid = grid,
-                                scheme = scheme,
-                                sourceId = sourceId,
+                                scheme = options.scheme,
+                                sourceId = options.sourceId,
                                 readTile = reader::read,
                             ),
-                        zIndex = zIndex,
-                        visible = visible,
-                        opacity = opacity,
-                        minZoom = minZoom,
-                        maxZoom = maxZoom,
-                        maxVisibleTiles = maxVisibleTiles,
-                        prefetchMargin = prefetchMargin,
-                        overviewZoomOffset = overviewZoomOffset,
-                        maxOverviewTiles = maxOverviewTiles,
-                        overviewPrefetchMargin = overviewPrefetchMargin,
+                        zIndex = options.zIndex,
+                        visible = options.visible,
+                        opacity = options.opacity,
+                        minZoom = options.minZoom,
+                        maxZoom = options.maxZoom,
+                        maxVisibleTiles = options.maxVisibleTiles,
+                        prefetchMargin = options.prefetchMargin,
+                        overviewZoomOffset = options.overviewZoomOffset,
+                        maxOverviewTiles = options.maxOverviewTiles,
+                        overviewPrefetchMargin = options.overviewPrefetchMargin,
                         attributions = resolvedAttributions,
                         onError = diagnostics::tileFailed,
                         onDiagnostic = diagnostics::onDiagnostic,
@@ -1251,7 +1202,7 @@ internal data class XyzRasterConfiguration(
     val projectionWorldUnitsPerMapUnit: Double,
     val grid: TileGrid,
     val urlTemplate: String,
-    val tms: Boolean,
+    val scheme: TileRowScheme,
     val maxVisibleTiles: Int,
     val prefetchMargin: Int,
     val overviewZoomOffset: Int,
@@ -1261,7 +1212,7 @@ internal data class XyzRasterConfiguration(
     val retryKey: Int,
 ) {
     override fun toString(): String =
-        "XyzRasterConfiguration(projectionId=$projectionId, tms=$tms, " +
+        "XyzRasterConfiguration(projectionId=$projectionId, scheme=$scheme, " +
             "loading=[$maxVisibleTiles,$prefetchMargin,$overviewZoomOffset,$maxOverviewTiles," +
             "$overviewPrefetchMargin], http=$http, retryKey=$retryKey)"
 }
@@ -1319,11 +1270,8 @@ private class MutableTileReader(
 class RasterHttpOptions internal constructor(
     config: RasterHttpConfig = RasterHttpConfig(),
 ) {
-    var headers: Map<String, String> = config.headers
+    private var headers: Map<String, String> = config.headers
     var transport: RasterHttpTransport? = config.transport
-
-    /** Allows WMS request headers on a GetMap origin different from GetCapabilities. */
-    var allowCrossOriginHeaders: Boolean = config.allowCrossOriginHeaders
 
     /** Change this stable semantic key when [transport] must recreate the raster runtime. */
     var transportKey: Any = config.transportKey ?: Unit
@@ -1343,7 +1291,7 @@ class RasterHttpOptions internal constructor(
         header("Authorization", "Bearer $token")
     }
 
-    internal fun build(): RasterHttpConfig =
+    internal fun build(allowCrossOriginHeaders: Boolean = false): RasterHttpConfig =
         RasterHttpConfig(
             headers = headers.toMap(),
             transport = transport,
@@ -1355,7 +1303,7 @@ class RasterHttpOptions internal constructor(
 /** Optional settings for [MapLayerBuilder.wmsTileLayer]. */
 @ExperimentalTiloApi
 @TiloDsl
-class WmsTileLayerOptions {
+class WmsTileLayerOptions internal constructor() {
     var styles: List<String> = emptyList()
     var format: WmsImageFormat? = null
     var version: WmsVersion? = null
@@ -1388,22 +1336,28 @@ class WmsTileLayerOptions {
     var state: RasterLayerState? = null
     var onError: ((Throwable) -> Unit)? = null
 
-    internal var http: RasterHttpConfig = RasterHttpConfig()
-        private set
+    /** Forwards configured headers to a trusted GetMap endpoint on another origin. */
+    var allowCrossOriginHeaders: Boolean = false
+
+    private val httpOptions = RasterHttpOptions()
 
     /** Configures authentication, headers, or a custom transport for capabilities and tiles. */
     fun http(block: RasterHttpOptions.() -> Unit) {
-        http = RasterHttpOptions(http).apply(block).build()
+        httpOptions.apply(block)
     }
+
+    internal fun resolvedHttp(): RasterHttpConfig = httpOptions.build(allowCrossOriginHeaders)
 }
 
 /** Optional settings for [MapLayerBuilder.xyzTileLayer]. */
 @ExperimentalTiloApi
 @TiloDsl
-class XyzTileLayerOptions {
+class XyzTileLayerOptions internal constructor() {
     var projection: Projection = Epsg3857Projection
     var grid: TileGrid? = null
-    var tms: Boolean = false
+
+    /** Tile-row origin used when substituting the `{y}` URL placeholder. */
+    var scheme: TileRowScheme = TileRowScheme.XYZ
     var zIndex: Int = 0
     var visible: Boolean = true
     var opacity: Double = 1.0
@@ -1418,13 +1372,63 @@ class XyzTileLayerOptions {
     var state: RasterLayerState? = null
     var onError: ((Throwable) -> Unit)? = null
 
-    internal var http: RasterHttpConfig = RasterHttpConfig()
-        private set
+    private var httpOptions = RasterHttpOptions()
+
+    internal fun copyHttpConfig(config: RasterHttpConfig) {
+        httpOptions = RasterHttpOptions(config)
+    }
 
     /** Configures authentication, headers, or a custom transport for tile requests. */
     fun http(block: RasterHttpOptions.() -> Unit) {
-        http = RasterHttpOptions(http).apply(block).build()
+        httpOptions.apply(block)
     }
+
+    internal fun resolvedHttp(): RasterHttpConfig = httpOptions.build()
+}
+
+/** Optional presentation, lifecycle, and HTTP settings for [MapLayerBuilder.osmLayer]. */
+@ExperimentalTiloApi
+@TiloDsl
+class OsmLayerOptions internal constructor() {
+    var zIndex: Int = 0
+    var visible: Boolean = true
+    var opacity: Double = 1.0
+    var minZoom: Double? = null
+    var maxZoom: Double? = null
+    var state: RasterLayerState? = null
+    var onError: ((Throwable) -> Unit)? = null
+
+    private val httpOptions = RasterHttpOptions()
+
+    /** Configures authentication, headers, or a custom transport for OpenStreetMap tile requests. */
+    fun http(block: RasterHttpOptions.() -> Unit) {
+        httpOptions.apply(block)
+    }
+
+    internal fun resolvedHttp(): RasterHttpConfig = httpOptions.build()
+}
+
+/** Optional settings for [MapLayerBuilder.tileStoreLayer]. */
+@ExperimentalTiloApi
+@TiloDsl
+class TileStoreLayerOptions internal constructor(
+    id: String,
+) {
+    var zIndex: Int = 0
+    var visible: Boolean = true
+    var opacity: Double = 1.0
+    var minZoom: Double? = null
+    var maxZoom: Double? = null
+    var scheme: TileRowScheme = TileRowScheme.TMS
+    var sourceId: String = id
+    var maxVisibleTiles: Int = 9
+    var prefetchMargin: Int = 0
+    var overviewZoomOffset: Int = 0
+    var maxOverviewTiles: Int = 4
+    var overviewPrefetchMargin: Int = 0
+    var attributions: List<Attribution> = emptyList()
+    var state: RasterLayerState? = null
+    var onError: ((Throwable) -> Unit)? = null
 }
 
 /**
@@ -1432,7 +1436,7 @@ class XyzTileLayerOptions {
  */
 @ExperimentalTiloApi
 @TiloDsl
-class FeatureLayerOptions {
+class FeatureLayerOptions internal constructor() {
     internal val pointIconPainters = linkedMapOf<String, Painter>()
 
     var zIndex: Int = 0
@@ -1469,7 +1473,7 @@ class FeatureLayerOptions {
 @Composable
 @ExperimentalTiloApi
 fun rememberMapCameraState(
-    initialPosition: CameraPosition,
+    initialPosition: CameraPosition = CameraPosition(Point(0.0, 0.0), zoom = 0.0),
     projection: Projection = IdentityProjection,
     config: MapConfig = MapConfig.Default,
 ): MapCameraState =
@@ -1486,28 +1490,6 @@ fun rememberMapCameraState(
                 ),
         )
     }
-
-/**
- * Convenience overload that remembers camera state from separate initial components.
- *
- * [initialCenter], [initialZoom], and [initialBearing] initialize a newly remembered state and are
- * not reapplied by later recompositions. [projection] and [config] are immutable
- * properties of [MapCameraState]; changing either replaces the remembered state.
- */
-@Composable
-@ExperimentalTiloApi
-fun rememberMapCameraState(
-    initialCenter: Point = Point(0.0, 0.0),
-    initialZoom: Double = 0.0,
-    projection: Projection = IdentityProjection,
-    config: MapConfig = MapConfig.Default,
-    initialBearing: Double = 0.0,
-): MapCameraState =
-    rememberMapCameraState(
-        initialPosition = CameraPosition(initialCenter, initialZoom, initialBearing),
-        projection = projection,
-        config = config,
-    )
 
 /**
  * Compose map surface.
@@ -1534,7 +1516,13 @@ fun TiloMap(
     onFeatureSelect: ((List<FeatureSelection>) -> Unit)? = null,
     onRenderError: ((Throwable) -> Unit)? = null,
     selectedFeatures: Set<FeatureSelectionRef> = emptySet(),
-    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? = null,
+    attributionContent: (@Composable BoxScope.(List<Attribution>) -> Unit)? =
+        { attributions ->
+            DefaultMapAttribution(
+                attributions = attributions,
+                clickLabel = options.accessibility.attributionClickLabel,
+            )
+        },
     scaleBarContent: (@Composable BoxScope.(ScaleBar) -> Unit)? = null,
     cameraControlsContent: (@Composable BoxScope.(MapCameraState) -> Unit)? = null,
     layers: MapLayerBuilder.() -> Unit,

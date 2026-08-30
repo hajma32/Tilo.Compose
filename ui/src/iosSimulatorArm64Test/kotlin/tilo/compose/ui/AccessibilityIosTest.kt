@@ -29,8 +29,10 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import tilo.compose.core.geometry.Point
 import tilo.compose.core.layers.Attribution
 import tilo.compose.core.layers.Layer
+import tilo.compose.core.map.CameraPosition
 import tilo.compose.core.map.MapConfig
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.TiloMap
@@ -41,13 +43,40 @@ import kotlin.test.assertEquals
 
 class AccessibilityIosTest {
     @Test
+    fun activeLayerAttributionIsVisibleWithoutAnExplicitSlot() =
+        runComposeUiTest {
+            setContent {
+                TiloMap(
+                    cameraState = rememberMapCameraState(),
+                    modifier = Modifier.size(320.dp),
+                    layers = {
+                        layer(
+                            object : Layer {
+                                override val id: String = "credited"
+                                override val attributions =
+                                    listOf(Attribution("Required provider credit", "https://example.com"))
+                            },
+                        )
+                    },
+                )
+            }
+
+            onNodeWithText("Required provider credit")
+                .assert(hasClickAction())
+                .assert(SemanticsMatcher.expectValue(SemanticsProperties.TraversalIndex, 4.0f))
+        }
+
+    @Test
     fun defaultControlsExposeSemanticsAndKeyboardTraversal() =
         runComposeUiTest {
             lateinit var cameraState: tilo.compose.dsl.MapCameraState
             var modifiedArrowEscaped = false
             var modifiedTabEscaped = false
             setContent {
-                cameraState = rememberMapCameraState(initialZoom = 3.0, initialBearing = 15.0)
+                cameraState =
+                    rememberMapCameraState(
+                        initialPosition = CameraPosition(Point(0.0, 0.0), zoom = 3.0, bearing = 15.0),
+                    )
                 Box(
                     modifier =
                         Modifier.onKeyEvent { event ->
@@ -105,13 +134,12 @@ class AccessibilityIosTest {
             setContent {
                 val cameraState =
                     rememberMapCameraState(
-                        initialZoom = 5.0,
+                        initialPosition = CameraPosition(Point(0.0, 0.0), zoom = 5.0),
                         config = MapConfig(minZoom = 0.0, maxZoom = 10.0),
                     )
                 TiloMap(
                     cameraState = cameraState,
                     modifier = Modifier.size(320.dp),
-                    attributionContent = defaultAttributionContent(),
                     cameraControlsContent = { state ->
                         DefaultZoomControls(state)
                         BasicText(

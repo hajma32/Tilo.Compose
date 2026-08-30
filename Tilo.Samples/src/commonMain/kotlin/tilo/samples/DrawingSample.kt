@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalTiloApi::class)
+@file:OptIn(ExperimentalTiloApi::class, tilo.compose.draw.ExperimentalTiloDrawApi::class)
 
 package tilo.samples
 
@@ -44,7 +44,6 @@ import tilo.compose.dsl.lineStyle
 import tilo.compose.dsl.pointStyle
 import tilo.compose.dsl.polygonStyle
 import tilo.compose.dsl.webMercator
-import tilo.compose.ui.defaultAttributionContent
 import tilo.compose.ui.defaultCameraControlsContent
 import tilo.compose.ui.defaultScaleBarContent
 
@@ -52,16 +51,12 @@ import tilo.compose.ui.defaultScaleBarContent
 internal fun BoxScope.DrawingSample() {
     val camera = rememberWebMercatorCamera(center = Point(14.42, 50.083), zoom = 13.0)
     var savedFeatures by remember { mutableStateOf<List<Feature>>(emptyList()) }
-    val drawState =
-        rememberDrawState(
-            onSave = { feature -> savedFeatures = savedFeatures + feature.asSavedDrawing() },
-        )
+    val drawState = rememberDrawState()
 
     TiloMap(
         cameraState = camera,
         modifier = Modifier.fillMaxSize(),
         onTapWorld = drawState::onMapTap,
-        attributionContent = defaultAttributionContent(),
         scaleBarContent = defaultScaleBarContent(),
         cameraControlsContent = defaultCameraControlsContent(),
         layers = {
@@ -82,6 +77,12 @@ internal fun BoxScope.DrawingSample() {
     DrawingControls(
         state = drawState,
         savedCount = savedFeatures.size,
+        onSaveDrawing = {
+            drawState
+                .save(key = "drawing-${savedFeatures.size + 1}")
+                ?.asSavedDrawing()
+                ?.let { saved -> savedFeatures = savedFeatures + saved }
+        },
         onClearSaved = { savedFeatures = emptyList() },
     )
 }
@@ -90,6 +91,7 @@ internal fun BoxScope.DrawingSample() {
 private fun BoxScope.DrawingControls(
     state: DrawState,
     savedCount: Int,
+    onSaveDrawing: () -> Unit,
     onClearSaved: () -> Unit,
 ) {
     Surface(
@@ -111,7 +113,13 @@ private fun BoxScope.DrawingControls(
                 SampleAction(
                     text = if (state.isDrawing) "Finish" else "Start drawing",
                     active = state.isDrawing,
-                    onClick = state::toggleDrawing,
+                    onClick = {
+                        if (state.isDrawing) {
+                            state.stopDrawing()
+                        } else {
+                            state.startDrawing()
+                        }
+                    },
                 )
                 if (state.isDrawing) {
                     DrawMode.entries.forEach { mode ->
@@ -124,7 +132,7 @@ private fun BoxScope.DrawingControls(
                 }
             }
             when {
-                state.isDrawing -> DrawingActions(state)
+                state.isDrawing -> DrawingActions(state, onSaveDrawing)
                 savedCount > 0 -> SavedDrawingActions(savedCount, onClearSaved)
             }
         }
@@ -132,15 +140,18 @@ private fun BoxScope.DrawingControls(
 }
 
 @Composable
-private fun DrawingActions(state: DrawState) {
+private fun DrawingActions(
+    state: DrawState,
+    onSave: () -> Unit,
+) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SampleAction("Undo", enabled = state.canUndo, onClick = state::undo)
         SampleAction("Redo", enabled = state.canRedo, onClick = state::redo)
-        SampleAction("Clear", enabled = state.draftPoints.isNotEmpty(), onClick = state::clear)
-        SampleAction("Save", active = true, enabled = state.canSave, onClick = state::save)
+        SampleAction("Clear", enabled = state.draftPoints.isNotEmpty(), onClick = state::clearDraft)
+        SampleAction("Save", active = true, enabled = state.canSave, onClick = onSave)
     }
 }
 

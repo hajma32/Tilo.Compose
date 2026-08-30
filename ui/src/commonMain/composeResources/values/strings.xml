@@ -3,5 +3,4 @@
     <string name="zoom_out">Zoom out</string>
     <string name="reset_map_rotation">Reset map rotation to north</string>
     <string name="map_scale">Map scale: %1$s</string>
-    <string name="open_attribution">Open attribution for %1$s</string>
 </resources>

@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalTiloApi::class)
+@file:OptIn(ExperimentalTiloApi::class, tilo.compose.render.ExperimentalTiloRenderingApi::class)
 
 package tilo.compose.dsl
 

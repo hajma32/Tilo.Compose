@@ -3,6 +3,7 @@
 package tilo.compose.dsl
 
 import tilo.compose.core.layers.vector.VectorRenderStrategy
+import tilo.compose.render.ExperimentalTiloRenderingApi
 
 /**
  * Compose DSL choice for rendering an in-memory feature layer.
@@ -31,6 +32,7 @@ fun immediate(): FeatureRenderMode = ImmediateFeatureRenderMode
  * This is useful for heavier, mostly static feature layers.
  */
 @ExperimentalTiloApi
+@ExperimentalTiloRenderingApi
 fun cachedBitmap(
     scale: Double = 1.0,
     paddingPx: Int = 128,

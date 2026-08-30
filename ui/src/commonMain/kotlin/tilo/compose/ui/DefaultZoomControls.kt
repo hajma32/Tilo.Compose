@@ -36,7 +36,6 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import tilo.compose.core.map.MapCameraController
 import tilo.compose.dsl.ExperimentalTiloApi
 import tilo.compose.dsl.MapCameraState
 import tilo.compose.dsl.tiloMapFocusTarget
@@ -53,16 +52,7 @@ fun BoxScope.DefaultZoomControls(
     cameraState: MapCameraState,
     zoomStep: Double = 1.0,
     style: CameraControlsStyle = CameraControlsStyle(),
-) = DefaultZoomControls(cameraState, zoomStep, style, MapUiAccessibility())
-
-/** Default animated zoom controls with configurable accessibility text. */
-@Composable
-@ExperimentalTiloApi
-fun BoxScope.DefaultZoomControls(
-    cameraState: MapCameraState,
-    zoomStep: Double = 1.0,
-    style: CameraControlsStyle = CameraControlsStyle(),
-    accessibility: MapUiAccessibility,
+    accessibility: MapUiAccessibility = MapUiAccessibility(),
 ) {
     DefaultZoomControls(
         zoomStep = zoomStep,
@@ -71,33 +61,6 @@ fun BoxScope.DefaultZoomControls(
         accessibility = accessibility,
         canZoomIn = cameraState.zoom < cameraState.config.maxZoom,
         canZoomOut = cameraState.zoom > cameraState.config.minZoom,
-    )
-}
-
-/**
- * Compatibility overload for camera implementations that only expose immediate zoom operations.
- * Prefer the [MapCameraState] overload to get animation automatically.
- */
-@Composable
-fun BoxScope.DefaultZoomControls(
-    cameraState: MapCameraController,
-    zoomStep: Double = 1.0,
-    style: CameraControlsStyle = CameraControlsStyle(),
-) = DefaultZoomControls(cameraState, zoomStep, style, MapUiAccessibility())
-
-/** Compatibility overload with configurable accessibility text. */
-@Composable
-fun BoxScope.DefaultZoomControls(
-    cameraState: MapCameraController,
-    zoomStep: Double = 1.0,
-    style: CameraControlsStyle = CameraControlsStyle(),
-    accessibility: MapUiAccessibility,
-) {
-    DefaultZoomControls(
-        zoomStep = zoomStep,
-        onZoomBy = { delta -> cameraState.zoomBy(delta, focus = null) },
-        style = style,
-        accessibility = accessibility,
     )
 }
 
@@ -112,20 +75,7 @@ fun BoxScope.DefaultZoomControls(
     zoomStep: Double = 1.0,
     onZoomBy: suspend (delta: Double) -> Unit,
     style: CameraControlsStyle = CameraControlsStyle(),
-) = DefaultZoomControls(
-    zoomStep = zoomStep,
-    onZoomBy = onZoomBy,
-    style = style,
-    accessibility = MapUiAccessibility(),
-)
-
-/** Draws callback-backed zoom controls with configurable accessibility text and enabled state. */
-@Composable
-fun BoxScope.DefaultZoomControls(
-    zoomStep: Double = 1.0,
-    onZoomBy: suspend (delta: Double) -> Unit,
-    style: CameraControlsStyle = CameraControlsStyle(),
-    accessibility: MapUiAccessibility,
+    accessibility: MapUiAccessibility = MapUiAccessibility(),
     canZoomIn: Boolean = true,
     canZoomOut: Boolean = true,
 ) {

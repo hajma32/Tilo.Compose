@@ -55,8 +55,7 @@ sealed interface RasterLayerStatus {
  * `wmsTileLayer`, `xyzTileLayer`, `osmLayer`, or `tileStoreLayer`. [status]
  * describes source initialization, [availability] distinguishes healthy,
  * degraded, offline, and empty data, and [diagnostics] contains structured
- * per-tile outcome counts. [lastTileError] remains as a compatibility view of
- * the latest failure cause and can be null for failures such as HTTP status.
+ * per-tile outcome counts.
  *
  * [retry] retires the current runtime and creates it again. For WMS this repeats
  * GetCapabilities; for other raster sources it clears the owned runtime/cache
@@ -68,9 +67,6 @@ class RasterLayerState internal constructor() {
     var status: RasterLayerStatus by mutableStateOf(RasterLayerStatus.Idle)
         private set
 
-    var lastTileError: Throwable? by mutableStateOf(null)
-        private set
-
     var availability: RasterLayerAvailability by mutableStateOf(RasterLayerAvailability.Unknown)
         private set
 
@@ -80,39 +76,25 @@ class RasterLayerState internal constructor() {
     private var retryRevision by mutableIntStateOf(0)
 
     fun retry() {
-        lastTileError = null
         availability = RasterLayerAvailability.Unknown
         diagnostics = RasterLayerDiagnostics()
         status = RasterLayerStatus.Idle
         retryRevision += 1
     }
 
-    fun clearTileError() {
-        lastTileError = null
-    }
-
     internal val retryKey: Int
         get() = retryRevision
 
     internal fun loading() {
-        lastTileError = null
         status = RasterLayerStatus.Loading
     }
 
-    internal fun ready(clearTileError: Boolean = false) {
-        if (clearTileError) {
-            lastTileError = null
-        }
+    internal fun ready() {
         status = RasterLayerStatus.Ready
     }
 
     internal fun initializationFailed(error: Throwable) {
-        lastTileError = null
         status = RasterLayerStatus.Failed(error)
-    }
-
-    internal fun tileFailed(error: Throwable) {
-        lastTileError = error
     }
 
     internal fun publishDiagnostics(
@@ -121,10 +103,6 @@ class RasterLayerState internal constructor() {
     ) {
         diagnostics = value
         this.availability = availability
-    }
-
-    internal fun publishTileError(error: Throwable?) {
-        lastTileError = error
     }
 
     internal fun idle() {
